@@ -167,11 +167,11 @@ def _parse_track_data(track_name: str, track_data: dict) -> tuple[dict[int, Step
 
 @mcp.tool()
 def set_pattern(
-    pattern_index: int,
+    name: str,
     tracks: dict[str, dict],
     length: int = 16,
 ) -> str:
-    """Define a complete pattern with tracks and steps. This is the primary tool for creating music.
+    """Define a named pattern with tracks and steps. This is the primary tool for creating music.
 
     The sequencer mirrors the Circuit Tracks: 6 tracks (synth1, synth2, drum1-4),
     each with up to 32 steps. Steps are 16th notes at the given BPM.
@@ -180,7 +180,7 @@ def set_pattern(
     Drum tracks ignore the note field (each drum has a fixed trigger note).
 
     Args:
-        pattern_index: Pattern slot (0-7).
+        name: Pattern name (e.g., "intro", "verse", "drop", "breakdown").
         tracks: Dict of track data keyed by track name. Track names:
             "synth1", "synth2", "drum1", "drum2", "drum3", "drum4".
             Each track value is a dict with:
@@ -194,9 +194,6 @@ def set_pattern(
                 - enabled (bool): default True.
         length: Pattern length in steps (16 or 32), default 16.
     """
-    if not 0 <= pattern_index <= 7:
-        return f"Invalid pattern_index {pattern_index}. Must be 0-7."
-
     pattern = Pattern(length=length)
     for track_name, track_data in tracks.items():
         if track_name not in VALID_TRACK_NAMES:
@@ -206,14 +203,14 @@ def set_pattern(
         track.steps = steps
         track.num_steps = num_steps
 
-    _engine.set_pattern(pattern_index, pattern)
+    _engine.set_pattern(name, pattern)
     total_steps = sum(len(t.steps) for t in pattern.tracks.values())
-    return f"Pattern {pattern_index} set: {total_steps} steps across {len(tracks)} tracks, length={length}"
+    return f"Pattern '{name}' set: {total_steps} steps across {len(tracks)} tracks, length={length}"
 
 
 @mcp.tool()
 def set_track(
-    pattern_index: int,
+    pattern_name: str,
     track: str,
     steps: dict[str, dict],
     clear_existing: bool = True,
@@ -221,13 +218,11 @@ def set_track(
     """Update a single track within a pattern. Use this to add/modify parts while the sequencer runs.
 
     Args:
-        pattern_index: Pattern slot (0-7).
+        pattern_name: Name of the pattern to modify.
         track: Track name: "synth1", "synth2", "drum1", "drum2", "drum3", "drum4".
         steps: Dict of step_index (as string) -> step data (same format as set_pattern).
         clear_existing: If True (default), replace all steps. If False, merge with existing.
     """
-    if not 0 <= pattern_index <= 7:
-        return f"Invalid pattern_index {pattern_index}. Must be 0-7."
     if track not in VALID_TRACK_NAMES:
         return f"Invalid track '{track}'. Must be one of: {', '.join(sorted(VALID_TRACK_NAMES))}"
 
@@ -235,59 +230,59 @@ def set_track(
     for idx_str, step_data in steps.items():
         parsed_steps[int(idx_str)] = Step.from_dict(step_data)
 
-    _engine.set_track(pattern_index, track, parsed_steps, clear=clear_existing)
+    _engine.set_track(pattern_name, track, parsed_steps, clear=clear_existing)
     mode = "replaced" if clear_existing else "merged"
-    return f"Track '{track}' in pattern {pattern_index}: {mode} {len(parsed_steps)} steps"
+    return f"Track '{track}' in pattern '{pattern_name}': {mode} {len(parsed_steps)} steps"
 
 
 @mcp.tool()
-def clear_pattern(pattern_index: int) -> str:
+def clear_pattern(name: str) -> str:
     """Clear a pattern, removing all steps from all tracks.
 
     Args:
-        pattern_index: Pattern slot (0-7).
+        name: Name of the pattern to clear.
     """
-    if not 0 <= pattern_index <= 7:
-        return f"Invalid pattern_index {pattern_index}. Must be 0-7."
-    _engine.clear_pattern(pattern_index)
-    return f"Pattern {pattern_index} cleared"
+    _engine.clear_pattern(name)
+    return f"Pattern '{name}' cleared"
 
 
 @mcp.tool()
-def get_pattern(pattern_index: int) -> dict:
+def get_pattern(name: str) -> dict:
     """Get the current data for a pattern. Useful for inspecting what's programmed.
 
     Args:
-        pattern_index: Pattern slot (0-7).
+        name: Name of the pattern.
     """
-    if not 0 <= pattern_index <= 7:
-        return {"error": f"Invalid pattern_index {pattern_index}. Must be 0-7."}
-    pattern = _engine.get_pattern(pattern_index)
+    pattern = _engine.get_pattern(name)
     if pattern is None:
-        return {"error": f"Pattern {pattern_index} is empty."}
+        return {"error": f"Pattern '{name}' not found."}
     return pattern.to_dict()
 
 
 @mcp.tool()
+def list_patterns() -> dict:
+    """List all defined pattern names."""
+    return {"patterns": _engine.list_patterns()}
+
+
+@mcp.tool()
 def start_sequencer(
-    pattern_index: int = 0,
+    pattern: str,
     bpm: float = 120.0,
     send_clock: bool = True,
 ) -> str:
-    """Start the pattern sequencer. Loops the specified pattern until stopped.
+    """Start the pattern sequencer. Loops the specified pattern until stopped or a queue is set.
 
     Sends MIDI clock to keep the Circuit Tracks display in sync.
     Use set_pattern first to define the pattern, then start_sequencer to play it.
 
     Args:
-        pattern_index: Which pattern to play (0-7).
+        pattern: Name of the pattern to play.
         bpm: Tempo in beats per minute.
         send_clock: Send MIDI clock (24ppqn) to sync the Circuit Tracks display.
     """
-    if not 0 <= pattern_index <= 7:
-        return f"Invalid pattern_index {pattern_index}. Must be 0-7."
-    _engine.start(pattern_index=pattern_index, bpm=bpm, send_clock=send_clock)
-    return f"Sequencer started: pattern {pattern_index} at {bpm} BPM"
+    _engine.start(pattern_name=pattern, bpm=bpm, send_clock=send_clock)
+    return f"Sequencer started: pattern '{pattern}' at {bpm} BPM"
 
 
 @mcp.tool()
@@ -309,18 +304,40 @@ def set_bpm(bpm: float) -> str:
 
 
 @mcp.tool()
-def queue_pattern(pattern_index: int) -> str:
-    """Queue a pattern switch at the next loop boundary.
+def queue_patterns(patterns: list[str]) -> str:
+    """Queue one or more patterns to play in sequence after the current one finishes.
 
-    The current pattern finishes its loop, then switches to the new pattern.
+    Each pattern plays once, then the next in the queue starts. When the queue
+    is empty, the last pattern loops. Use this to compose song structures.
+
+    Example: queue_patterns(["verse", "verse", "chorus", "verse", "chorus", "outro"])
 
     Args:
-        pattern_index: Pattern to switch to (0-7).
+        patterns: List of pattern names to play in order.
     """
-    if not 0 <= pattern_index <= 7:
-        return f"Invalid pattern_index {pattern_index}. Must be 0-7."
-    _engine.queue_pattern(pattern_index)
-    return f"Pattern {pattern_index} queued (will switch at next loop boundary)"
+    _engine.queue_patterns(patterns)
+    return f"Queued {len(patterns)} patterns: {', '.join(patterns)}"
+
+
+@mcp.tool()
+def set_song(patterns: list[str]) -> str:
+    """Replace the entire pattern queue (the song). Clears any previously queued patterns.
+
+    Use this to define a full song structure. The current pattern finishes,
+    then the song plays through. When the queue is empty, the last pattern loops.
+
+    Args:
+        patterns: List of pattern names in playback order.
+    """
+    _engine.set_queue(patterns)
+    return f"Song set: {len(patterns)} patterns — {', '.join(patterns)}"
+
+
+@mcp.tool()
+def clear_queue() -> str:
+    """Clear the pattern queue. The current pattern will loop indefinitely."""
+    _engine.clear_queue()
+    return "Pattern queue cleared (current pattern will loop)"
 
 
 @mcp.tool()
@@ -340,7 +357,7 @@ def mute_track(track: str, muted: bool = True) -> str:
 
 @mcp.tool()
 def get_sequencer_status() -> dict:
-    """Get the current sequencer state: running, pattern, step, BPM, mutes."""
+    """Get the current sequencer state: running, pattern, step, BPM, mutes, queue."""
     return _engine.get_status()
 
 

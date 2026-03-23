@@ -113,9 +113,9 @@ class Pattern:
 class SequencerEngine:
     def __init__(self, midi: MidiConnection):
         self._midi = midi
-        self._patterns: dict[int, Pattern] = {}
-        self._current_pattern: int = 0
-        self._next_pattern: int | None = None
+        self._patterns: dict[str, Pattern] = {}
+        self._current_pattern: str = ""
+        self._pattern_queue: list[str] = []
         self._bpm: float = 120.0
         self._running: bool = False
         self._send_clock: bool = True
@@ -138,27 +138,32 @@ class SequencerEngine:
                 "bpm": self._bpm,
                 "send_clock": self._send_clock,
                 "track_mutes": dict(self._track_mutes),
+                "pattern_queue": list(self._pattern_queue),
                 "patterns_defined": sorted(self._patterns.keys()),
             }
 
-    def set_pattern(self, index: int, pattern: Pattern) -> None:
+    def set_pattern(self, name: str, pattern: Pattern) -> None:
         with self._lock:
-            self._patterns[index] = pattern
+            self._patterns[name] = pattern
 
-    def get_pattern(self, index: int) -> Pattern | None:
+    def get_pattern(self, name: str) -> Pattern | None:
         with self._lock:
-            p = self._patterns.get(index)
+            p = self._patterns.get(name)
             return deepcopy(p) if p is not None else None
 
-    def clear_pattern(self, index: int) -> None:
+    def clear_pattern(self, name: str) -> None:
         with self._lock:
-            self._patterns.pop(index, None)
+            self._patterns.pop(name, None)
 
-    def set_track(self, pattern_index: int, track_name: str, steps: dict[int, Step], clear: bool = True) -> None:
+    def list_patterns(self) -> list[str]:
         with self._lock:
-            if pattern_index not in self._patterns:
-                self._patterns[pattern_index] = Pattern()
-            pattern = self._patterns[pattern_index]
+            return sorted(self._patterns.keys())
+
+    def set_track(self, pattern_name: str, track_name: str, steps: dict[int, Step], clear: bool = True) -> None:
+        with self._lock:
+            if pattern_name not in self._patterns:
+                self._patterns[pattern_name] = Pattern()
+            pattern = self._patterns[pattern_name]
             if track_name not in pattern.tracks:
                 return
             track = pattern.tracks[track_name]
@@ -171,9 +176,19 @@ class SequencerEngine:
         with self._lock:
             self._bpm = bpm
 
-    def queue_pattern(self, index: int) -> None:
+    def queue_patterns(self, names: list[str]) -> None:
+        """Queue one or more patterns to play after the current one finishes."""
         with self._lock:
-            self._next_pattern = index
+            self._pattern_queue.extend(names)
+
+    def clear_queue(self) -> None:
+        with self._lock:
+            self._pattern_queue.clear()
+
+    def set_queue(self, names: list[str]) -> None:
+        """Replace the entire pattern queue."""
+        with self._lock:
+            self._pattern_queue = list(names)
 
     def set_mute(self, track_name: str, muted: bool) -> None:
         with self._lock:
@@ -190,11 +205,11 @@ class SequencerEngine:
         for name, muted in mutes.items():
             self.set_mute(name, muted)
 
-    def start(self, pattern_index: int = 0, bpm: float = 120.0, send_clock: bool = True) -> None:
+    def start(self, pattern_name: str, bpm: float = 120.0, send_clock: bool = True) -> None:
         self.stop()
         with self._lock:
-            self._current_pattern = pattern_index
-            self._next_pattern = None
+            self._current_pattern = pattern_name
+            self._pattern_queue.clear()
             self._bpm = bpm
             self._send_clock = send_clock
             self._running = True
@@ -236,16 +251,17 @@ class SequencerEngine:
                 send_clock = self._send_clock
                 pattern = deepcopy(self._patterns.get(self._current_pattern, Pattern()))
                 mutes = dict(self._track_mutes)
-                next_pat = self._next_pattern
+                queue = list(self._pattern_queue)
 
             # Handle pattern boundary
             if step_index >= pattern.length:
                 step_index = 0
-                if next_pat is not None:
+                if queue:
                     with self._lock:
-                        self._current_pattern = next_pat
-                        self._next_pattern = None
-                        pattern = deepcopy(self._patterns.get(next_pat, Pattern()))
+                        if self._pattern_queue:
+                            next_name = self._pattern_queue.pop(0)
+                            self._current_pattern = next_name
+                            pattern = deepcopy(self._patterns.get(next_name, Pattern()))
 
             with self._lock:
                 self._current_step = step_index
