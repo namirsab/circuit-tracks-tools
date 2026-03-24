@@ -7,6 +7,7 @@ import time
 from mcp.server.fastmcp import FastMCP
 
 from circuit_mcp.constants import (
+    AUDIO_CC,
     DRUMS_CHANNEL,
     DRUM_CC,
     DRUM_NOTES,
@@ -973,8 +974,24 @@ def load_patch_file(synth: int, file_path: str) -> dict:
     }
 
 
+def _resolve_param(param_name: str, cc_maps: list[dict], nrpn_maps: list[dict]):
+    """Find a param in the given CC/NRPN lookup dicts. Returns ('cc', cc_num) or ('nrpn', (msb, lsb)) or None."""
+    for cc_map in cc_maps:
+        if param_name in cc_map:
+            return ("cc", cc_map[param_name])
+    for nrpn_map in nrpn_maps:
+        if param_name in nrpn_map:
+            return ("nrpn", nrpn_map[param_name])
+    return None
+
+
 def _send_params_at_t(
-    channel: int, start_values: dict[str, int], target: dict[str, int], t: float
+    channel: int,
+    start_values: dict[str, int],
+    target: dict[str, int],
+    t: float,
+    cc_maps: list[dict],
+    nrpn_maps: list[dict],
 ):
     """Send interpolated param values at position t (0.0 to 1.0)."""
     midi = _midi
@@ -982,36 +999,42 @@ def _send_params_at_t(
         start_val = start_values[param_name]
         current = round(start_val + (target_val - start_val) * t)
         current = max(0, min(127, current))
-        if param_name in SYNTH_CC:
-            cc = SYNTH_CC[param_name]
-            midi.control_change(channel, cc, current)
-        elif param_name in SYNTH_NRPN:
-            msb, lsb = SYNTH_NRPN[param_name]
+        resolved = _resolve_param(param_name, cc_maps, nrpn_maps)
+        if resolved is None:
+            continue
+        kind, addr = resolved
+        if kind == "cc":
+            midi.control_change(channel, addr, current)
+        else:
+            msb, lsb = addr
             midi.nrpn(channel, msb, lsb, current)
 
 
 def _run_morph(
     morph_id: str,
-    synth: int,
+    channel: int,
     start_values: dict[str, int],
     target: dict[str, int],
     duration_seconds: float,
     steps: int,
     stop_event: threading.Event,
-    ping_pong: bool = False,
+    ping_pong: bool,
+    cc_maps: list[dict],
+    nrpn_maps: list[dict],
 ):
-    """Background thread that interpolates synth params over time."""
-    channel = SYNTH1_CHANNEL if synth == 1 else SYNTH2_CHANNEL
+    """Background thread that interpolates params over time."""
     interval = duration_seconds / steps
 
     while True:
         # Forward: start → target
         for i in range(1, steps + 1):
             if stop_event.is_set():
-                _morph_threads.pop(morph_id, None)
+                # Only remove if we're still the current morph (avoid race with restart)
+                if _morph_threads.get(morph_id) is stop_event:
+                    _morph_threads.pop(morph_id, None)
                 return
             t = i / steps
-            _send_params_at_t(channel, start_values, target, t)
+            _send_params_at_t(channel, start_values, target, t, cc_maps, nrpn_maps)
             time.sleep(interval)
 
         if not ping_pong:
@@ -1020,13 +1043,85 @@ def _run_morph(
         # Backward: target → start
         for i in range(1, steps + 1):
             if stop_event.is_set():
-                _morph_threads.pop(morph_id, None)
+                # Only remove if we're still the current morph (avoid race with restart)
+                if _morph_threads.get(morph_id) is stop_event:
+                    _morph_threads.pop(morph_id, None)
                 return
             t = 1.0 - (i / steps)
-            _send_params_at_t(channel, start_values, target, t)
+            _send_params_at_t(channel, start_values, target, t, cc_maps, nrpn_maps)
             time.sleep(interval)
 
-    _morph_threads.pop(morph_id, None)
+    if _morph_threads.get(morph_id) is stop_event:
+        _morph_threads.pop(morph_id, None)
+
+
+def _start_morph(
+    morph_id: str,
+    channel: int,
+    start: dict[str, int],
+    target: dict[str, int],
+    duration_bars: float,
+    ping_pong: bool,
+    cc_maps: list[dict],
+    nrpn_maps: list[dict],
+) -> str:
+    """Shared logic: validate, launch morph thread, return status string."""
+    global _morph_counter
+
+    # Validate all params exist
+    errors = []
+    for param_name in set(list(start.keys()) + list(target.keys())):
+        if _resolve_param(param_name, cc_maps, nrpn_maps) is None:
+            errors.append(param_name)
+    if errors:
+        return f"Unknown params: {', '.join(sorted(errors))}"
+
+    if set(start.keys()) != set(target.keys()):
+        return "start and target must have the same parameter names."
+
+    # If a morph with this exact ID exists, stop it
+    if morph_id in _morph_threads:
+        _morph_threads[morph_id].set()
+
+    # Calculate duration from BPM (1 bar = 4 beats)
+    bpm = _engine._bpm if _engine._bpm else 78
+    seconds_per_bar = 4 * 60.0 / bpm
+    duration_seconds = duration_bars * seconds_per_bar
+
+    # ~20 updates per second for smooth morphing
+    total_steps = max(1, int(duration_seconds * 20))
+
+    # Set start values immediately
+    midi = _midi
+    for param_name, value in start.items():
+        resolved = _resolve_param(param_name, cc_maps, nrpn_maps)
+        if resolved is None:
+            continue
+        kind, addr = resolved
+        if kind == "cc":
+            midi.control_change(channel, addr, value)
+        else:
+            msb, lsb = addr
+            midi.nrpn(channel, msb, lsb, value)
+
+    stop_event = threading.Event()
+    _morph_threads[morph_id] = stop_event
+
+    thread = threading.Thread(
+        target=_run_morph,
+        args=(morph_id, channel, start, target, duration_seconds, total_steps,
+              stop_event, ping_pong, cc_maps, nrpn_maps),
+        daemon=True,
+    )
+    thread.start()
+
+    param_list = ", ".join(f"{k}: {start[k]}→{target[k]}" for k in target)
+    mode = "ping-pong" if ping_pong else "one-shot"
+    cycle_info = f" (full cycle: {duration_bars * 2} bars)" if ping_pong else ""
+    return (
+        f"Morph '{morph_id}' [{mode}] over {duration_bars} bars "
+        f"({duration_seconds:.1f}s){cycle_info}: {param_list}"
+    )
 
 
 @mcp.tool()
@@ -1067,61 +1162,97 @@ def morph_synth_params(
     if synth not in (1, 2):
         return f"Invalid synth number {synth}. Must be 1 or 2."
 
-    # Validate all params exist
-    errors = []
-    for param_name in list(start.keys()) + list(target.keys()):
-        if param_name not in SYNTH_CC and param_name not in SYNTH_NRPN:
-            errors.append(param_name)
-    if errors:
-        return f"Unknown params: {', '.join(set(errors))}"
-
-    if set(start.keys()) != set(target.keys()):
-        return "start and target must have the same parameter names."
-
-    # Generate morph ID
     if not name:
         _morph_counter += 1
         name = f"morph_{_morph_counter}"
     morph_id = f"s{synth}_{name}"
 
-    # If a morph with this exact ID exists, stop it
-    if morph_id in _morph_threads:
-        _morph_threads[morph_id].set()
-
-    # Calculate duration from BPM (1 bar = 4 beats)
-    bpm = _engine._bpm if _engine._bpm else 78
-    seconds_per_bar = 4 * 60.0 / bpm
-    duration_seconds = duration_bars * seconds_per_bar
-
-    # ~20 updates per second for smooth morphing
-    total_steps = max(1, int(duration_seconds * 20))
-
-    # Set start values immediately
     channel = SYNTH1_CHANNEL if synth == 1 else SYNTH2_CHANNEL
-    for param_name, value in start.items():
-        if param_name in SYNTH_CC:
-            cc = SYNTH_CC[param_name]
-            _midi.control_change(channel, cc, value)
-        elif param_name in SYNTH_NRPN:
-            msb, lsb = SYNTH_NRPN[param_name]
-            _midi.nrpn(channel, msb, lsb, value)
-
-    stop_event = threading.Event()
-    _morph_threads[morph_id] = stop_event
-
-    thread = threading.Thread(
-        target=_run_morph,
-        args=(morph_id, synth, start, target, duration_seconds, total_steps, stop_event, ping_pong),
-        daemon=True,
+    return _start_morph(
+        morph_id, channel, start, target, duration_bars, ping_pong,
+        cc_maps=[SYNTH_CC], nrpn_maps=[SYNTH_NRPN],
     )
-    thread.start()
 
-    param_list = ", ".join(f"{k}: {start[k]}→{target[k]}" for k in target)
-    mode = "ping-pong" if ping_pong else "one-shot"
-    cycle_info = f" (full cycle: {duration_bars * 2} bars)" if ping_pong else ""
-    return (
-        f"Morph '{name}' on synth {synth} [{mode}] over {duration_bars} bars "
-        f"({duration_seconds:.1f}s){cycle_info}: {param_list}"
+
+@mcp.tool()
+def morph_project_params(
+    start: dict[str, int],
+    target: dict[str, int],
+    duration_bars: float = 4,
+    ping_pong: bool = False,
+    name: str = "",
+) -> str:
+    """Smoothly morph project-level parameters: reverb, delay, master filter, mixer, sidechain.
+
+    Same behavior as morph_synth_params but for project parameters on MIDI channel 16.
+    Multiple morphs can run concurrently with different names.
+
+    Available CC params: reverb_synth1_send, reverb_synth2_send, reverb_drum1-4_send,
+    delay_synth1_send, delay_synth2_send, delay_drum1-4_send,
+    synth1_level, synth2_level, synth1_pan, synth2_pan,
+    master_filter_frequency (0-63=LP, 64=OFF, 65-127=HP), master_filter_resonance.
+
+    Available NRPN params: reverb_type, reverb_decay, reverb_damping,
+    delay_time, delay_time_sync, delay_feedback, delay_width, delay_lr_ratio, delay_slew_rate,
+    fx_bypass, sidechain_synth1/2_source/attack/hold/decay/depth.
+
+    Args:
+        start: Starting param values. e.g. {"master_filter_frequency": 64, "reverb_decay": 30}
+        target: Target param values. e.g. {"master_filter_frequency": 20, "reverb_decay": 100}
+        duration_bars: Duration in bars for one sweep direction. Default 4 bars.
+        ping_pong: If True, continuously sweep back and forth. Default False.
+        name: Optional name for this morph. Auto-generated if empty.
+    """
+    global _morph_counter
+
+    if not name:
+        _morph_counter += 1
+        name = f"morph_{_morph_counter}"
+    morph_id = f"proj_{name}"
+
+    return _start_morph(
+        morph_id, PROJECT_CHANNEL, start, target, duration_bars, ping_pong,
+        cc_maps=[PROJECT_CC], nrpn_maps=[PROJECT_NRPN],
+    )
+
+
+@mcp.tool()
+def morph_drum_params(
+    drum: int,
+    start: dict[str, int],
+    target: dict[str, int],
+    duration_bars: float = 4,
+    ping_pong: bool = False,
+    name: str = "",
+) -> str:
+    """Smoothly morph drum parameters: level, pitch, decay, distortion, eq, pan.
+
+    Same behavior as morph_synth_params but for drum track parameters on MIDI channel 10.
+    Multiple morphs can run concurrently with different names.
+
+    Available params: patch_select, level, pitch, decay, distortion, eq, pan.
+
+    Args:
+        drum: Drum number (1-4).
+        start: Starting param values. e.g. {"pitch": 40, "decay": 30}
+        target: Target param values. e.g. {"pitch": 100, "decay": 90}
+        duration_bars: Duration in bars for one sweep direction. Default 4 bars.
+        ping_pong: If True, continuously sweep back and forth. Default False.
+        name: Optional name for this morph. Auto-generated if empty.
+    """
+    global _morph_counter
+
+    if drum not in DRUM_CC:
+        return f"Invalid drum number {drum}. Must be 1-4."
+
+    if not name:
+        _morph_counter += 1
+        name = f"morph_{_morph_counter}"
+    morph_id = f"d{drum}_{name}"
+
+    return _start_morph(
+        morph_id, DRUMS_CHANNEL, start, target, duration_bars, ping_pong,
+        cc_maps=[DRUM_CC[drum]], nrpn_maps=[],
     )
 
 
