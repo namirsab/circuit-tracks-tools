@@ -8,6 +8,7 @@ from circuit_mcp.constants import (
     DRUMS_CHANNEL,
     DRUM_CC,
     DRUM_NOTES,
+    FACTORY_DRUM_SAMPLES,
     PROJECT_CHANNEL,
     PROJECT_CC,
     PROJECT_NRPN,
@@ -16,7 +17,15 @@ from circuit_mcp.constants import (
     SYNTH_CC,
     SYNTH_NRPN,
 )
+from circuit_mcp.macros import DEFAULT_MACROS, MacroTarget, apply_macro
 from circuit_mcp.midi import MidiConnection
+from circuit_mcp.patch import (
+    parse_patch_data,
+    parse_patch_file,
+    read_and_modify_patch,
+    request_current_patch,
+    send_current_patch,
+)
 from circuit_mcp.sequencer import (
     VALID_TRACK_NAMES,
     Pattern,
@@ -79,6 +88,8 @@ def connection_status() -> dict:
     return {
         "connected": midi.is_connected,
         "port_name": midi.port_name,
+        "has_input": midi.has_input,
+        "input_port_name": midi._input_port_name,
     }
 
 
@@ -429,6 +440,98 @@ def set_synth_param(synth: int, param_name: str, value: int) -> str:
 
 
 @mcp.tool()
+def set_synth_params(synth: int, params: dict[str, int]) -> str:
+    """Set multiple synth parameters at once in a single call.
+
+    This is the preferred way to configure a synth sound — pass all parameters
+    as a dict instead of making individual set_synth_param calls.
+
+    Available CC params: polyphony_mode, portamento_rate, pre_glide, keyboard_octave,
+    osc1_wave, osc1_wave_interpolate, osc1_pulse_width_index, osc1_virtual_sync_depth,
+    osc1_density, osc1_density_detune, osc1_semitones, osc1_cents, osc1_pitchbend,
+    osc2_wave, osc2_wave_interpolate, osc2_pulse_width_index, osc2_virtual_sync_depth,
+    osc2_density, osc2_density_detune, osc2_semitones, osc2_cents, osc2_pitchbend,
+    osc1_level, osc2_level, ring_mod_level, noise_level, pre_fx_level, post_fx_level,
+    routing, drive, drive_type, filter_type, filter_frequency, filter_tracking,
+    filter_resonance, filter_q_normalize, env2_to_filter_freq,
+    env1_velocity, env1_attack, env1_decay, env1_sustain, env1_release,
+    distortion_level, chorus_level, macro_knob1-8.
+
+    Available NRPN params: env2_velocity, env2_attack, env2_decay, env2_sustain,
+    env2_release, env3_delay, env3_attack, env3_decay, env3_sustain, env3_release,
+    lfo1_waveform, lfo1_rate, lfo2_waveform, lfo2_rate, distortion_type, chorus_type,
+    chorus_rate, chorus_feedback, chorus_mod_depth, eq_bass_frequency, eq_bass_level,
+    eq_mid_frequency, eq_mid_level, eq_treble_frequency, eq_treble_level,
+    mod1_source1 through mod12_destination.
+
+    Args:
+        synth: Synth number (1 or 2).
+        params: Dict of param_name -> value. e.g. {"filter_frequency": 80, "osc1_wave": 2}
+    """
+    if synth not in (1, 2):
+        return f"Invalid synth number {synth}. Must be 1 or 2."
+
+    channel = SYNTH1_CHANNEL if synth == 1 else SYNTH2_CHANNEL
+    midi = _midi
+    set_params = []
+    errors = []
+
+    for param_name, value in params.items():
+        if param_name in SYNTH_CC:
+            cc = SYNTH_CC[param_name]
+            midi.control_change(channel, cc, value)
+            set_params.append(f"{param_name}={value}")
+        elif param_name in SYNTH_NRPN:
+            msb, lsb = SYNTH_NRPN[param_name]
+            midi.nrpn(channel, msb, lsb, value)
+            set_params.append(f"{param_name}={value}")
+        else:
+            errors.append(param_name)
+
+    result = f"Synth {synth}: set {len(set_params)} params — {', '.join(set_params)}"
+    if errors:
+        result += f". Unknown params: {', '.join(errors)}"
+    return result
+
+
+@mcp.tool()
+def set_drum_params(drum: int, params: dict[str, int]) -> str:
+    """Set multiple drum parameters at once in a single call.
+
+    Available params: patch_select, level, pitch, decay, distortion, eq, pan.
+
+    Args:
+        drum: Drum number (1-4).
+        params: Dict of param_name -> value. e.g. {"pitch": 80, "decay": 60, "level": 100}
+    """
+    if drum not in DRUM_CC:
+        return f"Invalid drum number {drum}. Must be 1-4."
+
+    drum_params = DRUM_CC[drum]
+    midi = _midi
+    set_params = []
+    errors = []
+
+    for param_name, value in params.items():
+        if param_name not in drum_params:
+            errors.append(param_name)
+            continue
+        cc = drum_params[param_name]
+        midi.control_change(DRUMS_CHANNEL, cc, value)
+        if param_name == "patch_select":
+            sample_idx = value // 2
+            name = FACTORY_DRUM_SAMPLES.get(sample_idx, f"Sample {sample_idx}")
+            set_params.append(f"{param_name}={value} ({name})")
+        else:
+            set_params.append(f"{param_name}={value}")
+
+    result = f"Drum {drum}: set {len(set_params)} params — {', '.join(set_params)}"
+    if errors:
+        result += f". Unknown params: {', '.join(errors)}"
+    return result
+
+
+@mcp.tool()
 def set_drum_param(drum: int, param_name: str, value: int) -> str:
     """Set a drum parameter on drums 1-4.
 
@@ -448,7 +551,67 @@ def set_drum_param(drum: int, param_name: str, value: int) -> str:
     midi = _midi
     cc = params[param_name]
     midi.control_change(DRUMS_CHANNEL, cc, value)
+
+    if param_name == "patch_select":
+        sample_idx = value // 2
+        name = FACTORY_DRUM_SAMPLES.get(sample_idx, f"Sample {sample_idx}")
+        return f"Set drum {drum} {param_name}={value} → {name} (CC {cc})"
     return f"Set drum {drum} {param_name}={value} (CC {cc})"
+
+
+@mcp.tool()
+def list_drum_samples(page: int | None = None) -> dict:
+    """List available drum samples with their index numbers and names.
+
+    The Circuit Tracks has 64 samples per drum track, organized in 4 pages of 16.
+    Each page follows a kit structure:
+      Slots 1-2: Kicks, 3-4: Snares, 5-6: Closed Hi-Hats,
+      7-8: Open Hi-Hats, 9-12: Percussion, 13-16: Melodic sounds.
+
+    Args:
+        page: Optional page number (1-4) to show only that page. None shows all.
+    """
+    if page is not None:
+        if not 1 <= page <= 4:
+            return {"error": f"Invalid page {page}. Must be 1-4."}
+        start = (page - 1) * 16
+        end = start + 16
+        samples = {i: FACTORY_DRUM_SAMPLES[i] for i in range(start, end)}
+        return {"page": page, "samples": samples}
+
+    return {
+        "total_samples": len(FACTORY_DRUM_SAMPLES),
+        "pages": 4,
+        "samples_per_page": 16,
+        "samples": FACTORY_DRUM_SAMPLES,
+    }
+
+
+@mcp.tool()
+def select_drum_sample(drum: int, sample: int) -> str:
+    """Select a drum sample by index for a drum track.
+
+    Each drum track (1-4) can independently use any of the 64 factory samples.
+    Use list_drum_samples to see available samples and their indices.
+
+    The CC value sent is sample_index * 2 (each sample spans 2 CC values).
+
+    Args:
+        drum: Drum number (1-4).
+        sample: Sample index (0-63).
+    """
+    if drum not in DRUM_CC:
+        return f"Invalid drum number {drum}. Must be 1-4."
+    if not 0 <= sample <= 63:
+        return f"Invalid sample index {sample}. Must be 0-63."
+
+    cc = DRUM_CC[drum]["patch_select"]
+    cc_value = sample * 2
+    midi = _midi
+    midi.control_change(DRUMS_CHANNEL, cc, cc_value)
+
+    name = FACTORY_DRUM_SAMPLES.get(sample, f"Sample {sample}")
+    return f"Selected sample {sample} ({name}) on drum {drum} (CC {cc}={cc_value})"
 
 
 @mcp.tool()
@@ -515,6 +678,152 @@ def set_project_param(param_name: str, value: int) -> str:
         return f"Unknown param '{param_name}'. CC params: {available_cc}. NRPN params: {available_nrpn}."
 
 
+@mcp.tool()
+def set_project_params(params: dict[str, int]) -> str:
+    """Set multiple project-level parameters at once in a single call.
+
+    Available CC params: reverb_synth1_send, reverb_synth2_send, reverb_drum1-4_send,
+    delay_synth1_send, delay_synth2_send, delay_drum1-4_send,
+    synth1_level, synth2_level, synth1_pan, synth2_pan,
+    master_filter_frequency, master_filter_resonance.
+
+    Available NRPN params: reverb_type, reverb_decay, reverb_damping, fx_bypass,
+    delay_time, delay_time_sync, delay_feedback, delay_width, delay_lr_ratio,
+    delay_slew_rate, sidechain_synth1_source/attack/hold/decay/depth,
+    sidechain_synth2_source/attack/hold/decay/depth.
+
+    Args:
+        params: Dict of param_name -> value. e.g. {"reverb_type": 3, "delay_feedback": 80}
+    """
+    midi = _midi
+    set_params = []
+    errors = []
+
+    for param_name, value in params.items():
+        if param_name in PROJECT_CC:
+            cc = PROJECT_CC[param_name]
+            midi.control_change(PROJECT_CHANNEL, cc, value)
+            set_params.append(f"{param_name}={value}")
+        elif param_name in PROJECT_NRPN:
+            msb, lsb = PROJECT_NRPN[param_name]
+            midi.nrpn(PROJECT_CHANNEL, msb, lsb, value)
+            set_params.append(f"{param_name}={value}")
+        else:
+            errors.append(param_name)
+
+    result = f"Project: set {len(set_params)} params — {', '.join(set_params)}"
+    if errors:
+        result += f". Unknown params: {', '.join(errors)}"
+    return result
+
+
+
+# --- Macros (Live Performance) ---
+
+
+# Mutable macro state — can be customized at runtime
+_macros = dict(DEFAULT_MACROS)
+
+
+@mcp.tool()
+def set_macro(synth: int, macro: int, value: int) -> str:
+    """Set a macro knob value, which adjusts the mapped synth parameters.
+
+    Macros provide a consistent live performance interface. Each macro
+    controls one or more synth parameters with configurable ranges.
+
+    Default macro layout:
+      1: Filter (filter_frequency)
+      2: Resonance (filter_resonance)
+      3: Amp Envelope (env1_attack + env1_release)
+      4: Filter Envelope (env2_attack + env2_decay)
+      5: Distortion (distortion_level)
+      6: Chorus (chorus_level)
+      7: Osc Mix (crossfade osc1_level ↔ osc2_level)
+      8: Drive (drive)
+
+    Args:
+        synth: Synth number (1 or 2).
+        macro: Macro number (1-8).
+        value: Knob position (0-127).
+    """
+    if synth not in (1, 2):
+        return f"Invalid synth number {synth}. Must be 1 or 2."
+    if macro not in _macros:
+        return f"Invalid macro {macro}. Must be 1-8."
+
+    params = apply_macro(macro, value, _macros)
+    if not params:
+        return f"Macro {macro} has no targets configured."
+
+    channel = SYNTH1_CHANNEL if synth == 1 else SYNTH2_CHANNEL
+    midi = _midi
+    sent = []
+
+    for param_name, param_value in params.items():
+        if param_name in SYNTH_CC:
+            midi.control_change(channel, SYNTH_CC[param_name], param_value)
+            sent.append(f"{param_name}={param_value}")
+        elif param_name in SYNTH_NRPN:
+            msb, lsb = SYNTH_NRPN[param_name]
+            midi.nrpn(channel, msb, lsb, param_value)
+            sent.append(f"{param_name}={param_value}")
+
+    macro_name = _macros[macro]["name"]
+    return f"Macro {macro} ({macro_name}) = {value} on synth {synth}: {', '.join(sent)}"
+
+
+@mcp.tool()
+def get_macros() -> dict:
+    """Get the current macro layout showing what each macro controls."""
+    result = {}
+    for num, macro in _macros.items():
+        result[str(num)] = {
+            "name": macro["name"],
+            "targets": [
+                {"param": t.param, "min": t.min_val, "max": t.max_val}
+                for t in macro["targets"]
+            ],
+        }
+    return result
+
+
+@mcp.tool()
+def configure_macro(
+    macro: int,
+    name: str,
+    targets: list[dict],
+) -> str:
+    """Configure what a macro knob controls. Changes take effect immediately.
+
+    Args:
+        macro: Macro number (1-8).
+        name: Display name for this macro (e.g., "Filter Sweep").
+        targets: List of parameter targets, each a dict with:
+          - param (str): Parameter name (e.g., "filter_frequency").
+          - min (int): Value when knob is at 0. Default 0.
+          - max (int): Value when knob is at 127. Default 127.
+          Use min > max to invert the control direction.
+    """
+    if not 1 <= macro <= 8:
+        return f"Invalid macro {macro}. Must be 1-8."
+
+    parsed_targets = []
+    for t in targets:
+        param = t.get("param", "")
+        if param not in SYNTH_CC and param not in SYNTH_NRPN:
+            return f"Unknown param '{param}'. Must be a valid synth parameter name."
+        parsed_targets.append(MacroTarget(
+            param=param,
+            min_val=t.get("min", 0),
+            max_val=t.get("max", 127),
+        ))
+
+    _macros[macro] = {"name": name, "targets": parsed_targets}
+    target_desc = ", ".join(f"{t.param} ({t.min_val}→{t.max_val})" for t in parsed_targets)
+    return f"Macro {macro} configured: '{name}' → {target_desc}"
+
+
 # --- Transport ---
 
 
@@ -553,6 +862,113 @@ def get_parameter_info() -> dict:
             "drums": 9,
             "project": 15,
         },
+    }
+
+
+@mcp.tool()
+def get_synth_patch(synth: int) -> dict:
+    """Read the current synth patch from the Circuit Tracks via SysEx.
+
+    Requests a patch dump from the device and returns the patch name and
+    all readable parameter values. Requires a bidirectional MIDI connection
+    (both input and output ports).
+
+    Args:
+        synth: Synth number (1 or 2).
+    """
+    if synth not in (1, 2):
+        return {"error": f"Invalid synth number {synth}. Must be 1 or 2."}
+
+    midi = _midi
+    if not midi.has_input:
+        return {
+            "error": "No MIDI input port available. "
+            "The input port is needed to receive the patch dump from the device. "
+            "Reconnect and ensure the Circuit Tracks input port is accessible."
+        }
+
+    sysex_data = request_current_patch(midi, synth)
+    if sysex_data is None:
+        return {
+            "error": "No response from Circuit Tracks. "
+            "Make sure it is connected and not in a special mode (bootloader, etc)."
+        }
+
+    result = parse_patch_data(sysex_data)
+    result["synth"] = synth
+    result["raw_sysex_length"] = len(sysex_data)
+    return result
+
+
+@mcp.tool()
+def edit_synth_patch(synth: int, params: dict[str, int | str]) -> dict:
+    """Edit the current synth patch on the Circuit Tracks via SysEx read-modify-write.
+
+    This gives access to ALL patch parameters, including ones not reachable via CC/NRPN:
+    mod matrix, LFO details, EQ, chorus settings, macro routing, patch name, etc.
+
+    Reads the current patch, modifies the specified parameters, and sends it back.
+    Requires a bidirectional MIDI connection.
+
+    Patch-level params (SysEx-only):
+      name (str), category, genre,
+      osc1/2_pitchbend, routing, filter_type,
+      lfo1/2_waveform, lfo1/2_rate, lfo1/2_phase_offset, lfo1/2_slew_rate,
+      lfo1/2_delay, lfo1/2_delay_sync, lfo1/2_rate_sync, lfo1/2_one_shot,
+      lfo1/2_key_sync, lfo1/2_common_sync, lfo1/2_delay_trigger, lfo1/2_fade_mode,
+      eq_bass_frequency, eq_bass_level, eq_mid_frequency, eq_mid_level,
+      env1/2/3 velocity/attack/decay/sustain/release.
+
+    For unmapped bytes, use raw_<offset> (e.g., "raw_95": 64) to set byte
+    at that offset directly in the parameter region.
+
+    Args:
+        synth: Synth number (1 or 2).
+        params: Dict of param_name -> value. e.g. {"name": "MyPatch", "lfo1_rate": 80}
+    """
+    if synth not in (1, 2):
+        return {"error": f"Invalid synth number {synth}. Must be 1 or 2."}
+
+    midi = _midi
+    if not midi.has_input:
+        return {
+            "error": "No MIDI input port. Needed for read-modify-write. "
+            "Reconnect and ensure input port is accessible."
+        }
+
+    return read_and_modify_patch(midi, synth, params)
+
+
+@mcp.tool()
+def load_patch_file(synth: int, file_path: str) -> dict:
+    """Load a .syx patch file and send it to a synth on the Circuit Tracks.
+
+    Args:
+        synth: Synth number (1 or 2).
+        file_path: Path to the .syx patch file.
+    """
+    if synth not in (1, 2):
+        return {"error": f"Invalid synth number {synth}. Must be 1 or 2."}
+
+    parsed = parse_patch_file(file_path)
+    if "error" in parsed:
+        return parsed
+
+    # Read the raw bytes from the file
+    with open(file_path, "rb") as f:
+        raw = f.read()
+
+    patch_bytes = list(raw[9:-1])  # Skip F0 + 8-byte header, strip F7
+    if len(patch_bytes) != 340:
+        return {"error": f"Invalid patch size: {len(patch_bytes)} bytes, expected 340"}
+
+    midi = _midi
+    send_current_patch(midi, synth, patch_bytes)
+
+    return {
+        "loaded": parsed.get("name", "Unknown"),
+        "synth": synth,
+        "file": file_path,
     }
 
 
