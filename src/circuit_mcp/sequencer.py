@@ -209,7 +209,6 @@ class SequencerEngine:
         self.stop()
         with self._lock:
             self._current_pattern = pattern_name
-            self._pattern_queue.clear()
             self._bpm = bpm
             self._send_clock = send_clock
             self._running = True
