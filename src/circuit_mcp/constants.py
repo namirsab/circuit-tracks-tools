@@ -483,3 +483,86 @@ SYSEX_LOCATION_SYNTH1 = 0x00
 SYSEX_LOCATION_SYNTH2 = 0x01
 
 SYNTH_PATCH_DATA_SIZE = 340  # bytes
+
+# --- Factory Drum Sample Names ---
+# Circuit Tracks ships with 64 factory samples per drum track.
+# Samples are organized in 4 pages of 16 (kit pages).
+# Each page follows the same structure:
+#   Slots 1-2: Kicks, 3-4: Snares, 5-6: Closed Hi-Hats,
+#   7-8: Open Hi-Hats, 9-12: Percussion, 13-16: Melodic
+#
+# patch_select CC values 0-127 map to these 64 samples (2 CC values per sample).
+# To select sample N (0-63), send CC value N*2 or N*2+1.
+#
+# These names are descriptive based on the factory kit layout.
+# If you've loaded custom samples via Components, update this list to match.
+FACTORY_DRUM_SAMPLES = {
+    # Page 1 - Kit A
+    0: "Kick A1",
+    1: "Kick A2",
+    2: "Snare A1",
+    3: "Snare A2",
+    4: "Closed HH A1",
+    5: "Closed HH A2",
+    6: "Open HH A1",
+    7: "Open HH A2",
+    8: "Perc A1",
+    9: "Perc A2",
+    10: "Perc A3",
+    11: "Perc A4",
+    12: "Melodic A1",
+    13: "Melodic A2",
+    14: "Melodic A3",
+    15: "Melodic A4",
+    # Page 2 - Kit B
+    16: "Kick B1",
+    17: "Kick B2",
+    18: "Snare B1",
+    19: "Snare B2",
+    20: "Closed HH B1",
+    21: "Closed HH B2",
+    22: "Open HH B1",
+    23: "Open HH B2",
+    24: "Perc B1",
+    25: "Perc B2",
+    26: "Perc B3",
+    27: "Perc B4",
+    28: "Melodic B1",
+    29: "Melodic B2",
+    30: "Melodic B3",
+    31: "Melodic B4",
+    # Page 3 - Kit C
+    32: "Kick C1",
+    33: "Kick C2",
+    34: "Snare C1",
+    35: "Snare C2",
+    36: "Closed HH C1",
+    37: "Closed HH C2",
+    38: "Open HH C1",
+    39: "Open HH C2",
+    40: "Perc C1",
+    41: "Perc C2",
+    42: "Perc C3",
+    43: "Perc C4",
+    44: "Melodic C1",
+    45: "Melodic C2",
+    46: "Melodic C3",
+    47: "Melodic C4",
+    # Page 4 - Kit D
+    48: "Kick D1",
+    49: "Kick D2",
+    50: "Snare D1",
+    51: "Snare D2",
+    52: "Closed HH D1",
+    53: "Closed HH D2",
+    54: "Open HH D1",
+    55: "Open HH D2",
+    56: "Perc D1",
+    57: "Perc D2",
+    58: "Perc D3",
+    59: "Perc D4",
+    60: "Melodic D1",
+    61: "Melodic D2",
+    62: "Melodic D3",
+    63: "Melodic D4",
+}
