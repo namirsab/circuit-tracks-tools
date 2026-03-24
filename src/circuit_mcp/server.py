@@ -1,6 +1,8 @@
 """MCP server for controlling Novation Circuit Tracks via MIDI."""
 
 import asyncio
+import threading
+import time
 
 from mcp.server.fastmcp import FastMCP
 
@@ -38,6 +40,8 @@ from circuit_mcp.sequencer import (
 
 _midi = MidiConnection()
 _engine = SequencerEngine(_midi)
+_morph_threads: dict[str, threading.Event] = {}  # morph_id -> stop_event
+_morph_counter = 0
 
 mcp = FastMCP(
     "Circuit Tracks",
@@ -203,7 +207,7 @@ def set_pattern(
                 - gate (float): 0.0-1.0, fraction of step duration, default 0.5.
                 - probability (float): 0.0-1.0, chance of playing, default 1.0.
                 - enabled (bool): default True.
-        length: Pattern length in steps (16 or 32), default 16.
+        length: Pattern length in steps (default 16, any multiple of 16).
     """
     pattern = Pattern(length=length)
     for track_name, track_data in tracks.items():
@@ -519,8 +523,7 @@ def set_drum_params(drum: int, params: dict[str, int]) -> str:
         cc = drum_params[param_name]
         midi.control_change(DRUMS_CHANNEL, cc, value)
         if param_name == "patch_select":
-            sample_idx = value // 2
-            name = FACTORY_DRUM_SAMPLES.get(sample_idx, f"Sample {sample_idx}")
+            name = FACTORY_DRUM_SAMPLES.get(value, f"Sample {value}")
             set_params.append(f"{param_name}={value} ({name})")
         else:
             set_params.append(f"{param_name}={value}")
@@ -553,8 +556,7 @@ def set_drum_param(drum: int, param_name: str, value: int) -> str:
     midi.control_change(DRUMS_CHANNEL, cc, value)
 
     if param_name == "patch_select":
-        sample_idx = value // 2
-        name = FACTORY_DRUM_SAMPLES.get(sample_idx, f"Sample {sample_idx}")
+        name = FACTORY_DRUM_SAMPLES.get(value, f"Sample {value}")
         return f"Set drum {drum} {param_name}={value} → {name} (CC {cc})"
     return f"Set drum {drum} {param_name}={value} (CC {cc})"
 
@@ -594,7 +596,7 @@ def select_drum_sample(drum: int, sample: int) -> str:
     Each drum track (1-4) can independently use any of the 64 factory samples.
     Use list_drum_samples to see available samples and their indices.
 
-    The CC value sent is sample_index * 2 (each sample spans 2 CC values).
+    The CC value sent equals the sample index (0-63).
 
     Args:
         drum: Drum number (1-4).
@@ -606,12 +608,11 @@ def select_drum_sample(drum: int, sample: int) -> str:
         return f"Invalid sample index {sample}. Must be 0-63."
 
     cc = DRUM_CC[drum]["patch_select"]
-    cc_value = sample * 2
     midi = _midi
-    midi.control_change(DRUMS_CHANNEL, cc, cc_value)
+    midi.control_change(DRUMS_CHANNEL, cc, sample)
 
     name = FACTORY_DRUM_SAMPLES.get(sample, f"Sample {sample}")
-    return f"Selected sample {sample} ({name}) on drum {drum} (CC {cc}={cc_value})"
+    return f"Selected sample {sample} ({name}) on drum {drum} (CC {cc}={sample})"
 
 
 @mcp.tool()
@@ -970,6 +971,201 @@ def load_patch_file(synth: int, file_path: str) -> dict:
         "synth": synth,
         "file": file_path,
     }
+
+
+def _send_params_at_t(
+    channel: int, start_values: dict[str, int], target: dict[str, int], t: float
+):
+    """Send interpolated param values at position t (0.0 to 1.0)."""
+    midi = _midi
+    for param_name, target_val in target.items():
+        start_val = start_values[param_name]
+        current = round(start_val + (target_val - start_val) * t)
+        current = max(0, min(127, current))
+        if param_name in SYNTH_CC:
+            cc = SYNTH_CC[param_name]
+            midi.control_change(channel, cc, current)
+        elif param_name in SYNTH_NRPN:
+            msb, lsb = SYNTH_NRPN[param_name]
+            midi.nrpn(channel, msb, lsb, current)
+
+
+def _run_morph(
+    morph_id: str,
+    synth: int,
+    start_values: dict[str, int],
+    target: dict[str, int],
+    duration_seconds: float,
+    steps: int,
+    stop_event: threading.Event,
+    ping_pong: bool = False,
+):
+    """Background thread that interpolates synth params over time."""
+    channel = SYNTH1_CHANNEL if synth == 1 else SYNTH2_CHANNEL
+    interval = duration_seconds / steps
+
+    while True:
+        # Forward: start → target
+        for i in range(1, steps + 1):
+            if stop_event.is_set():
+                _morph_threads.pop(morph_id, None)
+                return
+            t = i / steps
+            _send_params_at_t(channel, start_values, target, t)
+            time.sleep(interval)
+
+        if not ping_pong:
+            break
+
+        # Backward: target → start
+        for i in range(1, steps + 1):
+            if stop_event.is_set():
+                _morph_threads.pop(morph_id, None)
+                return
+            t = 1.0 - (i / steps)
+            _send_params_at_t(channel, start_values, target, t)
+            time.sleep(interval)
+
+    _morph_threads.pop(morph_id, None)
+
+
+@mcp.tool()
+def morph_synth_params(
+    synth: int,
+    start: dict[str, int],
+    target: dict[str, int],
+    duration_bars: float = 4,
+    ping_pong: bool = False,
+    name: str = "",
+) -> str:
+    """Smoothly morph synth parameters from start values to target values over time.
+
+    Runs in the background while the sequencer plays. Interpolates all given
+    parameters linearly over the specified number of bars at the current BPM.
+
+    Multiple morphs can run concurrently on the same synth — each controls
+    different params (e.g. a slow filter sweep + a fast chorus wobble).
+    Give each morph a name to manage them individually with stop_morph.
+
+    When ping_pong is True, the morph continuously sweeps back and forth between
+    start and target values (like an LFO). duration_bars is the time for one
+    sweep direction, so a full cycle is 2x duration_bars.
+
+    Use stop_morph to cancel morphs by name, or stop_all_morphs to cancel all.
+
+    Args:
+        synth: Synth number (1 or 2).
+        start: Starting param values. e.g. {"filter_frequency": 30, "post_fx_level": 40}
+        target: Target param values. e.g. {"filter_frequency": 80, "post_fx_level": 90}
+        duration_bars: Duration in bars for one sweep direction. Default 4 bars.
+        ping_pong: If True, continuously sweep back and forth. Default False.
+        name: Optional name for this morph (e.g. "filter_sweep", "chorus_wobble").
+            Auto-generated if empty. Used to stop specific morphs.
+    """
+    global _morph_counter
+
+    if synth not in (1, 2):
+        return f"Invalid synth number {synth}. Must be 1 or 2."
+
+    # Validate all params exist
+    errors = []
+    for param_name in list(start.keys()) + list(target.keys()):
+        if param_name not in SYNTH_CC and param_name not in SYNTH_NRPN:
+            errors.append(param_name)
+    if errors:
+        return f"Unknown params: {', '.join(set(errors))}"
+
+    if set(start.keys()) != set(target.keys()):
+        return "start and target must have the same parameter names."
+
+    # Generate morph ID
+    if not name:
+        _morph_counter += 1
+        name = f"morph_{_morph_counter}"
+    morph_id = f"s{synth}_{name}"
+
+    # If a morph with this exact ID exists, stop it
+    if morph_id in _morph_threads:
+        _morph_threads[morph_id].set()
+
+    # Calculate duration from BPM (1 bar = 4 beats)
+    bpm = _engine._bpm if _engine._bpm else 78
+    seconds_per_bar = 4 * 60.0 / bpm
+    duration_seconds = duration_bars * seconds_per_bar
+
+    # ~20 updates per second for smooth morphing
+    total_steps = max(1, int(duration_seconds * 20))
+
+    # Set start values immediately
+    channel = SYNTH1_CHANNEL if synth == 1 else SYNTH2_CHANNEL
+    for param_name, value in start.items():
+        if param_name in SYNTH_CC:
+            cc = SYNTH_CC[param_name]
+            _midi.control_change(channel, cc, value)
+        elif param_name in SYNTH_NRPN:
+            msb, lsb = SYNTH_NRPN[param_name]
+            _midi.nrpn(channel, msb, lsb, value)
+
+    stop_event = threading.Event()
+    _morph_threads[morph_id] = stop_event
+
+    thread = threading.Thread(
+        target=_run_morph,
+        args=(morph_id, synth, start, target, duration_seconds, total_steps, stop_event, ping_pong),
+        daemon=True,
+    )
+    thread.start()
+
+    param_list = ", ".join(f"{k}: {start[k]}→{target[k]}" for k in target)
+    mode = "ping-pong" if ping_pong else "one-shot"
+    cycle_info = f" (full cycle: {duration_bars * 2} bars)" if ping_pong else ""
+    return (
+        f"Morph '{name}' on synth {synth} [{mode}] over {duration_bars} bars "
+        f"({duration_seconds:.1f}s){cycle_info}: {param_list}"
+    )
+
+
+@mcp.tool()
+def stop_morph(name: str = "", synth: int = 0) -> str:
+    """Stop one or more parameter morphs.
+
+    Can stop by name, by synth, or all at once.
+
+    Args:
+        name: Stop a specific morph by name. If empty, uses synth param.
+        synth: Stop all morphs on this synth (1 or 2). If 0, stops all morphs.
+    """
+    if name:
+        # Stop by exact name — check both synths
+        stopped = []
+        for morph_id in list(_morph_threads.keys()):
+            if morph_id.endswith(f"_{name}"):
+                _morph_threads[morph_id].set()
+                del _morph_threads[morph_id]
+                stopped.append(morph_id)
+        if stopped:
+            return f"Stopped: {', '.join(stopped)}"
+        return f"No morph named '{name}' found"
+
+    if synth in (1, 2):
+        # Stop all morphs on a specific synth
+        prefix = f"s{synth}_"
+        stopped = []
+        for morph_id in list(_morph_threads.keys()):
+            if morph_id.startswith(prefix):
+                _morph_threads[morph_id].set()
+                del _morph_threads[morph_id]
+                stopped.append(morph_id)
+        if stopped:
+            return f"Stopped {len(stopped)} morph(es) on synth {synth}: {', '.join(stopped)}"
+        return f"No morphs running on synth {synth}"
+
+    # Stop everything
+    count = len(_morph_threads)
+    for stop_event in _morph_threads.values():
+        stop_event.set()
+    _morph_threads.clear()
+    return f"Stopped all {count} morph(es)" if count else "No morphs running"
 
 
 def main():
