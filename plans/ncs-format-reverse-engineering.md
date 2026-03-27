@@ -10,29 +10,51 @@ Three example files compared:
 - `WithDrums.ncs` — same patches + C4 on synth1 (vel=64, gate=4 steps) + C6 on synth2 (default) + drum hits on step 1 & 9 of all 4 drum tracks, tempo=122 BPM
 
 ### External Resources
-- **Novation Components WASM validator** — validates NCS files before upload, could be disassembled
+- **WASM validator** — disassembled to extract complete data model field names (see below)
+  - Source: `circuit-tracks-project-validator-e83caa525f3f586024af78cebcb33ad4.wasm`
+  - From: https://github.com/userx14/CircuitTracksReverseEngineering
 - **Firmware RE gist**: https://gist.github.com/userx14/664f5e74cc7ced8c29d4a0434ab7be98
 - **No existing NCS parser library** — this is novel work
 
 ---
 
-## NCS Format Specification (confirmed)
+## NCS Format Specification
+
+**Source**: Binary analysis of 3 test files + WASM validator disassembly (field names from `circuit-tracks-project-validator.wasm`)
 
 ### File size: 160,780 bytes (fixed)
 
-### Header (0x00 - 0x37, 56 bytes)
-| Offset | Size | Field | Example |
-|--------|------|-------|---------|
-| 0x00 | 4 | Magic | `USER` (ASCII) |
-| 0x04 | 4 | File size (LE uint32) | 160780 = 0x2740C |
-| 0x08 | 4 | Version? | 1 |
-| 0x0C | 4 | Unknown | 11 (0x0B) |
-| 0x10 | 32 | Project name (ASCII, space-padded) | `Empty` |
-| 0x30 | 4 | Unknown | 0 |
-| 0x34 | 1 | **BPM** (confirmed: 120→0x78, 122→0x7A) | 120 |
-| 0x35 | 3 | Unknown (0x32, 0x03, 0x00) | fixed? |
+### Header (0x00 - 0x33, 52 bytes)
+| Offset | Size | WASM Field | Value | Notes |
+|--------|------|-----------|-------|-------|
+| 0x00 | 4 | `header.signature` | `USER` | ASCII magic |
+| 0x04 | 4 | `header.totalSessionSize` | 160780 | LE uint32 |
+| 0x08 | 4 | `header.sessionColour` | 1 | Project LED colour (validated "out of range") |
+| 0x0C | 4 | `header.featureFlags` | 0x0B=11 | `.midiTracks` must be set; `.reserved` must be 0 |
+| 0x10 | 32 | (name) | `Empty` | ASCII, space-padded |
+| 0x30 | 4 | (unknown) | 0 | |
 
-### Padding: 0x38 - 0x2E3 (684 bytes of zeros)
+### Timing Section (0x34 - 0x38, 5 bytes)
+| Offset | WASM Field | Value | Notes |
+|--------|-----------|-------|-------|
+| 0x34 | `timing.tempo` | 120 | BPM (40-240, confirmed 120→0x78, 122→0x7A) |
+| 0x35 | `timing.swing` | 50 | Swing (20-80, 0x32=50 ✓) |
+| 0x36 | `timing.swingSyncRate` | 3 | Swing sync rate |
+| 0x37 | `timing.spare1` | 0 | Must be 0 |
+| 0x38 | `timing.spare2` | 0 | Must be 0 |
+
+### Scenes + Chains Region (0x39 - 0x2E3, 683 bytes, all zeros in default)
+Contains (all default to 0):
+- `scenes[16].patternChains[8]` — each: `{start, end, padding}` (padding must be 0)
+- `sceneChain` — `{start, end, padding}`
+- `patternChains[8]` — per track: `{start, end, padding}`
+- `scaleRoot` — root note (0-11 = C to B)
+- `scaleType` — scale (0-15, 16 scales)
+- `delayPreset` — delay preset index (0-15)
+- `reverbPreset` — reverb preset index (0-7)
+- `midiKeyboardOctaves[2]` — octave per MIDI track
+
+Exact byte offsets within this region TBD — need test files with non-default values.
 
 ### Pattern Data Region: 0x2E4 - ~0x26CFC
 
@@ -43,66 +65,55 @@ Three example files compared:
 | 0-7 | Synth 1 | 3240 bytes | 28 bytes/step (confirmed) |
 | 8-15 | Synth 2 | 3240 bytes | 28 bytes/step (confirmed) |
 | 16-47 | Drums 1-4 | 1704 bytes | Row-based (confirmed) |
-| 48-63 | MIDI 1-2 | 3240 bytes | 28 bytes/step (assumed same as synth) |
+| 48-63 | MIDI 1-2 | 3240 bytes | 28 bytes/step (same as synth) |
 
 Each synth/MIDI pattern block (3240 bytes):
 - **4 bytes**: prefix/padding (zeros, or 0xFFFFFFFF at track boundaries)
-- **896 bytes**: 32 steps × 28 bytes
-- **40 bytes**: metadata header (`0F 00 03 00` + 36 zero bytes)
-- **2300 bytes**: 0xFF padding
+- **896 bytes**: 32 steps × 28 bytes (WASM: `steps[32]`)
+- **40 bytes**: pattern settings (see below)
+- **2300 bytes**: 0xFF = automation data region (WASM: `automation[N].values[32]`)
 
-### Synth/MIDI Step Format (28 bytes) — CONFIRMED
+### Synth/MIDI Step Format (28 bytes) — CONFIRMED via WASM
 
 ```
-Bytes 0-3:  Header
-  [0] active    — 0x00=empty, 0x01=has note
-  [1] param_count — 0x07 (constant)
-  [2] reserved  — 0x00
-  [3] reserved  — 0x00
+Bytes 0-3: stepInfo
+  [0] assignedNoteMask — bitmask for 6 note slots (0x01=note0 only, 0x3F=all 6)
+  [1] probability      — 0-7 (8 levels: 0=12.5%, 7=100%. Default=0x07)
+  [2] reserved         — 0x00
+  [3] reserved         — 0x00
 
-Bytes 4-7:  Param 0 (Note)
-  [4] note      — MIDI note number (0-127). C4=60=0x3C, C6=84=0x54
-  [5] gate      — Gate length in micro-ticks (6 per step)
+Bytes 4-27: notes[6], 4 bytes each (6-voice polyphony!)
+  Per note:
+  [0] noteNumber — MIDI note 0-127 (C4=60, C6=84)
+  [1] gate       — gate length in micro-ticks (6 per step)
                    0x06=1 step (default), 0x18=4 steps (confirmed)
-  [6] reserved  — 0x00
-  [7] velocity  — MIDI velocity (0-127)
-                   0x60=96 (empty default), 0x40=64 (confirmed "half")
+  [2] delay      — micro-step offset 0-5 (0=on beat)
+  [3] velocity   — MIDI velocity 0-127 (default 0x60=96)
 
-Bytes 8-27: Params 1-5 (step automation, 4 bytes each)
-  Each: [value, ?, 0x00, base_value(0x60)]
-  Likely: filter, resonance, FX send, probability, mutation
-  Default: 00 00 00 60
+Empty note slot default: [0x00, 0x00, 0x00, 0x60]
 ```
 
-### Drum Pattern Format (1704 bytes) — CONFIRMED
+### Synth/MIDI Pattern Settings (40 bytes, after step data)
+```
+  [0] playbackRange.end    — 0x0F=15 (0-indexed, default=step 16)
+  [1] playbackRange.start  — 0x00=0 (0-indexed, default=step 1)
+  [2] syncRate             — 0x03 (default, 8 possible values)
+  [3] playbackDirection    — 0x00 (0=Forward, 1=Reverse, 2=PingPong, 3=Random)
+  [4-39] zeros (reserved / automation lane metadata?)
+```
+
+### Drum Pattern Format (1704 bytes) — CONFIRMED via WASM
 
 Each drum pattern block:
-- **FF padding** (variable, fills start of block)
-- **16 bytes**: header/prefix (includes 0x20 at byte 8)
-- **32 bytes**: Row 0 — velocity per step (0x60=default vel, 0x00=empty)
-- **32 bytes**: Row 1 — parameter (0x07 default for all 32 steps)
-- **32 bytes**: Row 2 — 0xFF for all steps
-- **32 bytes**: Row 3 — trigger flag (0x01=active, 0x00=inactive)
-- **40 bytes**: metadata (`0F 00 03 00` + zeros)
+- **FF padding** (fills start of block)
+- **16 bytes**: header (byte 8 = 0x20 = step count indicator)
+- **32 bytes**: `velocity[32]` — 0x60=default active vel, 0x00=empty
+- **32 bytes**: `probabilities[32]` — 0x07=100% (0-7, 8 levels)
+- **32 bytes**: `drumChoice[32]` — 0xFF=default sample (sample flip per step!)
+- **32 bytes**: `drumRhythm[32]` — 0x01=active trigger, 0x00=inactive
+- **40 bytes**: pattern settings (same format as synth: playbackRange, syncRate, direction)
 
-Steps 1 and 9 (indices 0 and 8) confirmed active with 0x60 velocity and 0x01 trigger.
-
-### Pattern Metadata (40 bytes per pattern, `0F 00 03 00` header)
-Located after step data in each of the 64 pattern blocks. All 64 blocks identical in test files.
-```
-  [0] 0x0F = 15 → pattern end point (0-indexed, default=15 = step 16)
-  [1] 0x00 = 0  → pattern start point (0-indexed, default=0 = step 1)
-  [2] 0x03       → likely: play order (2 bits) + sync rate (6 bits), or similar
-  [3] 0x00       → unknown
-  [4-39] all zeros → reserved (probability? automation data pointers?)
-```
-
-### Drum Pattern Header (16 bytes, before step rows)
-```
-  [0-7] zeros
-  [8] 0x20 = 32 → step count / pattern length indicator
-  [9-15] zeros
-```
+Additional WASM fields for drum patterns: `automation[N].values[32]` (in FF region)
 
 ### Drum Step Rows (4 × 32 bytes after header)
 ```
@@ -116,10 +127,15 @@ Located after step data in each of the 64 pattern blocks. All 64 blocks identica
 
 #### Preamble (0x26CFC - 0x26D13, 24 bytes)
 ```
-  [0-19] 20 zeros — scene data? scale/root settings? (all default=0)
-  [20-21] 0x40 0x40 = 64, 64 — synth1 pan, synth2 pan (center=64)
+  [0-19] 20 zeros — synthTrackInfo / drumMuteStates / defaultDrumChoices? (all default=0)
+  [20-21] 0x40 0x40 = 64, 64 — synth pans? or part of synthTrackInfo
   [22-23] 0x00 0x00 — unknown
 ```
+WASM fields in this region (exact offsets TBD):
+- `synthTrackInfo[2]` — `.patch`, `.muteState`, `.sidechainPreset`
+- `drumMuteStates[4]`
+- `defaultDrumChoices[4]` — default drum sample per track
+- `midiTrackInfo[2]` — `.patch`, `.muteState`, `.sidechainPreset`
 
 #### Synth 1 Patch (0x26D14 - 0x26E67, 340 bytes)
 Full synth patch per Programmer's Reference format:
@@ -189,11 +205,15 @@ All features below are saved per-project in the NCS file. Features marked with �
 
 ### Global Project Settings
 - ✅ **Project name** (32 bytes ASCII at 0x10)
-- ✅ **BPM/Tempo** (40-240, byte at 0x34, default 120)
-- ❓ **Swing** (20-80, default 50 — not found in tail, maybe in padding 0x38-0x2E3)
-- ❓ **Scale selection** (16 scales — likely in the 20 zero-byte preamble at 0x26CFC)
-- ❓ **Root note** (C through B — likely in preamble)
-- ❓ **Project colour** (RGB LED colour — likely in preamble or padding)
+- ✅ **BPM/Tempo** (`timing.tempo` at 0x34, 40-240, default 120)
+- ✅ **Swing** (`timing.swing` at 0x35, 20-80, default 50)
+- ✅ **Swing sync rate** (`timing.swingSyncRate` at 0x36, default 3)
+- ✅ **Session colour** (`header.sessionColour` at 0x08, default 1)
+- ✅ **Feature flags** (`header.featureFlags` at 0x0C, default 0x0B)
+- ❓ **Scale type** (`scaleType`, 0-15, 16 scales — in scenes/chains region 0x39-0x2E3)
+- ❓ **Scale root** (`scaleRoot`, 0-11 = C to B — in scenes/chains region)
+- ❓ **Delay preset** (`delayPreset`, 0-15 — in scenes/chains region or tail)
+- ❓ **Reverb preset** (`reverbPreset`, 0-7 — in scenes/chains region or tail)
 
 ### Per-Track Mixer Settings
 - ✅ **Drum levels** (4 × byte at 0x2701C, default 100)
@@ -220,27 +240,28 @@ All features below are saved per-project in the NCS file. Features marked with �
 - ✅ **Reverb send** (byte 8: default 0)
 - ✅ **Delay send** (byte 9: default 0)
 
-### Per-Pattern Settings (in 40-byte metadata block per pattern)
-- ✅ **Pattern end point** (byte 0, 0-indexed, default=0x0F=15 → step 16)
-- ✅ **Pattern start point** (byte 1, 0-indexed, default=0x00 → step 1)
-- 🔶 **Play order + Sync rate** (byte 2 = 0x03, encoding TBD — needs test file with changed values)
+### Per-Pattern Settings (in 40-byte block per pattern, WASM-confirmed)
+- ✅ **`playbackRange.end`** (byte 0, 0-indexed, default=0x0F=15 → step 16)
+- ✅ **`playbackRange.start`** (byte 1, 0-indexed, default=0x00 → step 1)
+- ✅ **`syncRate`** (byte 2, default=0x03, 8 possible values)
+- ✅ **`playbackDirection`** (byte 3, default=0x00, 0=Fwd/1=Rev/2=PingPong/3=Random)
 
-### Synth Step Data (per step, 28 bytes)
-- ✅ **Active flag** (byte 0)
-- ✅ **Note** (byte 4, MIDI note 0-127; up to 6 notes per step for polyphony — need multi-note test)
-- ✅ **Velocity** (byte 7, 0-127)
-- ✅ **Gate** (byte 5, micro-ticks, 6 per step, range 1-96)
-- ✅ **Macro automation** (bytes 8-27: 5 × 4-byte param slots)
-- ❓ **Probability** (likely in one of the 5 automation param slots, or in byte 6)
-- ❓ **Micro step offset** (0-5 ticks per note — likely byte 6 or within automation params)
-- ❓ **Tie-forward** (drone/legato — likely a flag in byte 2 or 3)
+### Synth/MIDI Step Data (28 bytes, WASM-confirmed field names)
+- ✅ **`stepInfo.assignedNoteMask`** (byte 0) — bitmask for 6 note slots (0x01=1 note, 0x3F=all 6)
+- ✅ **`stepInfo.probability`** (byte 1) — 0-7, 8 levels (0x07=100%)
+- ✅ **`notes[6].noteNumber`** (byte 0 of each 4-byte note) — MIDI note 0-127
+- ✅ **`notes[6].gate`** (byte 1) — micro-ticks (6 per step, 1-96)
+- ✅ **`notes[6].delay`** (byte 2) — micro-step offset 0-5
+- ✅ **`notes[6].velocity`** (byte 3) — MIDI velocity 0-127 (default 96=0x60)
+- ✅ **Automation** — `automation[N].values[32]` in the 2300-byte FF region (0xFF = no data)
+- ❓ **Tie-forward** — not mentioned in WASM validator; may be encoded in gate value or separate field
 
-### Drum Step Data (4 rows of 32 bytes per pattern)
-- ✅ **Trigger flag** (Row 3: 0x01=active)
-- ✅ **Velocity** (Row 0: 0x60=default active vel)
-- ✅ **Probability** (Row 1: 0x07=100%, 0-indexed so 0=12.5% through 7=100%)
-- 🔶 **Row 2** (all 0xFF — micro-step? sample-flip bitmask? needs test)
-- ❓ **Sample flip** (per-step alternative sample — likely encoded in rows or drum header)
+### Drum Step Data (4 rows of 32 bytes, WASM-confirmed)
+- ✅ **`velocity[32]`** (Row 0: 0x60=default, 0x00=empty)
+- ✅ **`probabilities[32]`** (Row 1: 0x07=100%)
+- ✅ **`drumChoice[32]`** (Row 2: 0xFF=default sample — sample flip per step!)
+- ✅ **`drumRhythm[32]`** (Row 3: 0x01=trigger, 0x00=off)
+- ✅ **Automation** — `automation[N].values[32]` in FF region
 
 ### FX Settings (in tail section)
 - ✅ **Reverb type** (0x26FF0: default=2=Small Room)
