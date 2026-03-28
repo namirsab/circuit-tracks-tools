@@ -7,13 +7,14 @@ back into named parameter values.
 SysEx format (request):  F0 00 20 29 01 64 40 <synth> 00 F7
 SysEx format (response): F0 00 20 29 01 64 00 <synth> 00 <340 bytes patch> F7
 
-Patch binary layout (340 bytes):
+Patch binary layout (340 bytes, from Programmer's Reference Guide v3):
   Bytes 0-15:   Patch name (16 ASCII chars, space-padded)
-  Byte 16:      Category
-  Byte 17:      Genre
-  Bytes 18-339: Synth parameter data (322 bytes)
-
-Parameter offsets verified against the factory init patch and BatGirl.syx.
+  Byte 16:      Category (0-14)
+  Byte 17:      Genre (0-9)
+  Bytes 18-31:  Reserved (14 bytes, all zeros)
+  Bytes 32-123: Synth parameters (voice, osc, filter, env, LFO, FX, EQ)
+  Bytes 124-203: Mod matrix (20 slots × 4 bytes)
+  Bytes 204-339: Macro knobs (8 knobs × 17 bytes)
 """
 
 from circuit_mcp.constants import (
@@ -38,117 +39,133 @@ _PATCH_CATEGORY_OFFSET = 16
 _PATCH_GENRE_OFFSET = 17
 _PATCH_PARAMS_OFFSET = 18
 
-# Byte offsets within the parameter data region (relative to patch byte 18).
-# Verified against the factory init patch and BatGirl.syx.
-#
-# Init patch defaults shown in comments for verification.
-_PARAM_BYTE_OFFSETS: dict[str, int] = {
-    # --- Settings (bytes 14-17) ---
-    "polyphony_mode": 14,           # init=2 (Poly)
-    "portamento_rate": 15,          # init=0
-    "pre_glide": 16,                # init=64 (center)
-    "keyboard_octave": 17,          # init=64 (center)
+# Absolute byte offsets within the 340-byte patch binary.
+# From the official Programmer's Reference Guide v3, Synth Patch Format table.
+# name -> absolute patch address
+_PARAM_OFFSETS: dict[str, int] = {
+    # --- Voice (32-35) ---
+    "polyphony_mode": 32,
+    "portamento_rate": 33,
+    "pre_glide": 34,
+    "keyboard_octave": 35,
 
-    # --- Oscillator 1 (bytes 18-26) ---
-    "osc1_wave": 18,                # init=2 (sawtooth)
-    "osc1_wave_interpolate": 19,    # init=127
-    "osc1_pulse_width_index": 20,   # init=64
-    "osc1_virtual_sync_depth": 21,  # init=0
-    "osc1_density": 22,             # init=0
-    "osc1_density_detune": 23,      # init=0
-    "osc1_semitones": 24,           # init=64 (center)
-    "osc1_cents": 25,               # init=64 (center)
-    "osc1_pitchbend": 26,           # init=76 (+12 semitones range)
+    # --- Oscillator 1 (36-44) ---
+    "osc1_wave": 36,
+    "osc1_wave_interpolate": 37,
+    "osc1_pulse_width_index": 38,
+    "osc1_virtual_sync_depth": 39,
+    "osc1_density": 40,
+    "osc1_density_detune": 41,
+    "osc1_semitones": 42,
+    "osc1_cents": 43,
+    "osc1_pitchbend": 44,
 
-    # --- Oscillator 2 (bytes 27-35) ---
-    "osc2_wave": 27,                # init=2 (sawtooth)
-    "osc2_wave_interpolate": 28,    # init=127
-    "osc2_pulse_width_index": 29,   # init=64
-    "osc2_virtual_sync_depth": 30,  # init=0
-    "osc2_density": 31,             # init=0
-    "osc2_density_detune": 32,      # init=0
-    "osc2_semitones": 33,           # init=64 (center)
-    "osc2_cents": 34,               # init=64 (center)
-    "osc2_pitchbend": 35,           # init=76 (+12 semitones range)
+    # --- Oscillator 2 (45-53) ---
+    "osc2_wave": 45,
+    "osc2_wave_interpolate": 46,
+    "osc2_pulse_width_index": 47,
+    "osc2_virtual_sync_depth": 48,
+    "osc2_density": 49,
+    "osc2_density_detune": 50,
+    "osc2_semitones": 51,
+    "osc2_cents": 52,
+    "osc2_pitchbend": 53,
 
-    # --- Filter / Mixer / Envelopes (bytes 36-65) ---
-    "filter_frequency": 36,         # init=127 (fully open)
-    "filter_resonance": 37,         # init=0
-    "drive": 38,                    # init=0
-    "filter_tracking": 39,          # init=0
-    "osc1_level": 40,               # init=64
-    "osc2_level": 41,               # init=64
-    "ring_mod_level": 42,           # init=0
-    "noise_level": 43,              # init=0
-    "routing": 44,                  # init=0 (normal)
-    "filter_type": 45,              # init=1 (LP24?)
-    "env1_velocity": 46,            # init=127
-    "env1_sustain": 47,             # init=127
-    "env1_attack": 48,              # init=0
-    "pre_fx_level": 49,             # init=64
-    "post_fx_level": 50,            # init=64
-    "env2_to_filter_freq": 51,      # init=64 (center)
-    "env1_decay": 52,               # init=2 (very short? or mapped differently)
-    "env1_release": 53,             # init=90 (0x5a)
-    # NOTE: bytes 52-53 might be swapped with decay/release. The init values
-    # 2 and 90 are unusual for attack/decay vs decay/release. Needs device testing.
-    "env2_velocity": 54,            # init=127
-    "env2_attack": 55,              # init=40
-    "env2_sustain": 56,             # init=64
-    "env2_decay": 57,               # init=2
-    "env2_release": 58,             # init=75 (0x4b)
-    "env3_delay": 59,               # init=35 (0x23)
-    "env3_attack": 60,              # init=45 (0x2d)
-    "env3_decay": 61,               # init=0
-    "env3_sustain": 62,             # init=10 (0x0a)
-    "env3_release": 63,             # init=70 (0x46)
-    "env3_unknown1": 64,            # init=64
-    "env3_unknown2": 65,            # init=40
+    # --- Mixer (54-59) ---
+    "osc1_level": 54,
+    "osc2_level": 55,
+    "ring_mod_level": 56,
+    "noise_level": 57,
+    "pre_fx_level": 58,
+    "post_fx_level": 59,
 
-    # --- LFO 1 (bytes 66-78) ---
-    "lfo1_waveform": 66,            # init=0 (sine)
-    "lfo1_phase_offset": 67,        # init=0
-    "lfo1_slew_rate": 68,           # init=0
-    "lfo1_delay": 69,               # init=0
-    "lfo1_delay_sync": 70,          # init=0
-    "lfo1_rate": 71,                # init=68 (0x44)
-    "lfo1_rate_sync": 72,           # init=0
-    "lfo1_one_shot": 73,            # init=0
-    "lfo1_key_sync": 74,            # init=0
-    "lfo1_common_sync": 75,         # init=0
-    "lfo1_delay_trigger": 76,       # init=0
-    "lfo1_fade_mode": 77,           # init=0
+    # --- Filter (60-68) ---
+    "routing": 60,
+    "drive": 61,
+    "drive_type": 62,
+    "filter_type": 63,
+    "filter_frequency": 64,
+    "filter_tracking": 65,
+    "filter_resonance": 66,
+    "filter_q_normalize": 67,
+    "env2_to_filter_freq": 68,
 
-    # --- LFO 2 (bytes 78-85 region) ---
-    # There may be a gap byte at 78
-    "lfo2_waveform": 78,            # init=0 (sine)
-    "lfo2_phase_offset": 79,        # init=68 — WAIT this is lfo2_rate!
+    # --- Envelope 1 / Amp (69-73) ---
+    "env1_velocity": 69,
+    "env1_attack": 70,
+    "env1_decay": 71,
+    "env1_sustain": 72,
+    "env1_release": 73,
 
-    # Actually let me re-examine. LFO2 likely mirrors LFO1 layout.
-    # If LFO1 = 12 bytes (66-77), then LFO2 starts at 78:
-    "lfo2_rate": 79,                # init=68 (0x44) — confirmed
+    # --- Envelope 2 / Filter (74-78) ---
+    "env2_velocity": 74,
+    "env2_attack": 75,
+    "env2_decay": 76,
+    "env2_sustain": 77,
+    "env2_release": 78,
 
-    # --- FX & EQ (bytes ~86-99) ---
-    "eq_bass_frequency": 87,        # init=64
-    "eq_bass_level": 88,            # init=64
-    "eq_mid_frequency": 89,         # init=64
-    "eq_mid_level": 90,             # init=64
-    "distortion_level": 91,         # init=125 (0x7d) — or is this eq_treble_freq?
-    "chorus_level": 92,             # init=64
+    # --- Envelope 3 (79-83) ---
+    "env3_delay": 79,
+    "env3_attack": 80,
+    "env3_decay": 81,
+    "env3_sustain": 82,
+    "env3_release": 83,
 
-    # --- Mod Matrix (bytes ~100+) ---
-    # 20 mod slots × 4 bytes each (source1, source2, depth, destination)
-    # In init patch, all depths = 64 (center/no effect), sources & dests = 0
-    # The repeating pattern 00 00 00 40 00 00 00 40... visible in the hex
-    # starts around byte 98+
+    # --- LFO 1 (84-91) ---
+    "lfo1_waveform": 84,
+    "lfo1_phase_offset": 85,
+    "lfo1_slew_rate": 86,
+    "lfo1_delay": 87,
+    "lfo1_delay_sync": 88,
+    "lfo1_rate": 89,
+    "lfo1_rate_sync": 90,
+    "lfo1_flags": 91,  # bit0=OneShot, bit1=KeySync, bit2=CommonSync, bit3=DelayTrigger, bit4-5=FadeMode
+
+    # --- LFO 2 (92-99) ---
+    "lfo2_waveform": 92,
+    "lfo2_phase_offset": 93,
+    "lfo2_slew_rate": 94,
+    "lfo2_delay": 95,
+    "lfo2_delay_sync": 96,
+    "lfo2_rate": 97,
+    "lfo2_rate_sync": 98,
+    "lfo2_flags": 99,  # same bitfield as LFO1, FadeMode bits use values 4-7
+
+    # --- Effects (100-102) ---
+    "distortion_level": 100,
+    "chorus_level": 102,
+
+    # --- Equaliser (105-110) ---
+    "eq_bass_frequency": 105,
+    "eq_bass_level": 106,
+    "eq_mid_frequency": 107,
+    "eq_mid_level": 108,
+    "eq_treble_frequency": 109,
+    "eq_treble_level": 110,
+
+    # --- Distortion & Chorus details (116-123) ---
+    "distortion_type": 116,
+    "distortion_compensation": 117,
+    "chorus_type": 118,
+    "chorus_rate": 119,
+    "chorus_rate_sync": 120,
+    "chorus_feedback": 121,
+    "chorus_mod_depth": 122,
+    "chorus_delay": 123,
 }
 
-# Remove entries that are clearly wrong or placeholder
-# Keep only verified mappings
-_VERIFIED_PARAMS = {
-    k: v for k, v in _PARAM_BYTE_OFFSETS.items()
-    if not k.startswith("env3_unknown") and not k.startswith("lfo2_phase")
-}
+# Add mod matrix slots (20 slots × 4 bytes at addresses 124-203)
+for _slot in range(1, 21):
+    _base = 124 + (_slot - 1) * 4
+    _PARAM_OFFSETS[f"mod{_slot}_source1"] = _base
+    _PARAM_OFFSETS[f"mod{_slot}_source2"] = _base + 1
+    _PARAM_OFFSETS[f"mod{_slot}_depth"] = _base + 2
+    _PARAM_OFFSETS[f"mod{_slot}_destination"] = _base + 3
+
+# Backward-compatible alias: old code used _PARAM_BYTE_OFFSETS with offsets
+# relative to byte 18. Keep this for modify_patch_bytes() which adds
+# _PATCH_PARAMS_OFFSET (18) before writing.
+_PARAM_BYTE_OFFSETS = {name: addr - _PATCH_PARAMS_OFFSET for name, addr in _PARAM_OFFSETS.items()}
 
 
 def request_current_patch(midi: MidiConnection, synth: int) -> list[int] | None:
@@ -204,15 +221,14 @@ def parse_patch_data(sysex_data: list[int]) -> dict:
     category = patch_bytes[_PATCH_CATEGORY_OFFSET]
     genre = patch_bytes[_PATCH_GENRE_OFFSET]
 
-    # Extract parameter data
-    param_data = patch_bytes[_PATCH_PARAMS_OFFSET:]
+    # Extract parameter data using absolute addresses
     params = {}
-    for param_name, offset in _VERIFIED_PARAMS.items():
-        if offset < len(param_data):
-            params[param_name] = param_data[offset]
+    for param_name, addr in _PARAM_OFFSETS.items():
+        if addr < len(patch_bytes):
+            params[param_name] = patch_bytes[addr]
 
-    # Raw hex of the full parameter region for inspection
-    raw_param_hex = " ".join(f"{b:02x}" for b in param_data[:100])
+    # Raw hex of the parameter region for inspection
+    raw_param_hex = " ".join(f"{b:02x}" for b in patch_bytes[_PATCH_PARAMS_OFFSET:_PATCH_PARAMS_OFFSET + 100])
 
     return {
         "name": name,

@@ -445,6 +445,93 @@ MOD_MATRIX_DESTINATIONS = {
     17: "filter envelope decay",
 }
 
+# Macro knob destination index → parameter name
+# Ordering follows the Novation Components UI layout, NOT patch byte addresses.
+# Verified by dumping .syx patches with known macro assignments from hardware.
+# dest 0 and 40,43 are unverified best-guesses (marked with ?).
+MACRO_DESTINATIONS = {
+    0: "pre_fx_level",              # ? (unverified, likely)
+    1: "portamento_rate",           # confirmed
+    2: "post_fx_level",            # confirmed
+    3: "osc1_wave_interpolate",    # confirmed
+    4: "osc1_pulse_width_index",   # confirmed
+    5: "osc1_virtual_sync_depth",  # confirmed
+    6: "osc1_density",             # confirmed
+    7: "osc1_density_detune",      # confirmed
+    8: "osc1_semitones",           # confirmed
+    9: "osc1_cents",               # confirmed
+    10: "osc2_wave_interpolate",   # confirmed
+    11: "osc2_pulse_width_index",  # inferred (mirrors osc1)
+    12: "osc2_virtual_sync_depth", # confirmed
+    13: "osc2_density",            # inferred (mirrors osc1)
+    14: "osc2_density_detune",     # inferred (mirrors osc1)
+    15: "osc2_semitones",          # confirmed
+    16: "osc2_cents",              # confirmed
+    17: "osc1_level",              # confirmed
+    18: "osc2_level",              # confirmed
+    19: "ring_mod_level",          # confirmed
+    20: "noise_level",             # confirmed
+    21: "filter_frequency",        # confirmed
+    22: "filter_resonance",        # confirmed
+    23: "drive",                   # confirmed
+    24: "filter_tracking",         # confirmed
+    25: "env2_to_filter_freq",     # confirmed
+    26: "env1_attack",             # confirmed
+    27: "env1_decay",              # confirmed
+    28: "env1_sustain",            # confirmed
+    29: "env1_release",            # confirmed
+    30: "env2_attack",             # confirmed
+    31: "env2_decay",              # confirmed
+    32: "env2_sustain",            # confirmed
+    33: "env2_release",            # confirmed
+    34: "env3_delay",              # confirmed
+    35: "env3_attack",             # confirmed
+    36: "env3_decay",              # confirmed
+    37: "env3_sustain",            # confirmed
+    38: "env3_release",            # confirmed
+    39: "lfo1_rate",               # confirmed
+    40: "lfo1_delay",              # ? (unverified, likely)
+    41: "lfo1_slew_rate",          # confirmed
+    42: "lfo2_rate",               # confirmed
+    43: "lfo2_delay",              # ? (unverified, likely)
+    44: "lfo2_slew_rate",          # confirmed
+    45: "distortion_level",        # confirmed
+    46: "chorus_level",            # confirmed
+    47: "chorus_rate",             # confirmed
+    48: "chorus_feedback",         # confirmed
+    49: "chorus_mod_depth",        # confirmed
+    50: "chorus_delay",            # confirmed
+    51: "mod_matrix_1_depth",      # confirmed
+    52: "mod_matrix_2_depth",      # confirmed
+    53: "mod_matrix_3_depth",      # confirmed
+    54: "mod_matrix_4_depth",      # confirmed
+    55: "mod_matrix_5_depth",      # inferred (sequential)
+    56: "mod_matrix_6_depth",
+    57: "mod_matrix_7_depth",
+    58: "mod_matrix_8_depth",
+    59: "mod_matrix_9_depth",
+    60: "mod_matrix_10_depth",
+    61: "mod_matrix_11_depth",
+    62: "mod_matrix_12_depth",
+    63: "mod_matrix_13_depth",
+    64: "mod_matrix_14_depth",
+    65: "mod_matrix_15_depth",
+    66: "mod_matrix_16_depth",
+    67: "mod_matrix_17_depth",
+    68: "mod_matrix_18_depth",
+    69: "mod_matrix_19_depth",
+    70: "mod_matrix_20_depth",
+}
+
+# Reverse lookups for name → index resolution
+MACRO_DEST_BY_NAME = {v: k for k, v in MACRO_DESTINATIONS.items()}
+MOD_SOURCE_BY_NAME = {v.lower(): k for k, v in MOD_MATRIX_SOURCES.items()}
+MOD_DEST_BY_NAME = {v.lower(): k for k, v in MOD_MATRIX_DESTINATIONS.items()}
+OSC_WAVEFORM_BY_NAME = {v.lower(): k for k, v in OSC_WAVEFORMS.items()}
+FILTER_TYPE_BY_NAME = {v.lower(): k for k, v in FILTER_TYPES.items()}
+DISTORTION_TYPE_BY_NAME = {v.lower(): k for k, v in DISTORTION_TYPES.items()}
+LFO_WAVEFORM_BY_NAME = {v.lower(): k for k, v in LFO_WAVEFORMS.items()}
+
 REVERB_TYPES = {
     0: "chamber",
     1: "small room",

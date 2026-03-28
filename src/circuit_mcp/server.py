@@ -22,6 +22,7 @@ from circuit_mcp.constants import (
 )
 from circuit_mcp.macros import DEFAULT_MACROS, MacroTarget, apply_macro
 from circuit_mcp.midi import MidiConnection
+from circuit_mcp.patch import _PARAM_OFFSETS
 from circuit_mcp.patch import (
     parse_patch_data,
     parse_patch_file,
@@ -971,6 +972,207 @@ def load_patch_file(synth: int, file_path: str) -> dict:
         "loaded": parsed.get("name", "Unknown"),
         "synth": synth,
         "file": file_path,
+    }
+
+
+@mcp.tool()
+def create_synth_patch(
+    synth: int,
+    name: str,
+    params: dict[str, int] | None = None,
+    mod_matrix: list[dict] | None = None,
+    macros: dict[str, dict] | None = None,
+    preset: str | None = None,
+) -> dict:
+    """Create a synth patch from scratch and send it to the Circuit Tracks.
+
+    Unlike edit_synth_patch (which reads then modifies the current patch), this
+    builds a complete patch from an init template. Use for full sound design.
+
+    Preset names: "pad", "bass", "lead", "pluck" (or None for init patch).
+
+    Params use the same names as edit_synth_patch: osc1_wave, filter_frequency,
+    env1_attack, lfo1_rate, distortion_level, chorus_level, etc.
+
+    Mod matrix entries: {"source": str/int, "dest": str/int, "depth": int, "source2": str/int}
+    Sources: direct, velocity, keyboard, LFO 1+, LFO 1+/-, LFO 2+, LFO 2+/-,
+             env amp, env filter, env 3
+    Destinations: osc 1 & 2 pitch, osc 1/2 pitch, osc 1/2 v-sync,
+                  osc 1/2 pulse width / index, osc 1/2 level, noise level,
+                  ring modulation 1*2 level, filter drive amount,
+                  filter frequency, filter resonance, LFO 1/2 rate,
+                  amp/filter envelope decay
+
+    Macro entries: {macro_num: {"targets": [{"dest": str/int, "start": int, "end": int, "depth": int}]}}
+    Macro dest uses parameter names (filter_frequency, env1_attack, etc.) or indices 0-70.
+
+    Args:
+        synth: Synth number (1 or 2).
+        name: Patch name (up to 16 chars).
+        params: Dict of parameter_name -> value.
+        mod_matrix: List of mod routing dicts.
+        macros: Dict of macro_num (str) -> config dict with "targets" list.
+        preset: Optional preset name as starting point.
+    """
+    if synth not in (1, 2):
+        return {"error": f"Invalid synth number {synth}. Must be 1 or 2."}
+
+    from circuit_mcp.patch_builder import (
+        PatchBuilder, preset_pad, preset_bass, preset_lead, preset_pluck,
+    )
+
+    # Start from preset or init
+    presets = {"pad": preset_pad, "bass": preset_bass, "lead": preset_lead, "pluck": preset_pluck}
+    if preset and preset.lower() in presets:
+        builder = presets[preset.lower()](name)
+    else:
+        builder = PatchBuilder(name)
+
+    # Apply params
+    if params:
+        for param_name, value in params.items():
+            if param_name in _PARAM_OFFSETS:
+                builder._bytes[_PARAM_OFFSETS[param_name]] = max(0, min(127, int(value)))
+
+    # Apply mod matrix
+    if mod_matrix:
+        builder.clear_mods()
+        for entry in mod_matrix:
+            builder.add_mod(
+                source=entry.get("source", 0),
+                destination=entry.get("dest", 0),
+                depth=entry.get("depth", 80),
+                source2=entry.get("source2", 0),
+            )
+
+    # Apply macros
+    if macros:
+        for macro_num_str, config in macros.items():
+            macro_num = int(macro_num_str)
+            targets = config.get("targets", [])
+            position = config.get("position", 0)
+            builder.set_macro(macro_num, targets, position=position)
+
+    patch_bytes = list(builder.build())
+    midi = _midi
+    send_current_patch(midi, synth, patch_bytes)
+
+    return {
+        "synth": synth,
+        "name": name,
+        "preset": preset,
+        "params_set": len(params) if params else 0,
+        "mod_slots": len(mod_matrix) if mod_matrix else 0,
+        "macros_set": len(macros) if macros else 0,
+    }
+
+
+@mcp.tool()
+def get_patch_parameters() -> dict:
+    """Get a complete reference of all synth patch parameters for sound design.
+
+    Returns parameter names organized by category with their defaults, ranges,
+    and lookup tables for waveforms, filter types, mod matrix sources/destinations,
+    and macro destinations. Use this to plan sound design before calling
+    create_synth_patch.
+    """
+    from circuit_mcp.constants import (
+        OSC_WAVEFORMS, FILTER_TYPES, DISTORTION_TYPES, LFO_WAVEFORMS,
+        MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS, MACRO_DESTINATIONS,
+    )
+
+    return {
+        "parameters": {
+            "voice": {
+                "polyphony_mode": {"default": 2, "range": "0-2", "notes": "0=Mono, 1=Mono AG, 2=Poly"},
+                "portamento_rate": {"default": 0, "range": "0-127"},
+                "pre_glide": {"default": 64, "range": "52-76", "notes": "center=64"},
+                "keyboard_octave": {"default": 64, "range": "58-69", "notes": "center=64"},
+            },
+            "osc1": {
+                "osc1_wave": {"default": 2, "range": "0-29", "notes": "See waveforms table"},
+                "osc1_wave_interpolate": {"default": 127, "range": "0-127"},
+                "osc1_pulse_width_index": {"default": 64, "range": "0-127"},
+                "osc1_virtual_sync_depth": {"default": 0, "range": "0-127"},
+                "osc1_density": {"default": 0, "range": "0-127"},
+                "osc1_density_detune": {"default": 0, "range": "0-127"},
+                "osc1_semitones": {"default": 64, "range": "0-127", "notes": "center=64"},
+                "osc1_cents": {"default": 64, "range": "0-127", "notes": "center=64"},
+                "osc1_pitchbend": {"default": 76, "range": "52-76"},
+            },
+            "osc2": "Same layout as osc1 (prefix osc2_)",
+            "mixer": {
+                "osc1_level": {"default": 127, "range": "0-127"},
+                "osc2_level": {"default": 0, "range": "0-127"},
+                "ring_mod_level": {"default": 0, "range": "0-127"},
+                "noise_level": {"default": 0, "range": "0-127"},
+                "pre_fx_level": {"default": 64, "range": "52-82"},
+                "post_fx_level": {"default": 64, "range": "52-82"},
+            },
+            "filter": {
+                "routing": {"default": 0, "range": "0-2", "notes": "0=Normal, 1=Osc1 bypass, 2=Both bypass"},
+                "drive": {"default": 0, "range": "0-127"},
+                "drive_type": {"default": 0, "range": "0-6", "notes": "See distortion types"},
+                "filter_type": {"default": 1, "range": "0-5", "notes": "See filter types"},
+                "filter_frequency": {"default": 127, "range": "0-127"},
+                "filter_tracking": {"default": 0, "range": "0-127"},
+                "filter_resonance": {"default": 0, "range": "0-127"},
+                "filter_q_normalize": {"default": 64, "range": "0-127"},
+                "env2_to_filter_freq": {"default": 64, "range": "0-127", "notes": "center=64"},
+            },
+            "env_amp": {
+                "env1_velocity": {"default": 64, "range": "0-127", "notes": "center=64"},
+                "env1_attack": {"default": 2, "range": "0-127"},
+                "env1_decay": {"default": 90, "range": "0-127"},
+                "env1_sustain": {"default": 127, "range": "0-127"},
+                "env1_release": {"default": 40, "range": "0-127"},
+            },
+            "env_filter": {
+                "env2_velocity": {"default": 64, "range": "0-127"},
+                "env2_attack": {"default": 2, "range": "0-127"},
+                "env2_decay": {"default": 75, "range": "0-127"},
+                "env2_sustain": {"default": 35, "range": "0-127"},
+                "env2_release": {"default": 45, "range": "0-127"},
+            },
+            "env3": {
+                "env3_delay": {"default": 0, "range": "0-127"},
+                "env3_attack": {"default": 10, "range": "0-127"},
+                "env3_decay": {"default": 70, "range": "0-127"},
+                "env3_sustain": {"default": 64, "range": "0-127"},
+                "env3_release": {"default": 40, "range": "0-127"},
+            },
+            "lfo1": "waveform(0-37), phase_offset(0-119), slew_rate, delay, delay_sync(0-35), rate(def=68), rate_sync(0-35), flags(bitfield)",
+            "lfo2": "Same layout as lfo1 (prefix lfo2_)",
+            "effects": {
+                "distortion_level": {"default": 0, "range": "0-127"},
+                "distortion_type": {"default": 0, "range": "0-6"},
+                "distortion_compensation": {"default": 100, "range": "0-127"},
+                "chorus_level": {"default": 0, "range": "0-127"},
+                "chorus_type": {"default": 1, "range": "0-1", "notes": "0=Phaser, 1=Chorus"},
+                "chorus_rate": {"default": 20, "range": "0-127"},
+                "chorus_feedback": {"default": 74, "range": "0-127"},
+                "chorus_mod_depth": {"default": 64, "range": "0-127"},
+                "chorus_delay": {"default": 64, "range": "0-127"},
+            },
+            "eq": {
+                "eq_bass_frequency": {"default": 64, "range": "0-127"},
+                "eq_bass_level": {"default": 64, "range": "0-127", "notes": "center=64"},
+                "eq_mid_frequency": {"default": 64, "range": "0-127"},
+                "eq_mid_level": {"default": 64, "range": "0-127", "notes": "center=64"},
+                "eq_treble_frequency": {"default": 125, "range": "0-127"},
+                "eq_treble_level": {"default": 64, "range": "0-127", "notes": "center=64"},
+            },
+        },
+        "lookup_tables": {
+            "osc_waveforms": OSC_WAVEFORMS,
+            "filter_types": FILTER_TYPES,
+            "distortion_types": DISTORTION_TYPES,
+            "lfo_waveforms": LFO_WAVEFORMS,
+            "mod_matrix_sources": MOD_MATRIX_SOURCES,
+            "mod_matrix_destinations": MOD_MATRIX_DESTINATIONS,
+            "macro_destinations": MACRO_DESTINATIONS,
+        },
+        "presets": ["pad", "bass", "lead", "pluck"],
     }
 
 
