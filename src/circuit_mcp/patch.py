@@ -255,6 +255,28 @@ def send_current_patch(midi: MidiConnection, synth: int, patch_bytes: list[int])
     midi.send_sysex(sysex_data)
 
 
+def save_patch_to_slot(midi: MidiConnection, synth: int, slot: int, patch_bytes: list[int]) -> None:
+    """Save a patch to a numbered slot in flash memory.
+
+    Args:
+        midi: Connected MidiConnection.
+        synth: Synth number (1 or 2).
+        slot: Patch slot number (0-63).
+        patch_bytes: The 340-byte patch binary.
+    """
+    if len(patch_bytes) != _PATCH_SIZE:
+        raise ValueError(f"Patch must be {_PATCH_SIZE} bytes, got {len(patch_bytes)}")
+    if not 0 <= slot <= 63:
+        raise ValueError(f"Slot must be 0-63, got {slot}")
+
+    # Replace Patch format (from Programmer's Reference):
+    # header + cmd(0x01) + patch_number(0-63) + reserved(0) + 340 bytes
+    # Note: no synth location byte — patches are stored in a shared bank.
+    _CMD_REPLACE_PATCH = 0x01
+    sysex_data = _SYSEX_HEADER + [_CMD_REPLACE_PATCH, slot, 0] + patch_bytes
+    midi.send_sysex(sysex_data)
+
+
 def read_and_modify_patch(
     midi: MidiConnection,
     synth: int,

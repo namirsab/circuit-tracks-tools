@@ -28,6 +28,7 @@ from circuit_mcp.patch import (
     parse_patch_file,
     read_and_modify_patch,
     request_current_patch,
+    save_patch_to_slot,
     send_current_patch,
 )
 from circuit_mcp.sequencer import (
@@ -972,6 +973,57 @@ def load_patch_file(synth: int, file_path: str) -> dict:
         "loaded": parsed.get("name", "Unknown"),
         "synth": synth,
         "file": file_path,
+    }
+
+
+@mcp.tool()
+def save_synth_patch(synth: int, slot: int) -> dict:
+    """Save the current synth patch to a numbered slot in flash memory.
+
+    NOTE: The SysEx Replace Patch command may not work on all firmware versions.
+    If this doesn't persist, save manually on the hardware with Shift + Save
+    after loading the patch with create_synth_patch.
+
+    Args:
+        synth: Synth number (1 or 2).
+        slot: Patch slot number (0-63).
+    """
+    if synth not in (1, 2):
+        return {"error": f"Invalid synth number {synth}. Must be 1 or 2."}
+    if not 0 <= slot <= 63:
+        return {"error": f"Invalid slot {slot}. Must be 0-63."}
+
+    midi = _midi
+    if not midi.has_input:
+        return {
+            "error": "No MIDI input port available. "
+            "The input port is needed to read the current patch before saving."
+        }
+
+    # Read current patch from device
+    sysex_data = request_current_patch(midi, synth)
+    if sysex_data is None:
+        return {"error": "No response from Circuit Tracks. Is it connected?"}
+
+    patch_start = 8
+    patch_bytes = list(sysex_data[patch_start:patch_start + 340])
+    if len(patch_bytes) < 340:
+        return {"error": f"Patch data too short: {len(patch_bytes)} bytes"}
+
+    patch_name = "".join(chr(b) for b in patch_bytes[0:16] if 32 <= b <= 126).strip()
+
+    # Wait for device to finish processing the dump response
+    import time
+    time.sleep(0.1)
+
+    # Save to flash slot
+    save_patch_to_slot(midi, synth, slot, patch_bytes)
+
+    return {
+        "synth": synth,
+        "slot": slot,
+        "name": patch_name,
+        "note": "If patch doesn't persist, save manually on hardware with Shift + Save",
     }
 
 
