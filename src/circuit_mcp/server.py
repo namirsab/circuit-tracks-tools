@@ -28,10 +28,9 @@ from circuit_mcp.patch import (
     parse_patch_file,
     read_and_modify_patch,
     request_current_patch,
-    save_patch_to_slot,
     send_current_patch,
 )
-from circuit_mcp.ncs_transfer import send_ncs_project
+from circuit_mcp.ncs_transfer import send_ncs_project, send_patch_to_slot
 from circuit_mcp.sequencer import (
     VALID_TRACK_NAMES,
     Pattern,
@@ -981,9 +980,8 @@ def load_patch_file(synth: int, file_path: str) -> dict:
 def save_synth_patch(synth: int, slot: int) -> dict:
     """Save the current synth patch to a numbered slot in flash memory.
 
-    NOTE: The SysEx Replace Patch command may not work on all firmware versions.
-    If this doesn't persist, save manually on the hardware with Shift + Save
-    after loading the patch with create_synth_patch.
+    Uses the Novation Components file management protocol to write the patch
+    directly to flash storage.
 
     Args:
         synth: Synth number (1 or 2).
@@ -1007,25 +1005,16 @@ def save_synth_patch(synth: int, slot: int) -> dict:
         return {"error": "No response from Circuit Tracks. Is it connected?"}
 
     patch_start = 8
-    patch_bytes = list(sysex_data[patch_start:patch_start + 340])
+    patch_bytes = bytes(sysex_data[patch_start:patch_start + 340])
     if len(patch_bytes) < 340:
         return {"error": f"Patch data too short: {len(patch_bytes)} bytes"}
-
-    patch_name = "".join(chr(b) for b in patch_bytes[0:16] if 32 <= b <= 126).strip()
 
     # Wait for device to finish processing the dump response
     import time
     time.sleep(0.1)
 
-    # Save to flash slot
-    save_patch_to_slot(midi, synth, slot, patch_bytes)
-
-    return {
-        "synth": synth,
-        "slot": slot,
-        "name": patch_name,
-        "note": "If patch doesn't persist, save manually on hardware with Shift + Save",
-    }
+    # Save to flash slot via Components protocol
+    return send_patch_to_slot(midi, patch_bytes, synth, slot)
 
 
 @mcp.tool()

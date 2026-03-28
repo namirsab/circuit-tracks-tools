@@ -69,8 +69,10 @@ Replace the non-working Replace Patch SysEx (0x01) with `send_patch_to_slot()`.
 - `send_write_init()` / `send_write_data()` / `send_write_finish()`
 - `send_set_filename()`
 
-## Unknown
+## Resolved (from Components capture)
 
-- The exact file type byte for patches (need one Components capture)
-- Whether the directory listing handshake (subcmd 0x0b/0x09) is required for patches
-- Whether synth 1 and synth 2 patches use different type bytes or slot ranges
+- Patch directory file type byte is **0x04** (not 0x01/0x02 as hypothesized)
+- Components does NOT use WRITE_INIT/WRITE_DATA/WRITE_FINISH for patches
+- Instead: open file mgmt session → browse patch directory (16 entries per page) → close session → send Replace Patch SysEx
+- Replace Patch SysEx format: `header + 0x01 + location + 0x00 + slot + 0x00 + 340 bytes` (location: 0x00=synth1, 0x01=synth2)
+- The old Replace Patch format was missing the location byte and had wrong byte count

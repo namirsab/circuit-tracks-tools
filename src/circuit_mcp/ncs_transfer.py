@@ -40,6 +40,9 @@ _SUBCMD_ACK = 0x04
 # File type for projects
 _FILE_TYPE_PROJECT = 0x03
 
+# Patch size in bytes
+_PATCH_SIZE = 340
+
 # Data block size (raw bytes per WRITE_DATA message)
 _BLOCK_SIZE = 8192
 
@@ -276,4 +279,106 @@ def send_ncs_project(
         "bytes_sent": bytes_sent,
         "blocks": num_blocks,
         "crc32": f"0x{crc:08X}",
+    }
+
+
+def send_patch_to_slot(
+    midi: MidiConnection,
+    patch_bytes: bytes | list[int],
+    synth: int,
+    slot: int,
+) -> dict:
+    """Save a 340-byte synth patch to a flash slot.
+
+    Replicates the Novation Components patch save protocol:
+    1. Open a file management session and browse the patch directory
+    2. Close the session
+    3. Send the patch via Replace Patch SysEx (command group 0x01)
+
+    The file management session appears to "unlock" flash writes.
+
+    Args:
+        midi: Connected MidiConnection (must have input port).
+        patch_bytes: The 340-byte patch binary.
+        synth: Synth number (1 or 2).
+        slot: Patch slot number (0-63).
+
+    Returns:
+        Dict with transfer result info.
+    """
+    if synth not in (1, 2):
+        raise ValueError(f"Synth must be 1 or 2, got {synth}")
+    if not 0 <= slot <= 63:
+        raise ValueError(f"Slot must be 0-63, got {slot}")
+
+    if isinstance(patch_bytes, list):
+        patch_bytes = bytes(patch_bytes)
+    if len(patch_bytes) != _PATCH_SIZE:
+        raise ValueError(f"Patch data must be {_PATCH_SIZE} bytes, got {len(patch_bytes)}")
+
+    midi._ensure_connected()
+    _drain_input(midi)
+
+    # --- Phase 1: File management session (directory browse) ---
+    # This appears to prepare the device for flash writes.
+
+    # Patch directory file ID: type 0x04, slot encoded as 7-bit pair
+    _FILE_TYPE_PATCH = 0x04
+
+    # 1. Open session
+    midi.send_sysex(_make_msg(_SUBCMD_OPEN_SESSION))
+    time.sleep(0.3)
+    _drain_input(midi)
+
+    # 2. Directory handshake
+    midi.send_sysex(_make_msg(_SUBCMD_DIR_CONTROL, [0x01]))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    midi.send_sysex(_make_msg(_SUBCMD_QUERY_INFO, [0x01, 0x00]))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    midi.send_sysex(_make_msg(_SUBCMD_DIR_CONTROL, [0x02]))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    # 3. Query patch directory entries (Components sends 16 per page)
+    # Each query: WRITE_INIT with addr(0) + [0x04, 0x00, entry, 0x02]
+    page_start = (slot // 16) * 16
+    for i in range(16):
+        entry = page_start + i
+        query_payload = block_address(0) + [_FILE_TYPE_PATCH, 0x00, entry, 0x02]
+        midi.send_sysex(_make_msg(_SUBCMD_WRITE_INIT, query_payload))
+        time.sleep(0.02)
+    time.sleep(0.3)
+    _drain_input(midi)
+
+    # 4. Close session
+    midi.send_sysex(_make_msg(_SUBCMD_CLOSE_SESSION))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    # --- Phase 2: Replace Patch SysEx ---
+    # Components format: header + cmd(0x01) + location + 0x00 + slot + 0x00 + 340 bytes
+    # Header: manufacturer(3) + product_type(1) + product_number(1)
+    from circuit_mcp.constants import (
+        SYSEX_MANUFACTURER_ID,
+        SYSEX_PRODUCT_TYPE,
+        SYSEX_PRODUCT_NUMBER,
+    )
+
+    location = 0x00 if synth == 1 else 0x01
+    patch_header = SYSEX_MANUFACTURER_ID + [SYSEX_PRODUCT_TYPE, SYSEX_PRODUCT_NUMBER]
+    sysex_data = patch_header + [0x01, location, 0x00, slot, 0x00] + list(patch_bytes)
+    midi.send_sysex(sysex_data)
+
+    patch_name = "".join(chr(b) for b in patch_bytes[0:16] if 32 <= b <= 126).strip()
+
+    return {
+        "status": "ok",
+        "synth": synth,
+        "slot": slot,
+        "patch_name": patch_name,
+        "bytes_sent": _PATCH_SIZE,
     }
