@@ -29,10 +29,29 @@ Three example files compared:
 |--------|------|-----------|-------|-------|
 | 0x00 | 4 | `header.signature` | `USER` | ASCII magic |
 | 0x04 | 4 | `header.totalSessionSize` | 160780 | LE uint32 |
-| 0x08 | 4 | `header.sessionColour` | 1 | Project LED colour (validated "out of range") |
-| 0x0C | 4 | `header.featureFlags` | 0x0B=11 | `.midiTracks` must be set; `.reserved` must be 0 |
+| 0x08 | 4 | `header.sessionColour` (WASM label) | 1 | Must be 0 or 1 (other values rejected); actual purpose unknown — NOT the project color |
+| 0x0C | 4 | `header.featureFlags` (WASM label) | 0x08 | **Project LED color index** (0-13). See color table below. Values 14-15 also accepted. |
 | 0x10 | 32 | (name) | `Empty` | ASCII, space-padded |
 | 0x30 | 4 | (unknown) | 0 | |
+
+#### Project Color Table (byte at 0x0C)
+
+| Value | Name | RGB (from Components) |
+|-------|------|-----------------------|
+| 0 | Red | (251,53,53) |
+| 1 | Rose | (250,52,116) |
+| 2 | Peach | (250,130,125) |
+| 3 | Orange | (250,163,52) |
+| 4 | Sand | (250,195,125) |
+| 5 | Yellow | (250,242,52) |
+| 6 | Khaki | (219,250,125) |
+| 7 | Lime | (161,239,26) |
+| 8 | Green | (52,250,55) |
+| 9 | Teal | (75,250,134) |
+| 10 | Cyan | (52,175,250) |
+| 11 | Blue | (52,87,250) |
+| 12 | Purple | (110,52,250) |
+| 13 | Pink | (250,75,206) |
 
 ### Timing Section (0x34 - 0x38, 5 bytes)
 | Offset | WASM Field | Value | Notes |

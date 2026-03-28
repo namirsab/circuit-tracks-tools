@@ -31,6 +31,7 @@ from circuit_mcp.patch import (
     save_patch_to_slot,
     send_current_patch,
 )
+from circuit_mcp.ncs_transfer import send_ncs_project
 from circuit_mcp.sequencer import (
     VALID_TRACK_NAMES,
     Pattern,
@@ -1551,6 +1552,30 @@ def stop_morph(name: str = "", synth: int = 0) -> str:
         stop_event.set()
     _morph_threads.clear()
     return f"Stopped all {count} morph(es)" if count else "No morphs running"
+
+
+@mcp.tool()
+def send_project_file(file_path: str, slot: int = 0, filename: str = "") -> dict:
+    """Send an .ncs project file to the Circuit Tracks via SysEx.
+
+    Transfers a complete project file (160,780 bytes) to the device using
+    the Novation Components file management protocol. The device must be
+    connected and will show transfer progress.
+
+    Args:
+        file_path: Path to the .ncs project file.
+        slot: Target project slot on the device (0-63).
+        filename: Filename to set on device. If empty, auto-generated from slot.
+    """
+    with open(file_path, "rb") as f:
+        ncs_data = f.read()
+
+    return send_ncs_project(
+        _midi,
+        ncs_data,
+        slot=slot,
+        filename=filename if filename else None,
+    )
 
 
 def main():

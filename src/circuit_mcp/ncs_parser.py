@@ -234,8 +234,8 @@ class NCSHeader:
 
     signature: bytes = NCS_MAGIC
     total_session_size: int = NCS_FILE_SIZE
-    session_colour: int = 1
-    feature_flags: int = 0x0B
+    session_colour: int = 1  # Must be 0 or 1; purpose unknown
+    color: int = 8  # Project LED color index (0-13). 8=Green (default)
     name: str = ""
     unknown_30: bytes = field(default_factory=lambda: bytes(4))
 
@@ -396,7 +396,7 @@ def parse_ncs(path: str | Path) -> NCSFile:
         signature=data[0:4],
         total_session_size=struct.unpack_from("<I", data, 4)[0],
         session_colour=struct.unpack_from("<I", data, 8)[0],
-        feature_flags=struct.unpack_from("<I", data, 12)[0],
+        color=struct.unpack_from("<I", data, 12)[0],
         name=data[16:48].decode("ascii", errors="replace").rstrip(),
         unknown_30=data[48:52],
     )
@@ -550,7 +550,7 @@ def serialize_ncs(ncs: NCSFile) -> bytes:
     buf[0:4] = ncs.header.signature
     struct.pack_into("<I", buf, 4, ncs.header.total_session_size)
     struct.pack_into("<I", buf, 8, ncs.header.session_colour)
-    struct.pack_into("<I", buf, 12, ncs.header.feature_flags)
+    struct.pack_into("<I", buf, 12, ncs.header.color)
     buf[16:48] = ncs.header.name.encode("ascii")[:32].ljust(32)
     buf[48:52] = ncs.header.unknown_30
 
