@@ -368,9 +368,8 @@ def send_patch_to_slot(
         SYSEX_PRODUCT_NUMBER,
     )
 
-    location = 0x00 if synth == 1 else 0x01
     patch_header = SYSEX_MANUFACTURER_ID + [SYSEX_PRODUCT_TYPE, SYSEX_PRODUCT_NUMBER]
-    sysex_data = patch_header + [0x01, location, 0x00, slot, 0x00] + list(patch_bytes)
+    sysex_data = patch_header + [0x01, 0x00, 0x00, slot, 0x00] + list(patch_bytes)
     midi.send_sysex(sysex_data)
 
     patch_name = "".join(chr(b) for b in patch_bytes[0:16] if 32 <= b <= 126).strip()
