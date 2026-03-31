@@ -51,6 +51,7 @@ class Step:
     gate: float = 0.5
     enabled: bool = True
     probability: float = 1.0
+    sample: int | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> "Step":
@@ -67,6 +68,8 @@ class Step:
             s.enabled = bool(d["enabled"])
         if "probability" in d:
             s.probability = float(d["probability"])
+        if "sample" in d:
+            s.sample = int(d["sample"])
         return s
 
     def to_dict(self) -> dict:
@@ -75,6 +78,8 @@ class Step:
             d["enabled"] = False
         if self.probability < 1.0:
             d["probability"] = self.probability
+        if self.sample is not None:
+            d["sample"] = self.sample
         return d
 
 

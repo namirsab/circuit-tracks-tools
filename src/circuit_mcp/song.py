@@ -636,8 +636,10 @@ def _write_drum_steps(
         ncs_step.velocity = max(0, min(127, step.velocity))
         ncs_step.probability = max(0, min(7, round(step.probability * 7)))
 
-        # Set drum sample choice if specified globally
-        if global_sample is not None:
+        # Per-step sample overrides global track sample
+        if step.sample is not None:
+            ncs_step.drum_choice = step.sample
+        elif global_sample is not None:
             ncs_step.drum_choice = global_sample
         else:
             ncs_step.drum_choice = DEFAULT_DRUM_CHOICE

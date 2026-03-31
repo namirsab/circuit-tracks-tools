@@ -11,7 +11,6 @@ from circuit_mcp.constants import (
     DRUMS_CHANNEL,
     DRUM_CC,
     DRUM_NOTES,
-    FACTORY_DRUM_SAMPLES,
     PROJECT_CHANNEL,
     PROJECT_CC,
     PROJECT_NRPN,
@@ -19,6 +18,8 @@ from circuit_mcp.constants import (
     SYNTH2_CHANNEL,
     SYNTH_CC,
     SYNTH_NRPN,
+    load_drum_sample_names,
+    save_drum_sample_names,
 )
 from circuit_mcp.macros import DEFAULT_MACROS, MacroTarget, apply_macro
 from circuit_mcp.midi import MidiConnection
@@ -487,7 +488,9 @@ def set_synth_params(synth: int, params: dict[str, int]) -> str:
 def set_drum_params(drum: int, params: dict[str, int]) -> str:
     """Set multiple drum parameters at once in a single call.
 
-    Available params: patch_select, level, pitch, decay, distortion, eq, pan.
+    Available params: level, pitch, decay, distortion, eq, pan.
+    Note: patch_select is not available via CC (firmware bug). Use the
+    song format with NCS export to set drum samples reliably.
 
     Args:
         drum: Drum number (1-4).
@@ -502,16 +505,15 @@ def set_drum_params(drum: int, params: dict[str, int]) -> str:
     errors = []
 
     for param_name, value in params.items():
+        if param_name == "patch_select":
+            errors.append("patch_select (use NCS export instead)")
+            continue
         if param_name not in drum_params:
             errors.append(param_name)
             continue
         cc = drum_params[param_name]
         midi.control_change(DRUMS_CHANNEL, cc, value)
-        if param_name == "patch_select":
-            name = FACTORY_DRUM_SAMPLES.get(value, f"Sample {value}")
-            set_params.append(f"{param_name}={value} ({name})")
-        else:
-            set_params.append(f"{param_name}={value}")
+        set_params.append(f"{param_name}={value}")
 
     result = f"Drum {drum}: set {len(set_params)} params — {', '.join(set_params)}"
     if errors:
@@ -523,7 +525,9 @@ def set_drum_params(drum: int, params: dict[str, int]) -> str:
 def set_drum_param(drum: int, param_name: str, value: int) -> str:
     """Set a drum parameter on drums 1-4.
 
-    Params: patch_select, level, pitch, decay, distortion, eq, pan.
+    Params: level, pitch, decay, distortion, eq, pan.
+    Note: patch_select is not available via CC (firmware bug). Use the
+    song format with NCS export to set drum samples reliably.
 
     Args:
         drum: Drum number (1-4).
@@ -532,23 +536,28 @@ def set_drum_param(drum: int, param_name: str, value: int) -> str:
     """
     if drum not in DRUM_CC:
         return f"Invalid drum number {drum}. Must be 1-4."
+    if param_name == "patch_select":
+        return "patch_select cannot be set via CC (firmware bug). Use the song format with NCS export to set drum samples."
     params = DRUM_CC[drum]
     if param_name not in params:
-        return f"Unknown drum param '{param_name}'. Available: {', '.join(params.keys())}."
+        return f"Unknown drum param '{param_name}'. Available: level, pitch, decay, distortion, eq, pan."
 
     midi = _midi
     cc = params[param_name]
     midi.control_change(DRUMS_CHANNEL, cc, value)
-
-    if param_name == "patch_select":
-        name = FACTORY_DRUM_SAMPLES.get(value, f"Sample {value}")
-        return f"Set drum {drum} {param_name}={value} → {name} (CC {cc})"
     return f"Set drum {drum} {param_name}={value} (CC {cc})"
 
 
 @mcp.tool()
 def list_drum_samples(page: int | None = None) -> dict:
     """List available drum samples with their index numbers and names.
+
+    Returns sample names from user config (~/.config/circuit-mcp/drum_samples.json)
+    if available, otherwise falls back to factory defaults. Use set_drum_sample_names
+    to customize the sample map, or scan_drum_samples to read names from the device.
+
+    To assign samples to drum tracks, use the song format with the "sample" field
+    in sounds config (e.g. "drum1": {"sample": 2}) and export via NCS.
 
     The Circuit Tracks has 64 samples per drum track, organized in 4 pages of 16.
     Each page follows a kit structure:
@@ -558,46 +567,90 @@ def list_drum_samples(page: int | None = None) -> dict:
     Args:
         page: Optional page number (1-4) to show only that page. None shows all.
     """
+    all_samples = load_drum_sample_names()
+
     if page is not None:
         if not 1 <= page <= 4:
             return {"error": f"Invalid page {page}. Must be 1-4."}
         start = (page - 1) * 16
         end = start + 16
-        samples = {i: FACTORY_DRUM_SAMPLES[i] for i in range(start, end)}
+        samples = {i: all_samples.get(i, f"Sample {i}") for i in range(start, end)}
         return {"page": page, "samples": samples}
 
     return {
-        "total_samples": len(FACTORY_DRUM_SAMPLES),
+        "total_samples": len(all_samples),
         "pages": 4,
         "samples_per_page": 16,
-        "samples": FACTORY_DRUM_SAMPLES,
+        "samples": all_samples,
     }
 
 
 @mcp.tool()
-def select_drum_sample(drum: int, sample: int) -> str:
-    """Select a drum sample by index for a drum track.
+def set_drum_sample_names(samples: dict[str, str]) -> dict:
+    """Set custom names for drum samples, persisted to config file.
 
-    Each drum track (1-4) can independently use any of the 64 factory samples.
-    Use list_drum_samples to see available samples and their indices.
+    Use this when the user tells you what samples they have loaded on their
+    Circuit Tracks (e.g. custom samples loaded via Novation Components).
+    Names are saved to ~/.config/circuit-mcp/drum_samples.json and will be
+    used by list_drum_samples and select_drum_sample.
 
-    The CC value sent equals the sample index (0-63).
+    Entries are merged with existing config — only specified indices are updated.
 
     Args:
-        drum: Drum number (1-4).
-        sample: Sample index (0-63).
+        samples: Dict mapping sample index (as string) to name.
+                 Example: {"0": "808 Kick", "1": "909 Kick", "2": "Vinyl Snare"}
     """
-    if drum not in DRUM_CC:
-        return f"Invalid drum number {drum}. Must be 1-4."
-    if not 0 <= sample <= 63:
-        return f"Invalid sample index {sample}. Must be 0-63."
+    parsed = {}
+    for k, v in samples.items():
+        idx = int(k)
+        if not 0 <= idx <= 63:
+            return {"error": f"Invalid sample index {k}. Must be 0-63."}
+        parsed[idx] = str(v)
 
-    cc = DRUM_CC[drum]["patch_select"]
+    path = save_drum_sample_names(parsed)
+    return {
+        "status": "ok",
+        "samples_updated": len(parsed),
+        "config_path": str(path),
+    }
+
+
+@mcp.tool()
+def scan_drum_samples(save: bool = True) -> dict:
+    """Scan the Circuit Tracks device to read drum sample filenames.
+
+    Opens a file management session and captures the directory listing
+    for drum samples (file type 5). Saves the names to the config file
+    so list_drum_samples and select_drum_sample use the real names.
+
+    Args:
+        save: If True, saves discovered names to the config file.
+    """
+    from circuit_mcp.ncs_transfer import list_directory
+
+    _FILE_TYPE_SAMPLES = 5
+
     midi = _midi
-    midi.control_change(DRUMS_CHANNEL, cc, sample)
+    if not midi.is_connected:
+        return {"error": "Not connected. Use connect() first."}
+    if not midi.has_input:
+        return {"error": "No MIDI input port — cannot read from device."}
 
-    name = FACTORY_DRUM_SAMPLES.get(sample, f"Sample {sample}")
-    return f"Selected sample {sample} ({name}) on drum {drum} (CC {cc}={sample})"
+    entries = list_directory(midi, file_type=_FILE_TYPE_SAMPLES)
+
+    if not entries:
+        return {"status": "no_entries"}
+
+    if save:
+        samples = {e["slot"]: e["filename"] for e in entries}
+        save_drum_sample_names(samples)
+
+    return {
+        "status": "ok",
+        "entries_found": len(entries),
+        "entries": entries[:10],
+        "saved": save,
+    }
 
 
 @mcp.tool()

@@ -3,6 +3,12 @@
 All values extracted from the Circuit Tracks Programmer's Reference Guide v3.
 """
 
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
 # MIDI channels (0-indexed for mido)
 SYNTH1_CHANNEL = 0  # Channel 1
 SYNTH2_CHANNEL = 1  # Channel 2
@@ -612,8 +618,8 @@ SYNTH_PATCH_DATA_SIZE = 340  # bytes
 #   Slots 1-2: Kicks, 3-4: Snares, 5-6: Closed Hi-Hats,
 #   7-8: Open Hi-Hats, 9-12: Percussion, 13-16: Melodic
 #
-# patch_select CC values 0-127 map to these 64 samples (2 CC values per sample).
-# To select sample N (0-63), send CC value N*2 or N*2+1.
+# patch_select CC range is 0-63: the CC value IS the sample index directly.
+# (Confirmed in Programmer's Reference Guide v3, Drum Control table, p.12)
 #
 # These names are descriptive based on the factory kit layout.
 # If you've loaded custom samples via Components, update this list to match.
@@ -687,3 +693,47 @@ FACTORY_DRUM_SAMPLES = {
     62: "Melodic D3",
     63: "Melodic D4",
 }
+
+# --- User-configurable sample map ---
+SAMPLE_MAP_PATH = Path(os.path.expanduser("~/.config/circuit-mcp/drum_samples.json"))
+
+
+def load_drum_sample_names() -> dict[int, str]:
+    """Load drum sample names: user config > factory defaults.
+
+    Returns a dict mapping sample index (0-63) to name string.
+    User entries override factory defaults; factory fills gaps.
+    """
+    samples = dict(FACTORY_DRUM_SAMPLES)
+    if SAMPLE_MAP_PATH.exists():
+        try:
+            data = json.loads(SAMPLE_MAP_PATH.read_text())
+            for k, v in data.get("samples", {}).items():
+                samples[int(k)] = str(v)
+        except (json.JSONDecodeError, ValueError, OSError):
+            pass
+    return samples
+
+
+def save_drum_sample_names(samples: dict[int, str]) -> Path:
+    """Save drum sample names to the user config file.
+
+    Args:
+        samples: Dict mapping sample index (0-63) to name.
+
+    Returns:
+        Path to the saved config file.
+    """
+    SAMPLE_MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # Merge with existing file if present
+    existing: dict[str, str] = {}
+    if SAMPLE_MAP_PATH.exists():
+        try:
+            data = json.loads(SAMPLE_MAP_PATH.read_text())
+            existing = data.get("samples", {})
+        except (json.JSONDecodeError, ValueError, OSError):
+            pass
+    for k, v in samples.items():
+        existing[str(k)] = v
+    SAMPLE_MAP_PATH.write_text(json.dumps({"samples": existing}, indent=2) + "\n")
+    return SAMPLE_MAP_PATH

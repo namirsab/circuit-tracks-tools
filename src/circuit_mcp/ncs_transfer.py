@@ -36,6 +36,7 @@ _SUBCMD_CLOSE_SESSION = 0x41
 
 # Sub-commands (Device → Host)
 _SUBCMD_ACK = 0x04
+_SUBCMD_FILE_ENTRY = 0x0C
 
 # File type for projects
 _FILE_TYPE_PROJECT = 0x03
@@ -166,6 +167,99 @@ def _drain_input(midi: MidiConnection) -> None:
     if midi.has_input:
         while midi._input_port.poll() is not None:
             pass
+
+
+def list_directory(
+    midi: MidiConnection,
+    file_type: int = _FILE_TYPE_PROJECT,
+    timeout_s: float = 3.0,
+) -> list[dict]:
+    """List files on the device by capturing FILE_ENTRY responses.
+
+    Opens a file management session, sends the directory handshake for
+    the given file type, and captures FILE_ENTRY (0x0C) responses instead
+    of draining them.
+
+    Known file types: 0x03=projects, 0x04=patches, 0x05=drum samples.
+
+    Args:
+        midi: Connected MidiConnection with input port.
+        file_type: File type byte to query.
+        timeout_s: How long to wait for entries after the listing request.
+
+    Returns:
+        List of dicts with 'slot' and 'filename' keys.
+    """
+    midi._ensure_connected()
+    if not midi.has_input:
+        return []
+
+    _drain_input(midi)
+
+    # 1. Open session
+    midi.send_sysex(_make_msg(_SUBCMD_OPEN_SESSION))
+    time.sleep(0.3)
+    _drain_input(midi)
+
+    # 2. Directory handshake
+    midi.send_sysex(_make_msg(_SUBCMD_DIR_CONTROL, [0x01]))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    midi.send_sysex(_make_msg(_SUBCMD_QUERY_INFO, [0x01, 0x00]))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    midi.send_sysex(_make_msg(_SUBCMD_DIR_CONTROL, [0x02]))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    # 3. Request file listing — capture FILE_ENTRY responses
+    # Protocol: device responds with DIR_CONTROL ack first, then 64x FILE_ENTRY
+    # The second byte of DIR_CONTROL 0x03 payload selects the file type to list
+    midi.send_sysex(_make_msg(_SUBCMD_DIR_CONTROL, [file_type, 0x00]))
+
+    entries: list[dict] = []
+    header_len = len(_SYSEX_HEADER)
+    deadline = time.monotonic() + timeout_s
+    last_msg_time = time.monotonic()
+
+    while time.monotonic() < deadline:
+        msg = midi._input_port.poll()
+        if msg is None:
+            # If we have entries and haven't seen a message in 0.5s, we're done
+            if entries and (time.monotonic() - last_msg_time) > 0.5:
+                break
+            time.sleep(0.01)
+            continue
+
+        last_msg_time = time.monotonic()
+        if msg.type != "sysex":
+            continue
+        data = list(msg.data)
+        if (
+            len(data) > header_len + 3
+            and data[:header_len] == _SYSEX_HEADER
+            and data[header_len] == _SUBCMD_FILE_ENTRY
+        ):
+            # FILE_ENTRY format: header + 0x0C + subtype + slot_hi + slot_lo + filename bytes
+            subtype = data[header_len + 1]
+            slot = (data[header_len + 2] << 7) | data[header_len + 3]
+            name_bytes = data[header_len + 4:]
+            filename = "".join(chr(b) for b in name_bytes if 32 <= b <= 126)
+            entries.append({
+                "slot": slot,
+                "filename": filename,
+                "file_type": file_type,
+                "subtype": subtype,
+            })
+
+    # 4. Close session
+    midi.send_sysex(_make_msg(_SUBCMD_CLOSE_SESSION))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    return entries
 
 
 def send_ncs_project(

@@ -176,7 +176,15 @@ Before writing, Components sends:
 1. `0x0b 01` — device responds with `0x0b 01 01` (ACK)
 2. `0x09 01 00` — device responds with `0x09 01 <version info>`
 3. `0x0b 02` — device responds with `0x0c 02 00 <project name>` (current project name)
-4. `0x0b 03 00` — device responds with `0x0b 03 00 3f 00` then 64x `0x0c 03 <slot> <filename>` entries
+4. `0x0b <file_type> 00` — device responds with `0x0b <file_type> 00 3f 00` then 64x `0x0c <file_type> <slot> <filename>` entries
+
+The `<file_type>` byte in step 4 selects which directory to list:
+
+| File Type | Contents | Entries |
+|-----------|----------|---------|
+| `0x03` | Project files (.ncs) | Up to 64 |
+| `0x04` | Synth patches | Up to 64 |
+| `0x05` | Drum samples (.wav) | 64 |
 
 This handshake may be optional for write operations. If the device rejects writes without it, include it.
 
