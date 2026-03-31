@@ -627,12 +627,14 @@ def select_project(project_number: int, queued: bool = False) -> str:
         project_number: Project number (0-63).
         queued: If True, queue the change; if False, change instantly.
     """
+    global _current_project_slot
     if not 0 <= project_number <= 63:
         return f"Invalid project number {project_number}. Must be 0-63."
 
     midi = _midi
     program = project_number + (64 if queued else 0)
     midi.program_change(PROJECT_CHANNEL, program)
+    _current_project_slot = project_number
     mode = "queued" if queued else "instant"
     return f"Selected project {project_number} ({mode})"
 
@@ -1547,6 +1549,124 @@ def send_project_file(file_path: str, slot: int = 0, filename: str = "") -> dict
         slot=slot,
         filename=filename if filename else None,
     )
+
+
+_current_song = None  # type: ignore  # Stores the last loaded SongData for export
+_current_project_slot: int | None = None  # Tracks last selected project slot
+
+
+@mcp.tool()
+def load_song(song: dict) -> dict:
+    """Load a complete song from a single JSON description.
+
+    Sets up all patterns in the sequencer, sends synth patches to the device,
+    selects drum samples, configures FX/mixer, and sets the song queue — all
+    in one call. After loading, use start_sequencer to preview.
+
+    The song format:
+    {
+      "name": "My Song",
+      "bpm": 120,
+      "swing": 50,
+      "scale": {"root": "C", "type": "minor"},
+      "sounds": {
+        "synth1": {"preset": "pad", "name": "WarmPad", "params": {...}, "mod_matrix": [...], "macros": {...}},
+        "synth2": {"preset": "bass"},
+        "drum1": {"sample": 0}, "drum2": {"sample": 2},
+        "drum3": {"sample": 42}, "drum4": {"sample": 46}
+      },
+      "fx": {
+        "reverb": {"type": 2, "decay": 80, "damping": 60},
+        "delay": {"time": 64, "feedback": 70},
+        "reverb_sends": {"synth1": 40, "drum2": 10},
+        "delay_sends": {"synth1": 30},
+        "sidechain": {"synth1": {"source": "drum1", "depth": 80}}
+      },
+      "mixer": {"synth1": {"level": 100, "pan": 64}},
+      "patterns": {
+        "intro": {"length": 16, "tracks": {
+          "synth1": {"steps": {"0": {"note": 60, "velocity": 100, "gate": 0.8}}},
+          "drum1": {"steps": {"0": {}, "4": {}, "8": {}, "12": {}}}
+        }}
+      },
+      "song": ["intro", "verse", "chorus", "verse", "chorus"]
+    }
+
+    Synth presets: "pad", "bass", "lead", "pluck" (or omit for init patch).
+    Sounds.params uses the same parameter names as create_synth_patch.
+    Pattern step format is identical to set_pattern.
+    Drum steps: {} = trigger at default velocity. "note" field ignored.
+    All sections optional except "patterns".
+
+    Args:
+        song: Complete song description dict.
+    """
+    global _current_song
+    from circuit_mcp.song import parse_song, load_song_to_sequencer
+
+    try:
+        song_data = parse_song(song)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    result = load_song_to_sequencer(song_data, _engine, _midi)
+    _current_song = song_data
+
+    return {
+        "status": "loaded",
+        "name": song_data.name,
+        "bpm": song_data.bpm,
+        "patterns": list(song_data.patterns.keys()),
+        "song_order": song_data.song,
+        **result,
+    }
+
+
+@mcp.tool()
+def export_song_to_project(slot: int = -1, name: str = "") -> dict:
+    """Export the loaded song to the Circuit Tracks as an NCS project file.
+
+    Converts all patterns, FX, mixer, and song structure into a binary .ncs
+    project and transfers it to the device via SysEx. Requires a song to be
+    loaded first via load_song.
+
+    By default, exports to the currently selected project slot (set via
+    select_project). Pass an explicit slot to override.
+
+    Note: Synth patches are NOT stored in the .ncs file (they are separate
+    on the device). Use save_synth_patch to persist patches to flash slots.
+
+    Args:
+        slot: Target project slot (0-63). Defaults to the currently selected project.
+        name: Project name (up to 16 chars). Uses the song name if empty.
+    """
+    global _current_song
+    if _current_song is None:
+        return {"error": "No song loaded. Call load_song first."}
+
+    # Resolve slot: use explicit value, or fall back to current project
+    target_slot = slot if slot >= 0 else _current_project_slot
+    if target_slot is None:
+        return {
+            "error": "No project slot specified and no project currently selected. "
+            "Either pass a slot number or use select_project first."
+        }
+    if not 0 <= target_slot <= 63:
+        return {"error": f"Invalid slot {target_slot}. Must be 0-63."}
+
+    from circuit_mcp.song import export_song_to_device
+
+    try:
+        result = export_song_to_device(_current_song, _midi, slot=target_slot, name=name)
+    except Exception as e:
+        return {"error": f"Export failed: {e}"}
+
+    return {
+        "status": "exported",
+        "slot": target_slot,
+        "name": name or _current_song.name,
+        **result,
+    }
 
 
 def main():

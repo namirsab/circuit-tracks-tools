@@ -84,6 +84,15 @@ _SIDECHAIN_S2_OFFSET = 785   # 7 bytes: source, attack, hold, decay, depth, extr
 _MIXER_LEVELS_OFFSET = 800   # 4 bytes: S1, S2, M1, M2
 _MIXER_PANS_OFFSET = 804     # 4 bytes: S1, S2, M1, M2
 
+# Synth patches embedded in the tail
+_SYNTH1_PATCH_OFFSET = 24    # 340 bytes (full patch per Programmer's Reference)
+_SYNTH2_PATCH_OFFSET = 364   # 340 bytes
+_PATCH_SIZE = 340
+
+# Drum track configs (4 × 11 bytes)
+_DRUM_CONFIGS_OFFSET = 704   # 44 bytes total
+_DRUM_CONFIG_SIZE = 11       # per drum track
+
 # Track index constants for send arrays
 TRACK_S1 = 0
 TRACK_S2 = 1
@@ -343,6 +352,38 @@ class FXSettings:
 
 
 @dataclass
+class DrumTrackConfig:
+    """Per-drum-track settings stored in the NCS tail (11 bytes each)."""
+
+    patch_select: int = 0    # drum sample index
+    level: int = 100
+    pitch: int = 64          # center = 64
+    unknown1: int = 127
+    decay: int = 0
+    eq: int = 64             # center = 64
+    pan: int = 64            # center = 64
+    distortion: int = 0
+    reverb_send: int = 0
+    delay_send: int = 0
+    unknown2: int = 0
+
+    def to_bytes(self) -> bytes:
+        return bytes([
+            self.patch_select, self.level, self.pitch, self.unknown1,
+            self.decay, self.eq, self.pan, self.distortion,
+            self.reverb_send, self.delay_send, self.unknown2,
+        ])
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> DrumTrackConfig:
+        return cls(
+            patch_select=data[0], level=data[1], pitch=data[2], unknown1=data[3],
+            decay=data[4], eq=data[5], pan=data[6], distortion=data[7],
+            reverb_send=data[8], delay_send=data[9], unknown2=data[10],
+        )
+
+
+@dataclass
 class NCSProjectSettings:
     """Project-level settings stored in the tail preamble."""
 
@@ -371,6 +412,11 @@ class NCSFile:
 
     project_settings: NCSProjectSettings = field(default_factory=NCSProjectSettings)
     fx: FXSettings = field(default_factory=FXSettings)
+    synth1_patch: bytes = field(default_factory=lambda: bytes(_PATCH_SIZE))
+    synth2_patch: bytes = field(default_factory=lambda: bytes(_PATCH_SIZE))
+    drum_configs: list[DrumTrackConfig] = field(
+        default_factory=lambda: [DrumTrackConfig() for _ in range(NUM_DRUM_TRACKS)]
+    )
     synth_patterns: list[SynthPattern] = field(default_factory=list)
     drum_patterns: list[DrumPattern] = field(default_factory=list)
     midi_patterns: list[SynthPattern] = field(default_factory=list)
@@ -488,8 +534,17 @@ def parse_ncs(path: str | Path) -> NCSFile:
 
     ncs.tail = data[TAIL_OFFSET:]
 
-    # Extract project settings from tail preamble
+    # Extract synth patches and drum configs from tail
     t = ncs.tail
+    ncs.synth1_patch = bytes(t[_SYNTH1_PATCH_OFFSET:_SYNTH1_PATCH_OFFSET + _PATCH_SIZE])
+    ncs.synth2_patch = bytes(t[_SYNTH2_PATCH_OFFSET:_SYNTH2_PATCH_OFFSET + _PATCH_SIZE])
+    ncs.drum_configs = [
+        DrumTrackConfig.from_bytes(t[_DRUM_CONFIGS_OFFSET + i * _DRUM_CONFIG_SIZE:
+                                     _DRUM_CONFIGS_OFFSET + (i + 1) * _DRUM_CONFIG_SIZE])
+        for i in range(NUM_DRUM_TRACKS)
+    ]
+
+    # Extract project settings from tail preamble
     ncs.project_settings = NCSProjectSettings(
         scale_root=t[_TAIL_SCALE_ROOT_OFFSET],
         scale_type=t[_TAIL_SCALE_TYPE_OFFSET],
@@ -618,6 +673,15 @@ def serialize_ncs(ncs: NCSFile) -> bytes:
 
     # Tail
     tail = bytearray(ncs.tail)
+
+    # Synth patches
+    tail[_SYNTH1_PATCH_OFFSET:_SYNTH1_PATCH_OFFSET + _PATCH_SIZE] = ncs.synth1_patch
+    tail[_SYNTH2_PATCH_OFFSET:_SYNTH2_PATCH_OFFSET + _PATCH_SIZE] = ncs.synth2_patch
+
+    # Drum configs
+    for i, dc in enumerate(ncs.drum_configs):
+        off = _DRUM_CONFIGS_OFFSET + i * _DRUM_CONFIG_SIZE
+        tail[off:off + _DRUM_CONFIG_SIZE] = dc.to_bytes()
 
     # Project settings
     tail[_TAIL_SCALE_ROOT_OFFSET] = ncs.project_settings.scale_root
