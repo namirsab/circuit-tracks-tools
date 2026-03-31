@@ -114,6 +114,12 @@ class SoundConfig:
     macros: dict[str, dict] | None = None
     # Drum-specific
     sample: int | None = None
+    level: int | None = None
+    pitch: int | None = None
+    decay: int | None = None
+    distortion: int | None = None
+    eq: int | None = None
+    pan: int | None = None
 
 
 @dataclass
@@ -201,6 +207,12 @@ def parse_song(d: dict) -> SongData:
             sc.mod_matrix = sound_data.get("mod_matrix")
             sc.macros = sound_data.get("macros")
             sc.sample = sound_data.get("sample")
+            sc.level = sound_data.get("level")
+            sc.pitch = sound_data.get("pitch")
+            sc.decay = sound_data.get("decay")
+            sc.distortion = sound_data.get("distortion")
+            sc.eq = sound_data.get("eq")
+            sc.pan = sound_data.get("pan")
         song.sounds[track_name] = sc
 
     # FX
@@ -495,9 +507,24 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
     # Drum configs (sample selection + per-drum settings)
     for drum_name in ("drum1", "drum2", "drum3", "drum4"):
         sc = song.sounds.get(drum_name)
-        if sc and sc.sample is not None:
-            drum_idx = int(drum_name[-1]) - 1
-            ncs.drum_configs[drum_idx].patch_select = sc.sample
+        if not sc:
+            continue
+        drum_idx = int(drum_name[-1]) - 1
+        cfg = ncs.drum_configs[drum_idx]
+        if sc.sample is not None:
+            cfg.patch_select = sc.sample
+        if sc.level is not None:
+            cfg.level = sc.level
+        if sc.pitch is not None:
+            cfg.pitch = sc.pitch
+        if sc.decay is not None:
+            cfg.decay = sc.decay
+        if sc.distortion is not None:
+            cfg.distortion = sc.distortion
+        if sc.eq is not None:
+            cfg.eq = sc.eq
+        if sc.pan is not None:
+            cfg.pan = sc.pan
 
     # FX settings
     _apply_fx_to_ncs(ncs, song.fx)

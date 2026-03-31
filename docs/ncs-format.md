@@ -310,11 +310,11 @@ Same format as Synth 1 patch.
 | 0 | patch_select | 0-63 | D1=0, D2=2, D3=4, D4=8 | Sample index. **Confirmed** |
 | 1 | level | 0-127 | 100 | Track level. **Confirmed** |
 | 2 | pitch | 0-127 | 64 | Pitch (64=center/no shift). **Confirmed** |
-| 3 | (unknown) | -- | 127 | Always 127 in observed files. Possibly EQ max or filter default. **Unknown** |
-| 4 | decay | 0-127 | 0 | Sample decay. **Confirmed** |
+| 3 | decay | 0-127 | 127 | Decay envelope time (127=full length). **Confirmed** |
+| 4 | distortion | 0-127 | 0 | Distortion amount. **Confirmed** |
 | 5 | eq | 0-127 | 64 | EQ (64=center/flat). **Confirmed** |
 | 6 | pan | 0-127 | 64 | Pan (64=center). **Confirmed** |
-| 7 | distortion | 0-127 | 0 | Distortion amount. **Confirmed** |
+| 7 | (unknown) | -- | 0 | Always 0 in observed files. **Unknown** |
 | 8 | reverb_send | 0-127 | 0 | Reverb send level. **Confirmed** |
 | 9 | delay_send | 0-127 | 0 | Delay send level. **Confirmed** |
 | 10 | (unknown) | -- | 0 | Always 0 in observed files. **Unknown** |

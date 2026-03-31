@@ -358,27 +358,27 @@ class DrumTrackConfig:
     patch_select: int = 0    # drum sample index
     level: int = 100
     pitch: int = 64          # center = 64
-    unknown1: int = 127
-    decay: int = 0
+    decay: int = 127
+    distortion: int = 0
     eq: int = 64             # center = 64
     pan: int = 64            # center = 64
-    distortion: int = 0
+    unknown1: int = 0
     reverb_send: int = 0
     delay_send: int = 0
     unknown2: int = 0
 
     def to_bytes(self) -> bytes:
         return bytes([
-            self.patch_select, self.level, self.pitch, self.unknown1,
-            self.decay, self.eq, self.pan, self.distortion,
+            self.patch_select, self.level, self.pitch, self.decay,
+            self.distortion, self.eq, self.pan, self.unknown1,
             self.reverb_send, self.delay_send, self.unknown2,
         ])
 
     @classmethod
     def from_bytes(cls, data: bytes) -> DrumTrackConfig:
         return cls(
-            patch_select=data[0], level=data[1], pitch=data[2], unknown1=data[3],
-            decay=data[4], eq=data[5], pan=data[6], distortion=data[7],
+            patch_select=data[0], level=data[1], pitch=data[2], decay=data[3],
+            distortion=data[4], eq=data[5], pan=data[6], unknown1=data[7],
             reverb_send=data[8], delay_send=data[9], unknown2=data[10],
         )
 

@@ -70,7 +70,7 @@ def list_midi_ports() -> dict:
 
 
 @mcp.tool()
-def connect(port_name: str) -> str:
+def connect(port_name: str) -> dict:
     """Connect to the Circuit Tracks MIDI output port.
 
     Args:
@@ -78,7 +78,22 @@ def connect(port_name: str) -> str:
     """
     midi = _midi
     midi.connect(port_name)
-    return f"Connected to {port_name}"
+
+    result: dict = {"result": f"Connected to {port_name}"}
+
+    # Auto-scan drum sample names from the device
+    if midi.has_input:
+        try:
+            from circuit_mcp.ncs_transfer import list_directory
+            entries = list_directory(midi, file_type=5)
+            if entries:
+                samples = {e["slot"]: e["filename"] for e in entries}
+                save_drum_sample_names(samples)
+                result["drum_samples_scanned"] = len(entries)
+        except Exception:
+            pass  # Non-critical — fall back to config/factory defaults
+
+    return result
 
 
 @mcp.tool()
@@ -612,44 +627,6 @@ def set_drum_sample_names(samples: dict[str, str]) -> dict:
         "status": "ok",
         "samples_updated": len(parsed),
         "config_path": str(path),
-    }
-
-
-@mcp.tool()
-def scan_drum_samples(save: bool = True) -> dict:
-    """Scan the Circuit Tracks device to read drum sample filenames.
-
-    Opens a file management session and captures the directory listing
-    for drum samples (file type 5). Saves the names to the config file
-    so list_drum_samples and select_drum_sample use the real names.
-
-    Args:
-        save: If True, saves discovered names to the config file.
-    """
-    from circuit_mcp.ncs_transfer import list_directory
-
-    _FILE_TYPE_SAMPLES = 5
-
-    midi = _midi
-    if not midi.is_connected:
-        return {"error": "Not connected. Use connect() first."}
-    if not midi.has_input:
-        return {"error": "No MIDI input port — cannot read from device."}
-
-    entries = list_directory(midi, file_type=_FILE_TYPE_SAMPLES)
-
-    if not entries:
-        return {"status": "no_entries"}
-
-    if save:
-        samples = {e["slot"]: e["filename"] for e in entries}
-        save_drum_sample_names(samples)
-
-    return {
-        "status": "ok",
-        "entries_found": len(entries),
-        "entries": entries[:10],
-        "saved": save,
     }
 
 
