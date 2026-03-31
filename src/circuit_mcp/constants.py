@@ -557,6 +557,40 @@ DELAY_LR_RATIOS = {
     12: "OFF:1",
 }
 
+# FX Preset tables — factory parameter values captured from hardware.
+REVERB_PRESETS: dict[int, dict[str, int]] = {
+    0: {"type": 0, "decay": 80, "damping": 120},
+    1: {"type": 1, "decay": 90, "damping": 100},
+    2: {"type": 2, "decay": 80, "damping": 80},
+    3: {"type": 2, "decay": 100, "damping": 110},
+    4: {"type": 3, "decay": 90, "damping": 100},
+    5: {"type": 4, "decay": 105, "damping": 105},
+    6: {"type": 5, "decay": 90, "damping": 80},
+    7: {"type": 5, "decay": 120, "damping": 115},
+}
+
+DELAY_PRESETS: dict[int, dict[str, int]] = {
+    0:  {"time": 3, "sync": 0, "feedback": 100, "width": 115, "lr_ratio": 5, "slew": 115},
+    1:  {"time": 6, "sync": 0, "feedback": 45, "width": 104, "lr_ratio": 6, "slew": 26},
+    2:  {"time": 0, "sync": 2, "feedback": 63, "width": 62, "lr_ratio": 5, "slew": 40},
+    3:  {"time": 0, "sync": 4, "feedback": 25, "width": 10, "lr_ratio": 5, "slew": 75},
+    4:  {"time": 0, "sync": 5, "feedback": 59, "width": 15, "lr_ratio": 5, "slew": 39},
+    5:  {"time": 0, "sync": 7, "feedback": 15, "width": 34, "lr_ratio": 6, "slew": 56},
+    6:  {"time": 0, "sync": 7, "feedback": 75, "width": 115, "lr_ratio": 5, "slew": 98},
+    7:  {"time": 0, "sync": 7, "feedback": 75, "width": 75, "lr_ratio": 3, "slew": 23},
+    8:  {"time": 0, "sync": 8, "feedback": 80, "width": 10, "lr_ratio": 6, "slew": 68},
+    9:  {"time": 0, "sync": 9, "feedback": 50, "width": 100, "lr_ratio": 5, "slew": 33},
+    10: {"time": 0, "sync": 10, "feedback": 82, "width": 23, "lr_ratio": 5, "slew": 56},
+    11: {"time": 0, "sync": 10, "feedback": 78, "width": 88, "lr_ratio": 6, "slew": 47},
+    12: {"time": 0, "sync": 10, "feedback": 33, "width": 127, "lr_ratio": 3, "slew": 33},
+    13: {"time": 0, "sync": 11, "feedback": 50, "width": 60, "lr_ratio": 6, "slew": 86},
+    14: {"time": 0, "sync": 12, "feedback": 24, "width": 90, "lr_ratio": 3, "slew": 106},
+    15: {"time": 0, "sync": 12, "feedback": 50, "width": 115, "lr_ratio": 5, "slew": 111},
+}
+
+REVERB_PRESET_BY_NAME: dict[str, int] = {}
+DELAY_PRESET_BY_NAME: dict[str, int] = {}
+
 # SysEx constants
 SYSEX_MANUFACTURER_ID = [0x00, 0x20, 0x29]  # Novation
 SYSEX_PRODUCT_TYPE = 0x01                     # Synth

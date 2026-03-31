@@ -1576,6 +1576,8 @@ def load_song(song: dict) -> dict:
         "drum3": {"sample": 42}, "drum4": {"sample": 46}
       },
       "fx": {
+        "reverb_preset": 3,
+        "delay_preset": 5,
         "reverb": {"type": 2, "decay": 80, "damping": 60},
         "delay": {"time": 64, "feedback": 70},
         "reverb_sends": {"synth1": 40, "drum2": 10},

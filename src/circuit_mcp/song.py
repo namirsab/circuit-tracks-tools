@@ -11,11 +11,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from circuit_mcp.constants import (
+    DELAY_PRESET_BY_NAME,
+    DELAY_PRESETS,
     DRUM_CC,
     DRUMS_CHANNEL,
     PROJECT_CC,
     PROJECT_CHANNEL,
     PROJECT_NRPN,
+    REVERB_PRESET_BY_NAME,
+    REVERB_PRESETS,
     SYNTH_CC,
 )
 from circuit_mcp.midi import MidiConnection
@@ -121,6 +125,8 @@ class FXConfig:
     reverb_sends: dict[str, int] = field(default_factory=dict)
     delay_sends: dict[str, int] = field(default_factory=dict)
     sidechain: dict[str, dict] = field(default_factory=dict)
+    reverb_preset: str | int | None = None  # preset name or index (0-7)
+    delay_preset: str | int | None = None   # preset name or index (0-15)
 
 
 @dataclass
@@ -199,12 +205,37 @@ def parse_song(d: dict) -> SongData:
 
     # FX
     fx_data = d.get("fx", {})
+    reverb_preset = fx_data.get("reverb_preset")
+    delay_preset = fx_data.get("delay_preset")
+    # Validate preset values
+    if reverb_preset is not None:
+        if isinstance(reverb_preset, str):
+            if reverb_preset.lower() not in REVERB_PRESET_BY_NAME:
+                raise ValueError(
+                    f"Unknown reverb preset: {reverb_preset!r}. "
+                    f"Valid: {list(REVERB_PRESET_BY_NAME.keys())} or 0-7"
+                )
+        elif isinstance(reverb_preset, int):
+            if not 0 <= reverb_preset <= 7:
+                raise ValueError(f"Reverb preset index must be 0-7, got {reverb_preset}")
+    if delay_preset is not None:
+        if isinstance(delay_preset, str):
+            if delay_preset.lower() not in DELAY_PRESET_BY_NAME:
+                raise ValueError(
+                    f"Unknown delay preset: {delay_preset!r}. "
+                    f"Valid: {list(DELAY_PRESET_BY_NAME.keys())} or 0-15"
+                )
+        elif isinstance(delay_preset, int):
+            if not 0 <= delay_preset <= 15:
+                raise ValueError(f"Delay preset index must be 0-15, got {delay_preset}")
     song.fx = FXConfig(
         reverb=fx_data.get("reverb", {}),
         delay=fx_data.get("delay", {}),
         reverb_sends=fx_data.get("reverb_sends", {}),
         delay_sends=fx_data.get("delay_sends", {}),
         sidechain=fx_data.get("sidechain", {}),
+        reverb_preset=reverb_preset,
+        delay_preset=delay_preset,
     )
     # Validate send track names
     for name in list(song.fx.reverb_sends) + list(song.fx.delay_sends):
@@ -336,6 +367,21 @@ def load_song_to_sequencer(
 
 def _send_fx_midi(fx: FXConfig, midi: MidiConnection) -> None:
     """Send FX settings over MIDI CC/NRPN."""
+    # Build effective params: preset defaults merged with explicit overrides
+    reverb_params = dict(fx.reverb)
+    if fx.reverb_preset is not None and REVERB_PRESETS:
+        preset_idx = _resolve_reverb_preset(fx)
+        preset_vals = REVERB_PRESETS.get(preset_idx, {})
+        for k, v in preset_vals.items():
+            reverb_params.setdefault(k, v)
+
+    delay_params = dict(fx.delay)
+    if fx.delay_preset is not None and DELAY_PRESETS:
+        preset_idx = _resolve_delay_preset(fx)
+        preset_vals = DELAY_PRESETS.get(preset_idx, {})
+        for k, v in preset_vals.items():
+            delay_params.setdefault(k, v)
+
     # Reverb sends
     for track_name, value in fx.reverb_sends.items():
         key = f"reverb_{track_name}_send"
@@ -353,9 +399,9 @@ def _send_fx_midi(fx: FXConfig, midi: MidiConnection) -> None:
         "type": "reverb_type", "decay": "reverb_decay", "damping": "reverb_damping",
     }
     for param, nrpn_key in _nrpn_map.items():
-        if param in fx.reverb and nrpn_key in PROJECT_NRPN:
+        if param in reverb_params and nrpn_key in PROJECT_NRPN:
             msb, lsb = PROJECT_NRPN[nrpn_key]
-            midi.nrpn(PROJECT_CHANNEL, msb, lsb, fx.reverb[param])
+            midi.nrpn(PROJECT_CHANNEL, msb, lsb, reverb_params[param])
 
     # Delay params
     _delay_map = {
@@ -363,9 +409,9 @@ def _send_fx_midi(fx: FXConfig, midi: MidiConnection) -> None:
         "width": "delay_width", "lr_ratio": "delay_lr_ratio", "slew": "delay_slew_rate",
     }
     for param, nrpn_key in _delay_map.items():
-        if param in fx.delay and nrpn_key in PROJECT_NRPN:
+        if param in delay_params and nrpn_key in PROJECT_NRPN:
             msb, lsb = PROJECT_NRPN[nrpn_key]
-            midi.nrpn(PROJECT_CHANNEL, msb, lsb, fx.delay[param])
+            midi.nrpn(PROJECT_CHANNEL, msb, lsb, delay_params[param])
 
     # Sidechain
     for synth_name, sc_data in fx.sidechain.items():
@@ -597,8 +643,78 @@ def _write_drum_steps(
             ncs_step.drum_choice = DEFAULT_DRUM_CHOICE
 
 
+def _resolve_reverb_preset(fx: FXConfig) -> int:
+    """Resolve the reverb preset index from explicit preset or closest match."""
+    if fx.reverb_preset is not None:
+        if isinstance(fx.reverb_preset, str):
+            return REVERB_PRESET_BY_NAME[fx.reverb_preset.lower()]
+        return fx.reverb_preset
+    if fx.reverb and REVERB_PRESETS:
+        return _find_closest_reverb(fx.reverb)
+    return 0
+
+
+def _resolve_delay_preset(fx: FXConfig) -> int:
+    """Resolve the delay preset index from explicit preset or closest match."""
+    if fx.delay_preset is not None:
+        if isinstance(fx.delay_preset, str):
+            return DELAY_PRESET_BY_NAME[fx.delay_preset.lower()]
+        return fx.delay_preset
+    if fx.delay and DELAY_PRESETS:
+        return _find_closest_delay(fx.delay)
+    return 0
+
+
+# Parameter ranges for normalization in distance calculations
+_REVERB_RANGES = {"type": 5, "decay": 127, "damping": 127}
+_DELAY_RANGES = {"time": 127, "sync": 35, "feedback": 127, "width": 127, "lr_ratio": 12, "slew": 127}
+
+
+def _find_closest_reverb(params: dict[str, int]) -> int:
+    """Find the reverb preset closest to the given parameter values."""
+    best_idx, best_dist = 0, float("inf")
+    for idx, preset in REVERB_PRESETS.items():
+        dist = sum(
+            ((params.get(k, preset[k]) - preset[k]) / _REVERB_RANGES[k]) ** 2
+            for k in _REVERB_RANGES
+        )
+        if dist < best_dist:
+            best_idx, best_dist = idx, dist
+    return best_idx
+
+
+def _find_closest_delay(params: dict[str, int]) -> int:
+    """Find the delay preset closest to the given parameter values."""
+    best_idx, best_dist = 0, float("inf")
+    for idx, preset in DELAY_PRESETS.items():
+        dist = sum(
+            ((params.get(k, preset[k]) - preset[k]) / _DELAY_RANGES[k]) ** 2
+            for k in _DELAY_RANGES
+        )
+        if dist < best_dist:
+            best_idx, best_dist = idx, dist
+    return best_idx
+
+
 def _apply_fx_to_ncs(ncs: NCSFile, fx: FXConfig) -> None:
     """Apply FX configuration to an NCS file."""
+    # Resolve and set preset indices
+    ncs.project_settings.reverb_preset = _resolve_reverb_preset(fx)
+    ncs.project_settings.delay_preset = _resolve_delay_preset(fx)
+
+    # If a preset is specified, use its params as defaults
+    reverb_params = dict(fx.reverb)
+    if fx.reverb_preset is not None and REVERB_PRESETS:
+        preset_vals = REVERB_PRESETS.get(ncs.project_settings.reverb_preset, {})
+        for k, v in preset_vals.items():
+            reverb_params.setdefault(k, v)
+
+    delay_params = dict(fx.delay)
+    if fx.delay_preset is not None and DELAY_PRESETS:
+        preset_vals = DELAY_PRESETS.get(ncs.project_settings.delay_preset, {})
+        for k, v in preset_vals.items():
+            delay_params.setdefault(k, v)
+
     # Reverb sends
     for track_name, value in fx.reverb_sends.items():
         idx = _SEND_INDEX.get(track_name)
@@ -612,26 +728,26 @@ def _apply_fx_to_ncs(ncs: NCSFile, fx: FXConfig) -> None:
             ncs.fx.delay_sends[idx] = max(0, min(127, value))
 
     # Reverb params
-    if "type" in fx.reverb:
-        ncs.fx.reverb_type = fx.reverb["type"]
-    if "decay" in fx.reverb:
-        ncs.fx.reverb_decay = fx.reverb["decay"]
-    if "damping" in fx.reverb:
-        ncs.fx.reverb_damping = fx.reverb["damping"]
+    if "type" in reverb_params:
+        ncs.fx.reverb_type = reverb_params["type"]
+    if "decay" in reverb_params:
+        ncs.fx.reverb_decay = reverb_params["decay"]
+    if "damping" in reverb_params:
+        ncs.fx.reverb_damping = reverb_params["damping"]
 
     # Delay params
-    if "time" in fx.delay:
-        ncs.fx.delay_time = fx.delay["time"]
-    if "sync" in fx.delay:
-        ncs.fx.delay_sync = fx.delay["sync"]
-    if "feedback" in fx.delay:
-        ncs.fx.delay_feedback = fx.delay["feedback"]
-    if "width" in fx.delay:
-        ncs.fx.delay_width = fx.delay["width"]
-    if "lr_ratio" in fx.delay:
-        ncs.fx.delay_lr_ratio = fx.delay["lr_ratio"]
-    if "slew" in fx.delay:
-        ncs.fx.delay_slew = fx.delay["slew"]
+    if "time" in delay_params:
+        ncs.fx.delay_time = delay_params["time"]
+    if "sync" in delay_params:
+        ncs.fx.delay_sync = delay_params["sync"]
+    if "feedback" in delay_params:
+        ncs.fx.delay_feedback = delay_params["feedback"]
+    if "width" in delay_params:
+        ncs.fx.delay_width = delay_params["width"]
+    if "lr_ratio" in delay_params:
+        ncs.fx.delay_lr_ratio = delay_params["lr_ratio"]
+    if "slew" in delay_params:
+        ncs.fx.delay_slew = delay_params["slew"]
 
     # Sidechain
     for synth_name, sc_data in fx.sidechain.items():
