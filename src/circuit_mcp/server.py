@@ -417,9 +417,7 @@ def send_nrpn(channel: int, nrpn_msb: int, nrpn_lsb: int, value: int) -> str:
 def set_synth_param(synth: int, param_name: str, value: int) -> str:
     """Set a named synth parameter on Synth 1 or 2.
 
-    Common params: filter_frequency, filter_resonance, osc1_wave, osc2_wave,
-    osc1_level, osc2_level, env1_attack, env1_decay, env1_sustain, env1_release,
-    drive, distortion_level, chorus_level, macro_knob1-8.
+    Use get_patch_parameters for the full list of exact parameter names.
 
     Args:
         synth: Synth number (1 or 2).
@@ -453,23 +451,7 @@ def set_synth_params(synth: int, params: dict[str, int]) -> str:
     This is the preferred way to configure a synth sound — pass all parameters
     as a dict instead of making individual set_synth_param calls.
 
-    Available CC params: polyphony_mode, portamento_rate, pre_glide, keyboard_octave,
-    osc1_wave, osc1_wave_interpolate, osc1_pulse_width_index, osc1_virtual_sync_depth,
-    osc1_density, osc1_density_detune, osc1_semitones, osc1_cents, osc1_pitchbend,
-    osc2_wave, osc2_wave_interpolate, osc2_pulse_width_index, osc2_virtual_sync_depth,
-    osc2_density, osc2_density_detune, osc2_semitones, osc2_cents, osc2_pitchbend,
-    osc1_level, osc2_level, ring_mod_level, noise_level, pre_fx_level, post_fx_level,
-    routing, drive, drive_type, filter_type, filter_frequency, filter_tracking,
-    filter_resonance, filter_q_normalize, env2_to_filter_freq,
-    env1_velocity, env1_attack, env1_decay, env1_sustain, env1_release,
-    distortion_level, chorus_level, macro_knob1-8.
-
-    Available NRPN params: env2_velocity, env2_attack, env2_decay, env2_sustain,
-    env2_release, env3_delay, env3_attack, env3_decay, env3_sustain, env3_release,
-    lfo1_waveform, lfo1_rate, lfo2_waveform, lfo2_rate, distortion_type, chorus_type,
-    chorus_rate, chorus_feedback, chorus_mod_depth, eq_bass_frequency, eq_bass_level,
-    eq_mid_frequency, eq_mid_level, eq_treble_frequency, eq_treble_level,
-    mod1_source1 through mod12_destination.
+    Use get_patch_parameters for the full list of exact parameter names.
 
     Args:
         synth: Synth number (1 or 2).
@@ -736,16 +718,6 @@ def set_macro(synth: int, macro: int, value: int) -> str:
     Macros provide a consistent live performance interface. Each macro
     controls one or more synth parameters with configurable ranges.
 
-    Default macro layout:
-      1: Filter (filter_frequency)
-      2: Resonance (filter_resonance)
-      3: Amp Envelope (env1_attack + env1_release)
-      4: Filter Envelope (env2_attack + env2_decay)
-      5: Distortion (distortion_level)
-      6: Chorus (chorus_level)
-      7: Osc Mix (crossfade osc1_level ↔ osc2_level)
-      8: Drive (drive)
-
     Args:
         synth: Synth number (1 or 2).
         macro: Macro number (1-8).
@@ -914,15 +886,7 @@ def edit_synth_patch(synth: int, params: dict[str, int | str]) -> dict:
     Reads the current patch, modifies the specified parameters, and sends it back.
     Requires a bidirectional MIDI connection.
 
-    Patch-level params (SysEx-only):
-      name (str), category, genre,
-      osc1/2_pitchbend, routing, filter_type,
-      lfo1/2_waveform, lfo1/2_rate, lfo1/2_phase_offset, lfo1/2_slew_rate,
-      lfo1/2_delay, lfo1/2_delay_sync, lfo1/2_rate_sync, lfo1/2_one_shot,
-      lfo1/2_key_sync, lfo1/2_common_sync, lfo1/2_delay_trigger, lfo1/2_fade_mode,
-      eq_bass_frequency, eq_bass_level, eq_mid_frequency, eq_mid_level,
-      env1/2/3 velocity/attack/decay/sustain/release.
-
+    Use get_patch_parameters for the full list of exact parameter names.
     For unmapped bytes, use raw_<offset> (e.g., "raw_95": 64) to set byte
     at that offset directly in the parameter region.
 
@@ -1033,10 +997,12 @@ def create_synth_patch(
 
     Preset names: "pad", "bass", "lead", "pluck" (or None for init patch).
 
-    Params use the same names as edit_synth_patch: osc1_wave, filter_frequency,
-    env1_attack, lfo1_rate, distortion_level, chorus_level, etc.
+    IMPORTANT: Use get_patch_parameters to get the exact parameter names.
+    Unrecognised param names are silently ignored.
 
     Mod matrix entries: {"source": str/int, "dest": str/int, "depth": int, "source2": str/int}
+    Depth is SIGNED: -64 to +63 (0 = no modulation, positive = positive mod).
+      e.g. depth=5 means subtle positive modulation, depth=-20 means moderate negative.
     Sources: direct, velocity, keyboard, LFO 1+, LFO 1+/-, LFO 2+, LFO 2+/-,
              env amp, env filter, env 3
     Destinations: osc 1 & 2 pitch, osc 1/2 pitch, osc 1/2 v-sync,
@@ -1047,6 +1013,16 @@ def create_synth_patch(
 
     Macro entries: {macro_num: {"targets": [{"dest": str/int, "start": int, "end": int, "depth": int}]}}
     Macro dest uses parameter names (filter_frequency, env1_attack, etc.) or indices 0-70.
+
+    Standard macro layout (follow this order, be creative but use the names as an orientation)
+        1. Oscillator 
+        2. Oscillator Mod
+        3. Amp Envelope
+        4. Filter Envelope
+        5. Filter Frequency
+        6. Resonance
+        7. Modulation
+        8. FX
 
     Args:
         synth: Synth number (1 or 2).
@@ -1080,10 +1056,16 @@ def create_synth_patch(
     if mod_matrix:
         builder.clear_mods()
         for entry in mod_matrix:
+            # Depth is accepted as signed (-64 to +63) and converted to
+            # raw 0-127 (where 64 = no modulation).
+            raw_depth = entry.get("depth", 16)
+            if -64 <= raw_depth <= 63:
+                raw_depth = raw_depth + 64
+            # else assume caller already passed raw 0-127
             builder.add_mod(
                 source=entry.get("source", 0),
                 destination=entry.get("dest", 0),
-                depth=entry.get("depth", 80),
+                depth=raw_depth,
                 source2=entry.get("source2", 0),
             )
 

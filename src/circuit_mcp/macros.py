@@ -25,15 +25,17 @@ class MacroTarget:
 # from its min_val to max_val.
 DEFAULT_MACROS: dict[int, dict] = {
     1: {
-        "name": "Filter",
+        "name": "Oscillator",
         "targets": [
-            MacroTarget(param="filter_frequency", min_val=0, max_val=127),
+            MacroTarget(param="osc1_wave_interpolate", min_val=0, max_val=127),
+            MacroTarget(param="osc2_wave_interpolate", min_val=0, max_val=127),
         ],
     },
     2: {
-        "name": "Resonance",
+        "name": "Oscillator Mod",
         "targets": [
-            MacroTarget(param="filter_resonance", min_val=0, max_val=127),
+            MacroTarget(param="osc1_virtual_sync_depth", min_val=0, max_val=127),
+            MacroTarget(param="osc2_virtual_sync_depth", min_val=0, max_val=127),
         ],
     },
     3: {
@@ -51,28 +53,28 @@ DEFAULT_MACROS: dict[int, dict] = {
         ],
     },
     5: {
-        "name": "Distortion",
+        "name": "Filter Frequency",
         "targets": [
-            MacroTarget(param="distortion_level", min_val=0, max_val=127),
+            MacroTarget(param="filter_frequency", min_val=0, max_val=127),
         ],
     },
     6: {
-        "name": "Chorus",
+        "name": "Resonance",
         "targets": [
-            MacroTarget(param="chorus_level", min_val=0, max_val=127),
+            MacroTarget(param="filter_resonance", min_val=0, max_val=127),
         ],
     },
     7: {
-        "name": "Osc Mix",
+        "name": "Modulation",
         "targets": [
-            MacroTarget(param="osc1_level", min_val=127, max_val=0),
-            MacroTarget(param="osc2_level", min_val=0, max_val=127),
+            MacroTarget(param="lfo1_rate", min_val=0, max_val=127),
         ],
     },
     8: {
-        "name": "Drive",
+        "name": "FX",
         "targets": [
-            MacroTarget(param="drive", min_val=0, max_val=127),
+            MacroTarget(param="distortion_level", min_val=0, max_val=127),
+            MacroTarget(param="chorus_level", min_val=0, max_val=127),
         ],
     },
 }
