@@ -1,6 +1,7 @@
 """MCP server for controlling Novation Circuit Tracks via MIDI."""
 
 import asyncio
+import os
 import threading
 import time
 
@@ -120,43 +121,24 @@ def connection_status() -> dict:
 
 
 @mcp.tool()
-async def play_note(
-    channel: int,
-    note: int,
-    velocity: int = 100,
-    duration_ms: int = 500,
-) -> str:
-    """Play a single MIDI note on the Circuit Tracks.
-
-    Channels: 0=Synth 1, 1=Synth 2, 9=Drums (notes 60,62,64,65 for drums 1-4).
-
-    Args:
-        channel: MIDI channel (0-indexed). 0=Synth1, 1=Synth2, 9=Drums.
-        note: MIDI note number (0-127). Middle C = 60.
-        velocity: Note velocity (0-127).
-        duration_ms: How long to hold the note in milliseconds.
-    """
-    midi = _midi
-    midi.note_on(channel, note, velocity)
-    await asyncio.sleep(duration_ms / 1000.0)
-    midi.note_off(channel, note)
-    return f"Played note {note} on channel {channel} (vel={velocity}, dur={duration_ms}ms)"
-
-
-@mcp.tool()
-async def play_chord(
+async def play_notes(
     channel: int,
     notes: list[int],
     velocity: int = 100,
     duration_ms: int = 500,
 ) -> str:
-    """Play multiple notes simultaneously as a chord.
+    """Play one or more MIDI notes on the Circuit Tracks.
+
+    For a single note, pass a one-element list: [60].
+    For a chord, pass multiple notes: [60, 64, 67].
+
+    Channels: 0=Synth 1, 1=Synth 2, 9=Drums (notes 60,62,64,65 for drums 1-4).
 
     Args:
-        channel: MIDI channel (0-indexed). 0=Synth1, 1=Synth2.
-        notes: List of MIDI note numbers to play together.
+        channel: MIDI channel (0-indexed). 0=Synth1, 1=Synth2, 9=Drums.
+        notes: List of MIDI note numbers (0-127). Middle C = 60.
         velocity: Note velocity (0-127).
-        duration_ms: How long to hold the chord in milliseconds.
+        duration_ms: How long to hold the notes in milliseconds.
     """
     midi = _midi
     for note in notes:
@@ -164,6 +146,8 @@ async def play_chord(
     await asyncio.sleep(duration_ms / 1000.0)
     for note in notes:
         midi.note_off(channel, note)
+    if len(notes) == 1:
+        return f"Played note {notes[0]} on channel {channel} (vel={velocity}, dur={duration_ms}ms)"
     return f"Played chord {notes} on channel {channel}"
 
 
@@ -395,79 +379,49 @@ def get_sequencer_status() -> dict:
     return _engine.get_status()
 
 
-# --- CC / NRPN Tools ---
+# --- CC / NRPN Tools (debug only, set CIRCUIT_DEBUG=1 to enable) ---
 
 
-@mcp.tool()
-def send_cc(channel: int, control: int, value: int) -> str:
-    """Send a raw MIDI Control Change message.
+if os.environ.get("CIRCUIT_DEBUG"):
 
-    Args:
-        channel: MIDI channel (0-indexed).
-        control: CC number (0-127).
-        value: CC value (0-127).
-    """
-    midi = _midi
-    midi.control_change(channel, control, value)
-    return f"Sent CC {control}={value} on channel {channel}"
+    @mcp.tool()
+    def send_cc(channel: int, control: int, value: int) -> str:
+        """Send a raw MIDI Control Change message.
 
+        Args:
+            channel: MIDI channel (0-indexed).
+            control: CC number (0-127).
+            value: CC value (0-127).
+        """
+        midi = _midi
+        midi.control_change(channel, control, value)
+        return f"Sent CC {control}={value} on channel {channel}"
 
-@mcp.tool()
-def send_nrpn(channel: int, nrpn_msb: int, nrpn_lsb: int, value: int) -> str:
-    """Send an NRPN (Non-Registered Parameter Number) message.
+    @mcp.tool()
+    def send_nrpn(channel: int, nrpn_msb: int, nrpn_lsb: int, value: int) -> str:
+        """Send an NRPN (Non-Registered Parameter Number) message.
 
-    Used for synth parameters not accessible via standard CC.
+        Used for synth parameters not accessible via standard CC.
 
-    Args:
-        channel: MIDI channel (0-indexed).
-        nrpn_msb: NRPN parameter MSB.
-        nrpn_lsb: NRPN parameter LSB.
-        value: Parameter value (0-127).
-    """
-    midi = _midi
-    midi.nrpn(channel, nrpn_msb, nrpn_lsb, value)
-    return f"Sent NRPN ({nrpn_msb}:{nrpn_lsb})={value} on channel {channel}"
-
-
-@mcp.tool()
-def set_synth_param(synth: int, param_name: str, value: int) -> str:
-    """Set a named synth parameter on Synth 1 or 2.
-
-    Use get_patch_parameters for the full list of exact parameter names.
-
-    Args:
-        synth: Synth number (1 or 2).
-        param_name: Parameter name (e.g., "filter_frequency").
-        value: Parameter value (0-127 unless otherwise noted).
-    """
-    if synth not in (1, 2):
-        return f"Invalid synth number {synth}. Must be 1 or 2."
-
-    channel = SYNTH1_CHANNEL if synth == 1 else SYNTH2_CHANNEL
-    midi = _midi
-
-    if param_name in SYNTH_CC:
-        cc = SYNTH_CC[param_name]
-        midi.control_change(channel, cc, value)
-        return f"Set synth {synth} {param_name}={value} (CC {cc})"
-    elif param_name in SYNTH_NRPN:
-        msb, lsb = SYNTH_NRPN[param_name]
-        midi.nrpn(channel, msb, lsb, value)
-        return f"Set synth {synth} {param_name}={value} (NRPN {msb}:{lsb})"
-    else:
-        available_cc = ", ".join(sorted(SYNTH_CC.keys()))
-        available_nrpn = ", ".join(sorted(SYNTH_NRPN.keys()))
-        return f"Unknown param '{param_name}'. CC params: {available_cc}. NRPN params: {available_nrpn}."
+        Args:
+            channel: MIDI channel (0-indexed).
+            nrpn_msb: NRPN parameter MSB.
+            nrpn_lsb: NRPN parameter LSB.
+            value: Parameter value (0-127).
+        """
+        midi = _midi
+        midi.nrpn(channel, nrpn_msb, nrpn_lsb, value)
+        return f"Sent NRPN ({nrpn_msb}:{nrpn_lsb})={value} on channel {channel}"
 
 
 @mcp.tool()
 def set_synth_params(synth: int, params: dict[str, int]) -> str:
-    """Set multiple synth parameters at once in a single call.
+    """Set one or more synth parameters on Synth 1 or 2.
 
-    This is the preferred way to configure a synth sound — pass all parameters
-    as a dict instead of making individual set_synth_param calls.
+    Pass a dict of parameter names to values. For a single param, pass a
+    one-entry dict: {"filter_frequency": 80}.
 
-    Use get_patch_parameters for the full list of exact parameter names.
+    Use get_parameter_reference for the full list of exact parameter names.
 
     Args:
         synth: Synth number (1 or 2).
@@ -501,9 +455,10 @@ def set_synth_params(synth: int, params: dict[str, int]) -> str:
 
 @mcp.tool()
 def set_drum_params(drum: int, params: dict[str, int]) -> str:
-    """Set multiple drum parameters at once in a single call.
+    """Set one or more drum parameters on drums 1-4.
 
     Available params: level, pitch, decay, distortion, eq, pan.
+    For a single param, pass a one-entry dict: {"pitch": 80}.
     Note: patch_select is not available via CC (firmware bug). Use the
     song format with NCS export to set drum samples reliably.
 
@@ -536,31 +491,6 @@ def set_drum_params(drum: int, params: dict[str, int]) -> str:
     return result
 
 
-@mcp.tool()
-def set_drum_param(drum: int, param_name: str, value: int) -> str:
-    """Set a drum parameter on drums 1-4.
-
-    Params: level, pitch, decay, distortion, eq, pan.
-    Note: patch_select is not available via CC (firmware bug). Use the
-    song format with NCS export to set drum samples reliably.
-
-    Args:
-        drum: Drum number (1-4).
-        param_name: Parameter name.
-        value: Parameter value (0-127).
-    """
-    if drum not in DRUM_CC:
-        return f"Invalid drum number {drum}. Must be 1-4."
-    if param_name == "patch_select":
-        return "patch_select cannot be set via CC (firmware bug). Use the song format with NCS export to set drum samples."
-    params = DRUM_CC[drum]
-    if param_name not in params:
-        return f"Unknown drum param '{param_name}'. Available: level, pitch, decay, distortion, eq, pan."
-
-    midi = _midi
-    cc = params[param_name]
-    midi.control_change(DRUMS_CHANNEL, cc, value)
-    return f"Set drum {drum} {param_name}={value} (CC {cc})"
 
 
 @mcp.tool()
@@ -670,35 +600,10 @@ def select_project(project_number: int, queued: bool = False) -> str:
 
 
 @mcp.tool()
-def set_project_param(param_name: str, value: int) -> str:
-    """Set a project-level parameter (reverb, delay, mixer, sidechain, master filter).
-
-    Common params: reverb_synth1_send, delay_synth1_send, synth1_level,
-    master_filter_frequency, reverb_type, delay_time, delay_feedback.
-
-    Args:
-        param_name: Parameter name.
-        value: Parameter value.
-    """
-    midi = _midi
-
-    if param_name in PROJECT_CC:
-        cc = PROJECT_CC[param_name]
-        midi.control_change(PROJECT_CHANNEL, cc, value)
-        return f"Set project {param_name}={value} (CC {cc})"
-    elif param_name in PROJECT_NRPN:
-        msb, lsb = PROJECT_NRPN[param_name]
-        midi.nrpn(PROJECT_CHANNEL, msb, lsb, value)
-        return f"Set project {param_name}={value} (NRPN {msb}:{lsb})"
-    else:
-        available_cc = ", ".join(sorted(PROJECT_CC.keys()))
-        available_nrpn = ", ".join(sorted(PROJECT_NRPN.keys()))
-        return f"Unknown param '{param_name}'. CC params: {available_cc}. NRPN params: {available_nrpn}."
-
-
-@mcp.tool()
 def set_project_params(params: dict[str, int]) -> str:
-    """Set multiple project-level parameters at once in a single call.
+    """Set one or more project-level parameters (reverb, delay, mixer, sidechain, master filter).
+
+    For a single param, pass a one-entry dict: {"reverb_type": 3}.
 
     Available CC params: reverb_synth1_send, reverb_synth2_send, reverb_drum1-4_send,
     delay_synth1_send, delay_synth2_send, delay_drum1-4_send,
@@ -850,27 +755,6 @@ def transport(action: str) -> str:
 # --- Info / Reference ---
 
 
-@mcp.tool()
-def get_parameter_info() -> dict:
-    """Get a reference of all available parameter names organized by category.
-
-    Returns the complete list of parameter names you can use with
-    set_synth_param, set_drum_param, and set_project_param.
-    """
-    return {
-        "synth_cc_params": sorted(SYNTH_CC.keys()),
-        "synth_nrpn_params": sorted(SYNTH_NRPN.keys()),
-        "drum_params": ["patch_select", "level", "pitch", "decay", "distortion", "eq", "pan"],
-        "drum_numbers": [1, 2, 3, 4],
-        "project_cc_params": sorted(PROJECT_CC.keys()),
-        "project_nrpn_params": sorted(PROJECT_NRPN.keys()),
-        "channels": {
-            "synth1": 0,
-            "synth2": 1,
-            "drums": 9,
-            "project": 15,
-        },
-    }
 
 
 @mcp.tool()
@@ -918,7 +802,7 @@ def edit_synth_patch(synth: int, params: dict[str, int | str]) -> dict:
     Reads the current patch, modifies the specified parameters, and sends it back.
     Requires a bidirectional MIDI connection.
 
-    Use get_patch_parameters for the full list of exact parameter names.
+    Use get_parameter_reference for the full list of exact parameter names.
     For unmapped bytes, use raw_<offset> (e.g., "raw_95": 64) to set byte
     at that offset directly in the parameter region.
 
@@ -1029,7 +913,7 @@ def create_synth_patch(
 
     Preset names: "pad", "bass", "lead", "pluck" (or None for init patch).
 
-    IMPORTANT: Use get_patch_parameters to get the exact parameter names.
+    IMPORTANT: Use get_parameter_reference to get the exact parameter names.
     Unrecognised param names are silently ignored.
 
     Mod matrix entries: {"source": str/int, "dest": str/int, "depth": int, "source2": str/int}
@@ -1124,13 +1008,12 @@ def create_synth_patch(
 
 
 @mcp.tool()
-def get_patch_parameters() -> dict:
-    """Get a complete reference of all synth patch parameters for sound design.
+def get_parameter_reference() -> dict:
+    """Get a complete reference of all parameter names for synths, drums, and project.
 
-    Returns parameter names organized by category with their defaults, ranges,
-    and lookup tables for waveforms, filter types, mod matrix sources/destinations,
-    and macro destinations. Use this to plan sound design before calling
-    create_synth_patch.
+    Returns parameter names for set_synth_params, set_drum_params, set_project_params,
+    and create_synth_patch. Includes defaults, ranges, lookup tables for waveforms,
+    filter types, mod matrix sources/destinations, and macro destinations.
     """
     from circuit_mcp.constants import (
         OSC_WAVEFORMS, FILTER_TYPES, DISTORTION_TYPES, LFO_WAVEFORMS,
@@ -1138,7 +1021,19 @@ def get_patch_parameters() -> dict:
     )
 
     return {
-        "parameters": {
+        "synth_cc_params": sorted(SYNTH_CC.keys()),
+        "synth_nrpn_params": sorted(SYNTH_NRPN.keys()),
+        "drum_params": ["level", "pitch", "decay", "distortion", "eq", "pan"],
+        "drum_numbers": [1, 2, 3, 4],
+        "project_cc_params": sorted(PROJECT_CC.keys()),
+        "project_nrpn_params": sorted(PROJECT_NRPN.keys()),
+        "channels": {
+            "synth1": 0,
+            "synth2": 1,
+            "drums": 9,
+            "project": 15,
+        },
+        "patch_parameters": {
             "voice": {
                 "polyphony_mode": {"default": 2, "range": "0-2", "notes": "0=Mono, 1=Mono AG, 2=Poly"},
                 "portamento_rate": {"default": 0, "range": "0-127"},
