@@ -630,7 +630,8 @@ def _write_synth_steps(
         for i, note in enumerate(step.notes[:NOTES_PER_STEP]):
             mask |= 1 << i
             ncs_step.notes[i] = NCSNote(
-                note_number=max(0, min(127, note)),
+                # Circuit Tracks plays NCS notes 1 octave below external MIDI
+                note_number=max(0, min(127, note + 12)),
                 gate=max(1, min(6, round(step.gate * 6))),
                 delay=0,
                 velocity=max(0, min(127, step.velocity)),

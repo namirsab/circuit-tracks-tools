@@ -1587,11 +1587,13 @@ _current_project_slot: int | None = None  # Tracks last selected project slot
 
 @mcp.tool()
 def load_song(song: dict) -> dict:
-    """Load a complete song from a single JSON description.
+    """Load a complete song into the MCP's internal sequencer for preview.
 
-    Sets up all patterns in the sequencer, sends synth patches to the device,
-    selects drum samples, configures FX/mixer, and sets the song queue — all
-    in one call. After loading, use start_sequencer to preview.
+    This does NOT write anything to the Circuit Tracks project storage.
+    Synth patches and drum samples are sent to the device for live preview,
+    but patterns, FX, mixer, and song structure stay in the MCP sequencer
+    only. Use start_sequencer to play back, then export_song_to_project
+    to save permanently to a project slot on the device.
 
     The song format:
     {
