@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from circuit_mcp.ncs_transfer import (
+from circuit_tracks.ncs_transfer import (
     NCS_FILE_SIZE,
     _BLOCK_SIZE,
     block_address,

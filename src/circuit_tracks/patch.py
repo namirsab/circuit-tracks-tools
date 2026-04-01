@@ -17,12 +17,12 @@ Patch binary layout (340 bytes, from Programmer's Reference Guide v3):
   Bytes 204-339: Macro knobs (8 knobs × 17 bytes)
 """
 
-from circuit_mcp.constants import (
+from circuit_tracks.constants import (
     SYSEX_MANUFACTURER_ID,
     SYSEX_PRODUCT_TYPE,
     SYSEX_PRODUCT_NUMBER,
 )
-from circuit_mcp.midi import MidiConnection
+from circuit_tracks.midi import MidiConnection
 
 # SysEx command bytes
 _CMD_REPLACE_CURRENT = 0x00  # Device sends this when dumping current patch

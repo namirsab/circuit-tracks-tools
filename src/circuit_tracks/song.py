@@ -10,7 +10,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from circuit_mcp.constants import (
+from circuit_tracks.constants import (
     DELAY_PRESET_BY_NAME,
     DELAY_PRESETS,
     DRUM_CC,
@@ -22,8 +22,8 @@ from circuit_mcp.constants import (
     REVERB_PRESETS,
     SYNTH_CC,
 )
-from circuit_mcp.midi import MidiConnection
-from circuit_mcp.ncs_parser import (
+from circuit_tracks.midi import MidiConnection
+from circuit_tracks.ncs_parser import (
     DEFAULT_DRUM_CHOICE,
     DEFAULT_NOTE_VELOCITY,
     DEFAULT_PROBABILITY,
@@ -49,16 +49,16 @@ from circuit_mcp.ncs_parser import (
     set_scene,
     set_scene_chain,
 )
-from circuit_mcp.ncs_transfer import send_ncs_project
-from circuit_mcp.patch import _PARAM_OFFSETS, send_current_patch
-from circuit_mcp.patch_builder import (
+from circuit_tracks.ncs_transfer import send_ncs_project
+from circuit_tracks.patch import _PARAM_OFFSETS, send_current_patch
+from circuit_tracks.patch_builder import (
     PatchBuilder,
     preset_bass,
     preset_lead,
     preset_pad,
     preset_pluck,
 )
-from circuit_mcp.sequencer import (
+from circuit_tracks.sequencer import (
     VALID_TRACK_NAMES,
     Pattern,
     SequencerEngine,
@@ -490,18 +490,23 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
                 track_idx = 0 if track_name == "synth1" else 1
                 ncs_pat = get_synth_pattern(ncs, track_idx, slot_idx)
                 _write_synth_steps(ncs_pat, steps_raw, ncs_length)
+                _write_track_macros(ncs_pat, track_data, ncs_length)
+                _write_mixer_locks(ncs_pat, track_data, ncs_length)
                 ncs_pat.settings.playback_end = ncs_length - 1
 
             elif track_name.startswith("drum"):
                 drum_idx = int(track_name[-1]) - 1  # 0-3
                 ncs_pat = get_drum_pattern(ncs, drum_idx, slot_idx)
                 _write_drum_steps(ncs_pat, steps_raw, ncs_length, song, track_name)
+                _write_drum_param_locks(ncs_pat, track_data, ncs_length)
                 ncs_pat.settings.playback_end = ncs_length - 1
 
             elif track_name in ("midi1", "midi2"):
                 midi_idx = 0 if track_name == "midi1" else 1
                 ncs_pat = get_midi_pattern(ncs, midi_idx, slot_idx)
                 _write_synth_steps(ncs_pat, steps_raw, ncs_length)
+                _write_track_macros(ncs_pat, track_data, ncs_length)
+                _write_mixer_locks(ncs_pat, track_data, ncs_length)
                 ncs_pat.settings.playback_end = ncs_length - 1
 
     # Synth patches
@@ -647,6 +652,101 @@ def _write_synth_steps(
 
         ncs_step.assigned_note_mask = mask
         ncs_step.probability = max(0, min(7, round(step.probability * 7)))
+
+        # Write macro locks (p-locks)
+        macros = step_data.get("macros") if isinstance(step_data, dict) else None
+        if macros:
+            for macro_str, value in macros.items():
+                macro_num = int(macro_str)
+                if 1 <= macro_num <= 8:
+                    if macro_num not in ncs_pat.macro_locks:
+                        ncs_pat.macro_locks[macro_num] = {}
+                    ncs_pat.macro_locks[macro_num][idx] = max(0, min(127, int(value)))
+
+
+def _write_track_macros(
+    ncs_pat: SynthPattern, track_data: dict, length: int,
+) -> None:
+    """Write track-level macro automation into an NCS SynthPattern.
+
+    Track data may contain a "macros" dict:
+        {"macros": {"5": {"0": 0, "1": 30, "2.5": 60, ...}}}
+
+    Keys are macro numbers (1-8). Values are dicts mapping position to value.
+    Position can be an integer step index or a float for micro-step resolution
+    (e.g. "2.5" = step 2, halfway through).
+    """
+    track_macros = track_data.get("macros")
+    if not track_macros:
+        return
+
+    for macro_str, positions in track_macros.items():
+        macro_num = int(macro_str)
+        if not (1 <= macro_num <= 8):
+            continue
+        if macro_num not in ncs_pat.macro_locks:
+            ncs_pat.macro_locks[macro_num] = {}
+        for pos_str, value in positions.items():
+            pos = float(pos_str)
+            if 0 <= pos < length:
+                ncs_pat.macro_locks[macro_num][pos] = max(0, min(127, int(value)))
+
+
+def _write_mixer_locks(
+    ncs_pat: SynthPattern, track_data: dict, length: int,
+) -> None:
+    """Write track-level mixer/FX automation into an NCS SynthPattern.
+
+    Track data may contain a "mixer" dict:
+        {"mixer": {"level": {"0": 100, "8": 50}, "pan": {"0": 0, "15": 127}}}
+
+    Keys are parameter names ("reverb_send", "delay_send", "level", "pan").
+    Values are dicts mapping step position to value (0-127).
+    Float positions supported for micro-step resolution.
+    """
+    mixer_data = track_data.get("mixer")
+    if not mixer_data:
+        return
+
+    valid_params = {"reverb_send", "delay_send", "level", "pan"}
+    for param_name, positions in mixer_data.items():
+        if param_name not in valid_params:
+            continue
+        if param_name not in ncs_pat.mixer_locks:
+            ncs_pat.mixer_locks[param_name] = {}
+        for pos_str, value in positions.items():
+            pos = float(pos_str)
+            if 0 <= pos < length:
+                ncs_pat.mixer_locks[param_name][pos] = max(0, min(127, int(value)))
+
+
+def _write_drum_param_locks(
+    ncs_pat: DrumPattern, track_data: dict, length: int,
+) -> None:
+    """Write track-level parameter automation into an NCS DrumPattern.
+
+    Track data may contain a "params" dict:
+        {"params": {"pitch": {"0": 30, "4": 90, ...}, "decay": {"0": 100}}}
+
+    Keys are parameter names ("pitch", "decay", "distortion", "eq",
+    "reverb_send", "delay_send", "level", "pan").
+    Values are dicts mapping step position to value (0-127).
+    Float positions supported for micro-step resolution.
+    """
+    track_params = track_data.get("params")
+    if not track_params:
+        return
+
+    valid_params = {"pitch", "decay", "distortion", "eq", "reverb_send", "delay_send", "level", "pan"}
+    for param_name, positions in track_params.items():
+        if param_name not in valid_params:
+            continue
+        if param_name not in ncs_pat.param_locks:
+            ncs_pat.param_locks[param_name] = {}
+        for pos_str, value in positions.items():
+            pos = float(pos_str)
+            if 0 <= pos < length:
+                ncs_pat.param_locks[param_name][pos] = max(0, min(127, int(value)))
 
 
 def _write_drum_steps(

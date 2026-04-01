@@ -202,6 +202,31 @@ class PatternSettings:
         )
 
 
+AUTOMATION_REGION_SIZE = 2304  # 8 macros × 6 micro-ticks × 32 steps + mixer/FX lanes
+DRUM_AUTOMATION_REGION_SIZE = 1520  # 4 params × 6 micro-ticks × 32 steps + padding
+AUTOMATION_LANES_PER_MACRO = 6  # 6 micro-ticks per step
+
+# Drum automation slot -> parameter name mapping
+DRUM_AUTOMATION_PARAMS = {
+    0: "pitch",
+    1: "decay",
+    2: "distortion",
+    3: "eq",
+    4: "reverb_send",
+    5: "delay_send",
+    6: "level",
+    7: "pan",
+}
+
+# Synth/MIDI mixer automation slots (lanes 48-71, after the 8 macro slots)
+MIXER_AUTOMATION_PARAMS = {
+    8: "reverb_send",   # lanes 48-53
+    9: "delay_send",    # lanes 54-59
+    10: "level",        # lanes 60-65
+    11: "pan",          # lanes 66-71
+}
+
+
 @dataclass
 class SynthPattern:
     """A synth or MIDI pattern: 32 steps + settings + raw surrounding data."""
@@ -212,6 +237,28 @@ class SynthPattern:
     settings: PatternSettings = field(default_factory=PatternSettings)
     pre_data: bytes = b""
     post_data: bytes = b""
+    macro_locks: dict[int, dict[float, int]] = field(default_factory=dict)
+    """Per-step macro parameter locks.
+
+    Maps macro number (1-8) to {position: value (0-127)}.
+    Position can be an int (step index 0-31) or a float for micro-step
+    resolution (e.g. 2.5 = step 2, micro-tick 3 out of 6).
+
+    The automation region is a continuous 192-position buffer per macro
+    (6 micro-ticks × 32 steps). Position N.F maps to flat index
+    N * positions_per_step + round(F * positions_per_step).
+
+    Note: Automation data is stored in the NEXT block's pre_data region
+    in the NCS binary (2304 bytes between block N settings and block N+1
+    step data).
+    """
+    mixer_locks: dict[str, dict[float, int]] = field(default_factory=dict)
+    """Per-step mixer/FX automation locks.
+
+    Maps parameter name ("reverb_send", "delay_send", "level", "pan") to
+    {position: value (0-127)}. Same position format as macro_locks.
+    Stored in lanes 48-71 of the automation region (slots 8-11).
+    """
 
 
 @dataclass
@@ -235,6 +282,13 @@ class DrumPattern:
     raw_header: bytes = b""
     pre_data: bytes = b""
     post_data: bytes = b""
+    param_locks: dict[str, dict[float, int]] = field(default_factory=dict)
+    """Per-step parameter locks for drum tracks.
+
+    Maps parameter name ("pitch", "decay", "distortion", "eq") to
+    {position: value (0-127)}. Position can be int (step) or float
+    (micro-step). Same format as SynthPattern.macro_locks.
+    """
 
 
 @dataclass
@@ -585,7 +639,226 @@ def parse_ncs(path: str | Path) -> NCSFile:
         mixer_pans=list(t[_MIXER_PANS_OFFSET:_MIXER_PANS_OFFSET + 4]),
     )
 
+    # Parse macro automation from pre_data of subsequent blocks
+    _parse_automation_locks(ncs)
+
     return ncs
+
+
+def _parse_automation_locks(ncs: NCSFile) -> None:
+    """Extract automation lock data from pre_data regions.
+
+    Automation for block N is stored in block N+1's pre_data.
+    - Synth/MIDI blocks: 2304 bytes, 8 macros × 6 micro-tick lanes × 32 steps.
+    - Drum blocks: 1520 bytes, 4 params × 6 micro-tick lanes × 32 steps.
+    """
+    # Build ordered list of all blocks
+    synth_i = drum_i = midi_i = 0
+    blocks: list[tuple[int, SynthPattern | DrumPattern]] = []
+    for block_idx in range(64):
+        if _is_drum_block(block_idx):
+            blocks.append((block_idx, ncs.drum_patterns[drum_i]))
+            drum_i += 1
+        elif block_idx < _SYNTH_BLOCK_COUNT:
+            blocks.append((block_idx, ncs.synth_patterns[synth_i]))
+            synth_i += 1
+        else:
+            blocks.append((block_idx, ncs.midi_patterns[midi_i]))
+            midi_i += 1
+
+    for block_idx, pattern in blocks:
+        next_block_idx = block_idx + 1
+        if next_block_idx >= 64:
+            continue
+        next_pre_data = _get_block_pre_data(ncs, next_block_idx)
+
+        if isinstance(pattern, DrumPattern):
+            if len(next_pre_data) != DRUM_AUTOMATION_REGION_SIZE:
+                continue
+            _parse_drum_locks(pattern, next_pre_data)
+        else:
+            if len(next_pre_data) != AUTOMATION_REGION_SIZE:
+                continue
+            _parse_synth_locks(pattern, next_pre_data)
+
+
+def _parse_synth_locks(pattern: SynthPattern, pre_data: bytes) -> None:
+    """Parse synth/MIDI macro and mixer locks from automation region."""
+    num_steps = pattern.settings.playback_end + 1
+    total_positions = AUTOMATION_LANES_PER_MACRO * STEPS_PER_PATTERN  # 192
+    positions_per_step = total_positions // num_steps if num_steps > 0 else 6
+
+    # Macros (slots 0-7, lanes 0-47)
+    for macro in range(1, 9):
+        base_offset = (macro - 1) * total_positions
+        locks = {}
+        for step in range(num_steps):
+            flat_idx = step * positions_per_step
+            lane = flat_idx // STEPS_PER_PATTERN
+            pos = flat_idx % STEPS_PER_PATTERN
+            val = pre_data[base_offset + lane * STEPS_PER_PATTERN + pos]
+            if val != 0xFF:
+                locks[step] = val
+        if locks:
+            pattern.macro_locks[macro] = locks
+
+    # Mixer/FX (slots 8-11, lanes 48-71)
+    for slot, param_name in MIXER_AUTOMATION_PARAMS.items():
+        base_offset = slot * total_positions
+        if base_offset >= len(pre_data):
+            break
+        locks = {}
+        for step in range(num_steps):
+            flat_idx = step * positions_per_step
+            lane = flat_idx // STEPS_PER_PATTERN
+            pos = flat_idx % STEPS_PER_PATTERN
+            offset = base_offset + lane * STEPS_PER_PATTERN + pos
+            if offset < len(pre_data):
+                val = pre_data[offset]
+                if val != 0xFF:
+                    locks[step] = val
+        if locks:
+            pattern.mixer_locks[param_name] = locks
+
+
+def _parse_drum_locks(pattern: DrumPattern, pre_data: bytes) -> None:
+    """Parse drum parameter locks from automation region."""
+    num_steps = pattern.settings.playback_end + 1
+    total_positions = AUTOMATION_LANES_PER_MACRO * STEPS_PER_PATTERN  # 192
+    positions_per_step = total_positions // num_steps if num_steps > 0 else 6
+
+    for slot, param_name in DRUM_AUTOMATION_PARAMS.items():
+        base_offset = slot * total_positions
+        if base_offset >= len(pre_data):
+            break
+        locks = {}
+        for step in range(num_steps):
+            flat_idx = step * positions_per_step
+            lane = flat_idx // STEPS_PER_PATTERN
+            pos = flat_idx % STEPS_PER_PATTERN
+            offset = base_offset + lane * STEPS_PER_PATTERN + pos
+            if offset < len(pre_data):
+                val = pre_data[offset]
+                if val != 0xFF:
+                    locks[step] = val
+        if locks:
+            pattern.param_locks[param_name] = locks
+
+
+def _get_block_pre_data(ncs: NCSFile, block_idx: int) -> bytes:
+    """Get the pre_data of a specific block by index."""
+    synth_i = drum_i = midi_i = 0
+    for bi in range(64):
+        if _is_drum_block(bi):
+            pat = ncs.drum_patterns[drum_i]
+            drum_i += 1
+        elif bi < _SYNTH_BLOCK_COUNT:
+            pat = ncs.synth_patterns[synth_i]
+            synth_i += 1
+        else:
+            pat = ncs.midi_patterns[midi_i]
+            midi_i += 1
+        if bi == block_idx:
+            return pat.pre_data
+    return b""
+
+
+def _write_locks_to_region(
+    locks: dict[int | str, dict[float, int]],
+    slot_mapping: dict[int | str, int],
+    region_size: int,
+    num_steps: int,
+) -> bytes:
+    """Write automation locks into a pre_data region.
+
+    Args:
+        locks: {key: {position: value}} where key is macro number or param name.
+        slot_mapping: {key: slot_index} mapping lock keys to automation slot indices.
+        region_size: Size of the automation region in bytes.
+        num_steps: Number of active steps in the pattern.
+
+    Returns the automation region bytes.
+    """
+    buf = bytearray(b'\xff' * region_size)
+    total_positions = AUTOMATION_LANES_PER_MACRO * STEPS_PER_PATTERN  # 192
+    positions_per_step = total_positions // num_steps if num_steps > 0 else 6
+
+    for key, positions in locks.items():
+        slot = slot_mapping.get(key)
+        if slot is None:
+            continue
+        base_offset = slot * total_positions
+        if base_offset >= region_size:
+            continue
+
+        for position, value in positions.items():
+            clamped = max(0, min(127, value))
+            pos_f = float(position)
+            step_int = int(pos_f)
+            frac = pos_f - step_int
+
+            if step_int < 0 or step_int >= num_steps:
+                continue
+
+            if frac == 0.0 and pos_f == int(pos_f):
+                start_pos = step_int * positions_per_step
+                for p in range(positions_per_step):
+                    flat_idx = start_pos + p
+                    if flat_idx < total_positions:
+                        lane = flat_idx // STEPS_PER_PATTERN
+                        pos = flat_idx % STEPS_PER_PATTERN
+                        idx = base_offset + lane * STEPS_PER_PATTERN + pos
+                        if idx < region_size:
+                            buf[idx] = clamped
+            else:
+                flat_idx = int(round(pos_f * positions_per_step))
+                if 0 <= flat_idx < total_positions:
+                    lane = flat_idx // STEPS_PER_PATTERN
+                    pos = flat_idx % STEPS_PER_PATTERN
+                    idx = base_offset + lane * STEPS_PER_PATTERN + pos
+                    if idx < region_size:
+                        buf[idx] = clamped
+
+    return bytes(buf)
+
+
+def write_automation_to_pre_data(
+    pattern: SynthPattern | DrumPattern, next_block_pre_data: bytes,
+) -> bytes:
+    """Write automation locks from a pattern into the next block's pre_data.
+
+    Handles both synth/MIDI macro locks and drum parameter locks.
+    Returns the modified pre_data bytes.
+    """
+    if isinstance(pattern, DrumPattern):
+        if not pattern.param_locks:
+            return next_block_pre_data
+        slot_mapping = {name: slot for slot, name in DRUM_AUTOMATION_PARAMS.items()}
+        return _write_locks_to_region(
+            pattern.param_locks, slot_mapping,
+            DRUM_AUTOMATION_REGION_SIZE,
+            pattern.settings.playback_end + 1,
+        )
+    else:
+        if not pattern.macro_locks and not pattern.mixer_locks:
+            return next_block_pre_data
+        # Combine macro locks (slots 0-7) and mixer locks (slots 8-11)
+        all_locks: dict[int | str, dict[float, int]] = {}
+        slot_mapping: dict[int | str, int] = {}
+        # Macros
+        for macro, locks in pattern.macro_locks.items():
+            all_locks[macro] = locks
+            slot_mapping[macro] = macro - 1
+        # Mixer/FX
+        mixer_slot_mapping = {name: slot for slot, name in MIXER_AUTOMATION_PARAMS.items()}
+        for param_name, locks in pattern.mixer_locks.items():
+            all_locks[param_name] = locks
+            slot_mapping[param_name] = mixer_slot_mapping[param_name]
+        return _write_locks_to_region(
+            all_locks, slot_mapping,
+            AUTOMATION_REGION_SIZE,
+            pattern.settings.playback_end + 1,
+        )
 
 
 # --- Writer ---
@@ -594,6 +867,63 @@ def parse_ncs(path: str | Path) -> NCSFile:
 def write_ncs(ncs: NCSFile, path: str | Path) -> None:
     """Write an NCSFile to disk."""
     Path(path).write_bytes(serialize_ncs(ncs))
+
+
+def _write_automation_to_blocks(ncs: NCSFile) -> None:
+    """Inject automation locks from all pattern types into next block's pre_data."""
+    block_patterns: dict[int, SynthPattern | DrumPattern] = {}
+    synth_i = drum_i = midi_i = 0
+    for block_idx in range(64):
+        if _is_drum_block(block_idx):
+            block_patterns[block_idx] = ncs.drum_patterns[drum_i]
+            drum_i += 1
+        elif block_idx < _SYNTH_BLOCK_COUNT:
+            block_patterns[block_idx] = ncs.synth_patterns[synth_i]
+            synth_i += 1
+        else:
+            block_patterns[block_idx] = ncs.midi_patterns[midi_i]
+            midi_i += 1
+
+    for block_idx, pattern in block_patterns.items():
+        has_locks = (
+            (isinstance(pattern, DrumPattern) and pattern.param_locks) or
+            (isinstance(pattern, SynthPattern) and (pattern.macro_locks or pattern.mixer_locks))
+        )
+        if not has_locks:
+            continue
+        next_idx = block_idx + 1
+        if next_idx >= 64:
+            continue
+        next_pre = _get_block_pre_data(ncs, next_idx)
+        updated = write_automation_to_pre_data(pattern, next_pre)
+        _set_block_pre_data(ncs, next_idx, updated)
+
+
+def _set_block_pre_data(ncs: NCSFile, block_idx: int, data: bytes) -> None:
+    """Set the pre_data of a specific block by index."""
+    synth_i = drum_i = midi_i = 0
+    for bi in range(64):
+        if _is_drum_block(bi):
+            if bi == block_idx:
+                ncs.drum_patterns[drum_i] = DrumPattern(
+                    steps=ncs.drum_patterns[drum_i].steps,
+                    settings=ncs.drum_patterns[drum_i].settings,
+                    raw_header=ncs.drum_patterns[drum_i].raw_header,
+                    pre_data=data,
+                    post_data=ncs.drum_patterns[drum_i].post_data,
+                )
+                return
+            drum_i += 1
+        elif bi < _SYNTH_BLOCK_COUNT:
+            if bi == block_idx:
+                ncs.synth_patterns[synth_i].pre_data = data
+                return
+            synth_i += 1
+        else:
+            if bi == block_idx:
+                ncs.midi_patterns[midi_i].pre_data = data
+                return
+            midi_i += 1
 
 
 def serialize_ncs(ncs: NCSFile) -> bytes:
@@ -627,6 +957,9 @@ def serialize_ncs(ncs: NCSFile) -> bytes:
     for i, chain in enumerate(ncs.pattern_chains):
         off = sc_base + _PATTERN_CHAINS_OFFSET + i * 4
         buf[off:off + 4] = chain.to_bytes()
+
+    # Write macro locks into next block's pre_data before serializing
+    _write_automation_to_blocks(ncs)
 
     # Pattern blocks
     d4_off = sc_base + _PATTERN_CHAINS_OFFSET + 7 * 4

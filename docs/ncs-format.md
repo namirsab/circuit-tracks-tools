@@ -265,9 +265,36 @@ Each row contains one byte per step (32 bytes total):
 | Drum choice | `drumChoice[32]` | 0xFF (default sample) | 0xFF | Per-step sample selection ("sample flip"). Non-0xFF selects an alternate sample for that step. **Confirmed** |
 | Rhythm | `drumRhythm[32]` | 0x01 | 0x00 | Trigger flag: 1 = hit, 0 = rest. **Confirmed** |
 
-### Automation Data
+### Automation Data (P-Locks)
 
-Both synth and drum blocks contain automation regions filled with 0xFF bytes (indicating no automation data). The WASM validator references `automation[N].values[32]` fields. The exact mapping of automation lanes to parameter destinations within these regions has not been fully documented.
+Automation for block N is stored in block N+1's pre-data region (between block N settings end and block N+1 step data start). The region is a contiguous buffer of 0xFF-filled bytes where non-0xFF values represent per-step parameter locks.
+
+**Synth/MIDI blocks**: 2,304 bytes = 72 lanes × 32 positions.
+
+| Slot | Lanes | Parameter |
+|------|-------|-----------|
+| 0-7 | 0-47 | Macro knobs 1-8 |
+| 8 | 48-53 | Reverb send |
+| 9 | 54-59 | Delay send |
+| 10 | 60-65 | Level |
+| 11 | 66-71 | Pan |
+
+**Drum blocks**: 1,520 bytes = 47.5 lanes × 32 positions.
+
+| Slot | Lanes | Parameter |
+|------|-------|-----------|
+| 0 | 0-5 | Pitch |
+| 1 | 6-11 | Decay |
+| 2 | 12-17 | Distortion |
+| 3 | 18-23 | EQ |
+| 4 | 24-29 | Reverb send |
+| 5 | 30-35 | Delay send |
+| 6 | 36-41 | Level |
+| 7 | 42-47 | Pan (truncated: last 16 bytes missing) |
+
+**Layout per slot**: Each slot has 6 lanes of 32 positions = 192 positions total. These form a continuous buffer where positions map to sub-step timing. For a 16-step pattern: 192 / 16 = 12 sub-positions per step. For 32 steps: 6 sub-positions per step.
+
+**Values**: 0x00-0x7F = locked parameter value. 0xFF = no automation (pass-through). For step-level locks, all sub-positions within the step are set to the same value.
 
 ---
 
@@ -724,5 +751,5 @@ The following fields have been observed in the binary data but their purpose has
 | Scene header bytes 0-7 | 8 bytes | varies | First 8 bytes of each 40-byte scene block. |
 | Sidechain S2 extra bytes | 2 bytes | 0 | Two extra bytes after S2 sidechain params. |
 | Tail preamble bytes 0-15 | 16 bytes | mostly 0 | WASM references `synthTrackInfo`, `drumMuteStates`, `defaultDrumChoices`, `midiTrackInfo` in this region. |
-| Automation data layout | variable | 0xFF | Both synth and drum blocks have automation regions. WASM references `automation[N].values[32]` but lane-to-parameter mapping is undocumented. |
+| ~~Automation data layout~~ | ~~variable~~ | ~~0xFF~~ | **Documented** — see Automation Data (P-Locks) section above. Synth: 12 slots (8 macros + reverb/delay/level/pan). Drum: 8 slots (pitch/decay/distortion/eq + reverb/delay/level/pan). |
 | Trailing 1,000 bytes | 1,000 bytes | 0 | 0x27024-0x2740B. Always zeros. |

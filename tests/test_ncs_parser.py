@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from circuit_mcp.ncs_parser import (
+from circuit_tracks.ncs_parser import (
     NCSFile,
     NCSNote,
     SynthStep,

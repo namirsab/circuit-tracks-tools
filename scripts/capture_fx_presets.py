@@ -16,7 +16,7 @@ from pathlib import Path
 # Add src to path so we can import circuit_mcp
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from circuit_mcp.ncs_parser import parse_ncs
+from circuit_tracks.ncs_parser import parse_ncs
 
 
 def extract_fx_presets(ncs_dir: Path) -> None:

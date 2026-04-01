@@ -29,7 +29,7 @@ Usage:
 
 from __future__ import annotations
 
-from circuit_mcp.constants import (
+from circuit_tracks.constants import (
     MACRO_DESTINATIONS,
     MACRO_DEST_BY_NAME,
     MOD_MATRIX_SOURCES,

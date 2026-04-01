@@ -2,13 +2,10 @@
 
 import asyncio
 import os
-import threading
-import time
 
 from mcp.server.fastmcp import FastMCP
 
-from circuit_mcp.constants import (
-    AUDIO_CC,
+from circuit_tracks.constants import (
     DRUMS_CHANNEL,
     DRUM_CC,
     DRUM_NOTES,
@@ -22,31 +19,29 @@ from circuit_mcp.constants import (
     load_drum_sample_names,
     save_drum_sample_names,
 )
-from circuit_mcp.macros import DEFAULT_MACROS, MacroTarget, apply_macro
-from circuit_mcp.midi import MidiConnection
-from circuit_mcp.patch import _PARAM_OFFSETS
-from circuit_mcp.patch import (
+from circuit_tracks.macros import DEFAULT_MACROS, MacroTarget, apply_macro
+from circuit_tracks.midi import MidiConnection
+from circuit_tracks.morph import MorphEngine
+from circuit_tracks.patch import _PARAM_OFFSETS
+from circuit_tracks.patch import (
     parse_patch_data,
     parse_patch_file,
     read_and_modify_patch,
     request_current_patch,
     send_current_patch,
 )
-from circuit_mcp.ncs_transfer import send_ncs_project, send_patch_to_slot
-from circuit_mcp.sequencer import (
+from circuit_tracks.ncs_transfer import send_ncs_project, send_patch_to_slot
+from circuit_tracks.sequencer import (
     VALID_TRACK_NAMES,
     Pattern,
     SequencerEngine,
     Step,
-    Track,
-    TrackType,
 )
 
 
 _midi = MidiConnection()
 _engine = SequencerEngine(_midi)
-_morph_threads: dict[str, threading.Event] = {}  # morph_id -> stop_event
-_morph_counter = 0
+_morph = MorphEngine(_midi)
 
 mcp = FastMCP(
     "Circuit Tracks",
@@ -86,7 +81,7 @@ def connect(port_name: str) -> dict:
     # Auto-scan drum sample names from the device
     if midi.has_input:
         try:
-            from circuit_mcp.ncs_transfer import list_directory
+            from circuit_tracks.ncs_transfer import list_directory
             entries = list_directory(midi, file_type=5)
             if entries:
                 samples = {e["slot"]: e["filename"] for e in entries}
@@ -953,7 +948,7 @@ def create_synth_patch(
     if synth not in (1, 2):
         return {"error": f"Invalid synth number {synth}. Must be 1 or 2."}
 
-    from circuit_mcp.patch_builder import (
+    from circuit_tracks.patch_builder import (
         PatchBuilder, preset_pad, preset_bass, preset_lead, preset_pluck,
     )
 
@@ -1017,7 +1012,7 @@ def get_parameter_reference() -> dict:
     and create_synth_patch. Includes defaults, ranges, lookup tables for waveforms,
     filter types, mod matrix sources/destinations, and macro destinations.
     """
-    from circuit_mcp.constants import (
+    from circuit_tracks.constants import (
         OSC_WAVEFORMS, FILTER_TYPES, DISTORTION_TYPES, LFO_WAVEFORMS,
         MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS, MACRO_DESTINATIONS,
     )
@@ -1129,87 +1124,6 @@ def get_parameter_reference() -> dict:
     }
 
 
-def _resolve_param(param_name: str, cc_maps: list[dict], nrpn_maps: list[dict]):
-    """Find a param in the given CC/NRPN lookup dicts. Returns ('cc', cc_num) or ('nrpn', (msb, lsb)) or None."""
-    for cc_map in cc_maps:
-        if param_name in cc_map:
-            return ("cc", cc_map[param_name])
-    for nrpn_map in nrpn_maps:
-        if param_name in nrpn_map:
-            return ("nrpn", nrpn_map[param_name])
-    return None
-
-
-def _send_params_at_t(
-    channel: int,
-    start_values: dict[str, int],
-    target: dict[str, int],
-    t: float,
-    cc_maps: list[dict],
-    nrpn_maps: list[dict],
-):
-    """Send interpolated param values at position t (0.0 to 1.0)."""
-    midi = _midi
-    for param_name, target_val in target.items():
-        start_val = start_values[param_name]
-        current = round(start_val + (target_val - start_val) * t)
-        current = max(0, min(127, current))
-        resolved = _resolve_param(param_name, cc_maps, nrpn_maps)
-        if resolved is None:
-            continue
-        kind, addr = resolved
-        if kind == "cc":
-            midi.control_change(channel, addr, current)
-        else:
-            msb, lsb = addr
-            midi.nrpn(channel, msb, lsb, current)
-
-
-def _run_morph(
-    morph_id: str,
-    channel: int,
-    start_values: dict[str, int],
-    target: dict[str, int],
-    duration_seconds: float,
-    steps: int,
-    stop_event: threading.Event,
-    ping_pong: bool,
-    cc_maps: list[dict],
-    nrpn_maps: list[dict],
-):
-    """Background thread that interpolates params over time."""
-    interval = duration_seconds / steps
-
-    while True:
-        # Forward: start → target
-        for i in range(1, steps + 1):
-            if stop_event.is_set():
-                # Only remove if we're still the current morph (avoid race with restart)
-                if _morph_threads.get(morph_id) is stop_event:
-                    _morph_threads.pop(morph_id, None)
-                return
-            t = i / steps
-            _send_params_at_t(channel, start_values, target, t, cc_maps, nrpn_maps)
-            time.sleep(interval)
-
-        if not ping_pong:
-            break
-
-        # Backward: target → start
-        for i in range(1, steps + 1):
-            if stop_event.is_set():
-                # Only remove if we're still the current morph (avoid race with restart)
-                if _morph_threads.get(morph_id) is stop_event:
-                    _morph_threads.pop(morph_id, None)
-                return
-            t = 1.0 - (i / steps)
-            _send_params_at_t(channel, start_values, target, t, cc_maps, nrpn_maps)
-            time.sleep(interval)
-
-    if _morph_threads.get(morph_id) is stop_event:
-        _morph_threads.pop(morph_id, None)
-
-
 def _start_morph(
     morph_id: str,
     channel: int,
@@ -1220,55 +1134,17 @@ def _start_morph(
     cc_maps: list[dict],
     nrpn_maps: list[dict],
 ) -> str:
-    """Shared logic: validate, launch morph thread, return status string."""
-    global _morph_counter
-
-    # Validate all params exist
-    errors = []
-    for param_name in set(list(start.keys()) + list(target.keys())):
-        if _resolve_param(param_name, cc_maps, nrpn_maps) is None:
-            errors.append(param_name)
-    if errors:
-        return f"Unknown params: {', '.join(sorted(errors))}"
-
-    if set(start.keys()) != set(target.keys()):
-        return "start and target must have the same parameter names."
-
-    # If a morph with this exact ID exists, stop it
-    if morph_id in _morph_threads:
-        _morph_threads[morph_id].set()
-
-    # Calculate duration from BPM (1 bar = 4 beats)
+    """Shared logic: validate, launch morph, return status string."""
     bpm = _engine._bpm if _engine._bpm else 78
     seconds_per_bar = 4 * 60.0 / bpm
     duration_seconds = duration_bars * seconds_per_bar
 
-    # ~20 updates per second for smooth morphing
-    total_steps = max(1, int(duration_seconds * 20))
-
-    # Set start values immediately
-    midi = _midi
-    for param_name, value in start.items():
-        resolved = _resolve_param(param_name, cc_maps, nrpn_maps)
-        if resolved is None:
-            continue
-        kind, addr = resolved
-        if kind == "cc":
-            midi.control_change(channel, addr, value)
-        else:
-            msb, lsb = addr
-            midi.nrpn(channel, msb, lsb, value)
-
-    stop_event = threading.Event()
-    _morph_threads[morph_id] = stop_event
-
-    thread = threading.Thread(
-        target=_run_morph,
-        args=(morph_id, channel, start, target, duration_seconds, total_steps,
-              stop_event, ping_pong, cc_maps, nrpn_maps),
-        daemon=True,
+    error = _morph.start(
+        morph_id, channel, start, target, duration_seconds, ping_pong,
+        cc_maps, nrpn_maps,
     )
-    thread.start()
+    if error:
+        return error
 
     param_list = ", ".join(f"{k}: {start[k]}→{target[k]}" for k in target)
     mode = "ping-pong" if ping_pong else "one-shot"
@@ -1312,14 +1188,11 @@ def morph_synth_params(
         name: Optional name for this morph (e.g. "filter_sweep", "chorus_wobble").
             Auto-generated if empty. Used to stop specific morphs.
     """
-    global _morph_counter
-
     if synth not in (1, 2):
         return f"Invalid synth number {synth}. Must be 1 or 2."
 
     if not name:
-        _morph_counter += 1
-        name = f"morph_{_morph_counter}"
+        name = _morph.next_id()
     morph_id = f"s{synth}_{name}"
 
     channel = SYNTH1_CHANNEL if synth == 1 else SYNTH2_CHANNEL
@@ -1358,11 +1231,8 @@ def morph_project_params(
         ping_pong: If True, continuously sweep back and forth. Default False.
         name: Optional name for this morph. Auto-generated if empty.
     """
-    global _morph_counter
-
     if not name:
-        _morph_counter += 1
-        name = f"morph_{_morph_counter}"
+        name = _morph.next_id()
     morph_id = f"proj_{name}"
 
     return _start_morph(
@@ -1395,14 +1265,11 @@ def morph_drum_params(
         ping_pong: If True, continuously sweep back and forth. Default False.
         name: Optional name for this morph. Auto-generated if empty.
     """
-    global _morph_counter
-
     if drum not in DRUM_CC:
         return f"Invalid drum number {drum}. Must be 1-4."
 
     if not name:
-        _morph_counter += 1
-        name = f"morph_{_morph_counter}"
+        name = _morph.next_id()
     morph_id = f"d{drum}_{name}"
 
     return _start_morph(
@@ -1422,35 +1289,18 @@ def stop_morph(name: str = "", synth: int = 0) -> str:
         synth: Stop all morphs on this synth (1 or 2). If 0, stops all morphs.
     """
     if name:
-        # Stop by exact name — check both synths
-        stopped = []
-        for morph_id in list(_morph_threads.keys()):
-            if morph_id.endswith(f"_{name}"):
-                _morph_threads[morph_id].set()
-                del _morph_threads[morph_id]
-                stopped.append(morph_id)
+        stopped = _morph.stop_by_name(name)
         if stopped:
             return f"Stopped: {', '.join(stopped)}"
         return f"No morph named '{name}' found"
 
     if synth in (1, 2):
-        # Stop all morphs on a specific synth
-        prefix = f"s{synth}_"
-        stopped = []
-        for morph_id in list(_morph_threads.keys()):
-            if morph_id.startswith(prefix):
-                _morph_threads[morph_id].set()
-                del _morph_threads[morph_id]
-                stopped.append(morph_id)
+        stopped = _morph.stop_by_prefix(f"s{synth}_")
         if stopped:
             return f"Stopped {len(stopped)} morph(es) on synth {synth}: {', '.join(stopped)}"
         return f"No morphs running on synth {synth}"
 
-    # Stop everything
-    count = len(_morph_threads)
-    for stop_event in _morph_threads.values():
-        stop_event.set()
-    _morph_threads.clear()
+    count = _morph.stop_all()
     return f"Stopped all {count} morph(es)" if count else "No morphs running"
 
 
@@ -1533,7 +1383,7 @@ def load_song(song: dict) -> dict:
         song: Complete song description dict.
     """
     global _current_song
-    from circuit_mcp.song import parse_song, load_song_to_sequencer
+    from circuit_tracks.song import parse_song, load_song_to_sequencer
 
     try:
         song_data = parse_song(song)
@@ -1585,7 +1435,7 @@ def export_song_to_project(slot: int = -1, name: str = "") -> dict:
     if not 0 <= target_slot <= 63:
         return {"error": f"Invalid slot {target_slot}. Must be 0-63."}
 
-    from circuit_mcp.song import export_song_to_device
+    from circuit_tracks.song import export_song_to_device
 
     try:
         result = export_song_to_device(_current_song, _midi, slot=target_slot, name=name)

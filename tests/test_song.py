@@ -4,20 +4,20 @@ from pathlib import Path
 
 import pytest
 
-from circuit_mcp.ncs_parser import (
+from circuit_tracks.ncs_parser import (
     NCS_FILE_SIZE,
     get_drum_pattern,
     get_synth_pattern,
     parse_ncs,
 )
-from circuit_mcp.song import (
+from circuit_tracks.song import (
     SongData,
     parse_song,
     song_to_ncs,
 )
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "example-projects-ncs"
-EMPTY_NCS = Path(__file__).parent.parent / "src" / "circuit_mcp" / "data" / "Empty.ncs"
+EMPTY_NCS = Path(__file__).parent.parent / "src" / "circuit_tracks" / "data" / "Empty.ncs"
 
 
 # --- Minimal valid song ---
@@ -221,15 +221,15 @@ class TestSongToNcs:
         pat = get_synth_pattern(ncs, 0, 0)  # synth1, pattern 0
         step0 = pat.steps[0]
         assert step0.assigned_note_mask == 0x01  # one note
-        assert step0.notes[0].note_number == 62
+        assert step0.notes[0].note_number == 74  # MIDI 62 + 12 NCS offset
         assert step0.notes[0].velocity == 100
 
         # Step 8 has a chord (3 notes)
         step8 = pat.steps[8]
         assert step8.assigned_note_mask == 0x07  # bits 0,1,2
-        assert step8.notes[0].note_number == 62
-        assert step8.notes[1].note_number == 65
-        assert step8.notes[2].note_number == 69
+        assert step8.notes[0].note_number == 74  # MIDI 62 + 12
+        assert step8.notes[1].note_number == 77  # MIDI 65 + 12
+        assert step8.notes[2].note_number == 81  # MIDI 69 + 12
 
     def test_drum_pattern_written(self):
         song = parse_song(FULL_SONG)

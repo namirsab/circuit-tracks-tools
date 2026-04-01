@@ -14,12 +14,12 @@ import time
 import zlib
 from collections.abc import Callable
 
-from circuit_mcp.constants import (
+from circuit_tracks.constants import (
     SYSEX_MANUFACTURER_ID,
     SYSEX_PRODUCT_NUMBER,
     SYSEX_PRODUCT_TYPE,
 )
-from circuit_mcp.midi import MidiConnection
+from circuit_tracks.midi import MidiConnection
 
 # File management protocol command group
 _CMD_GROUP = 0x03
@@ -456,7 +456,7 @@ def send_patch_to_slot(
     # --- Phase 2: Replace Patch SysEx ---
     # Components format: header + cmd(0x01) + location + 0x00 + slot + 0x00 + 340 bytes
     # Header: manufacturer(3) + product_type(1) + product_number(1)
-    from circuit_mcp.constants import (
+    from circuit_tracks.constants import (
         SYSEX_MANUFACTURER_ID,
         SYSEX_PRODUCT_TYPE,
         SYSEX_PRODUCT_NUMBER,

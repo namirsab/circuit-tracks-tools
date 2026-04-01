@@ -1,7 +1,7 @@
 """Tests for the synth patch builder."""
 
 import pytest
-from circuit_mcp.patch_builder import (
+from circuit_tracks.patch_builder import (
     PATCH_SIZE,
     PatchBuilder,
     _INIT_PATCH,
@@ -10,7 +10,7 @@ from circuit_mcp.patch_builder import (
     preset_lead,
     preset_pluck,
 )
-from circuit_mcp.constants import MACRO_DEST_BY_NAME
+from circuit_tracks.constants import MACRO_DEST_BY_NAME
 
 
 class TestInitPatch:

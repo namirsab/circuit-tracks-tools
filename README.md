@@ -19,9 +19,9 @@ An MCP (Model Context Protocol) server that lets AI agents control a [Novation C
 ## Installation
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install .
+python -m venv venv
+source venv/bin/activate
+pip install -e ".[mcp]"
 ```
 
 ## Usage with Claude Code
@@ -47,17 +47,18 @@ The agent will program patterns on your Circuit Tracks as if a human were doing 
 ## Project structure
 
 ```
-src/circuit_mcp/
-  server.py         # MCP server — all tool definitions
-  midi.py           # MIDI connection handling
-  sequencer.py      # Pattern/step sequencer engine
-  patch.py          # Synth patch read/write
-  patch_builder.py  # Patch construction helpers
-  constants.py      # CC numbers, NRPN mappings, channel assignments
-  macros.py         # Macro knob configuration
-  ncs_parser.py     # .ncs project file parser
-  ncs_transfer.py   # SysEx project/patch transfer
-  song.py           # Song structure
+src/circuit_tracks/   # Standalone library for Circuit Tracks control
+  midi.py             # MIDI connection handling
+  sequencer.py        # Pattern/step sequencer engine
+  patch.py            # Synth patch read/write
+  patch_builder.py    # Patch construction helpers
+  constants.py        # CC numbers, NRPN mappings, channel assignments
+  macros.py           # Macro knob configuration
+  ncs_parser.py       # .ncs project file parser
+  ncs_transfer.py     # SysEx project/patch transfer
+  song.py             # Song format and device export
+src/circuit_mcp/      # MCP server (thin wrapper over the library)
+  server.py           # All MCP tool definitions
 docs/
-  ncs-format.md     # Reverse-engineered .ncs file format spec
+  ncs-format.md       # Reverse-engineered .ncs file format spec
 ```
