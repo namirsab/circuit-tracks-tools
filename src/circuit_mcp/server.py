@@ -192,16 +192,17 @@ def set_pattern(
 ) -> str:
     """Define a named pattern with tracks and steps. This is the primary tool for creating music.
 
-    The sequencer mirrors the Circuit Tracks: 6 tracks (synth1, synth2, drum1-4),
+    The sequencer mirrors the Circuit Tracks: 8 tracks (synth1, synth2, drum1-4, midi1, midi2),
     each with up to 32 steps. Steps are 16th notes at the given BPM.
 
     Only specify steps that have notes — absent step indices are rests.
     Drum tracks ignore the note field (each drum has a fixed trigger note).
+    MIDI tracks output to external gear via MIDI (channels 3-4).
 
     Args:
         name: Pattern name (e.g., "intro", "verse", "drop", "breakdown").
         tracks: Dict of track data keyed by track name. Track names:
-            "synth1", "synth2", "drum1", "drum2", "drum3", "drum4".
+            "synth1", "synth2", "drum1", "drum2", "drum3", "drum4", "midi1", "midi2".
             Each track value is a dict with:
               "steps": dict of step_index (as string) -> step data.
               Step data fields (all optional, have defaults):
@@ -238,7 +239,7 @@ def set_track(
 
     Args:
         pattern_name: Name of the pattern to modify.
-        track: Track name: "synth1", "synth2", "drum1", "drum2", "drum3", "drum4".
+        track: Track name: "synth1", "synth2", "drum1", "drum2", "drum3", "drum4", "midi1", "midi2".
         steps: Dict of step_index (as string) -> step data (same format as set_pattern).
         clear_existing: If True (default), replace all steps. If False, merge with existing.
     """
@@ -364,7 +365,7 @@ def mute_track(track: str, muted: bool = True) -> str:
     """Mute or unmute a track. Takes effect immediately.
 
     Args:
-        track: Track name: "synth1", "synth2", "drum1", "drum2", "drum3", "drum4".
+        track: Track name: "synth1", "synth2", "drum1", "drum2", "drum3", "drum4", "midi1", "midi2".
         muted: True to mute, False to unmute.
     """
     if track not in VALID_TRACK_NAMES:

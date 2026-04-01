@@ -13,6 +13,8 @@ from pathlib import Path
 SYNTH1_CHANNEL = 0  # Channel 1
 SYNTH2_CHANNEL = 1  # Channel 2
 DRUMS_CHANNEL = 9   # Channel 10
+MIDI1_CHANNEL = 2   # Channel 3
+MIDI2_CHANNEL = 3   # Channel 4
 PROJECT_CHANNEL = 15  # Channel 16
 
 # Drum trigger notes (on channel 10)

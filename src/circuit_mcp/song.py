@@ -42,6 +42,7 @@ from circuit_mcp.ncs_parser import (
     SynthPattern,
     SynthStep,
     get_drum_pattern,
+    get_midi_pattern,
     get_synth_pattern,
     parse_ncs,
     serialize_ncs,
@@ -92,10 +93,11 @@ _SCALE_ROOT = {
 
 # Scale type name -> integer
 _SCALE_TYPE = {
-    "natural minor": 0, "minor": 0, "major": 1, "dorian": 2, "mixolydian": 3,
-    "phrygian": 4, "harmonic minor": 5, "blues": 6, "minor pentatonic": 7,
-    "hungarian minor": 8, "ukranian dorian": 9, "marva": 10,
-    "todi": 11, "whole tone": 12, "hirajoshi": 13, "chromatic": 14,
+    "natural minor": 0, "minor": 0, "major": 1, "dorian": 2, "phrygian": 3,
+    "mixolydian": 4, "melodic minor": 5, "harmonic minor": 6,
+    "bebop dorian": 7, "blues": 8, "minor pentatonic": 9,
+    "hungarian minor": 10, "ukranian dorian": 11, "marva": 12,
+    "todi": 13, "whole tone": 14, "chromatic": 15,
 }
 
 
@@ -494,6 +496,12 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
                 drum_idx = int(track_name[-1]) - 1  # 0-3
                 ncs_pat = get_drum_pattern(ncs, drum_idx, slot_idx)
                 _write_drum_steps(ncs_pat, steps_raw, ncs_length, song, track_name)
+                ncs_pat.settings.playback_end = ncs_length - 1
+
+            elif track_name in ("midi1", "midi2"):
+                midi_idx = 0 if track_name == "midi1" else 1
+                ncs_pat = get_midi_pattern(ncs, midi_idx, slot_idx)
+                _write_synth_steps(ncs_pat, steps_raw, ncs_length)
                 ncs_pat.settings.playback_end = ncs_length - 1
 
     # Synth patches

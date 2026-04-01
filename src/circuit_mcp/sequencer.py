@@ -12,7 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
 
-from circuit_mcp.constants import DRUM_NOTES
+from circuit_mcp.constants import DRUM_NOTES, MIDI1_CHANNEL, MIDI2_CHANNEL
 from circuit_mcp.midi import MidiConnection
 
 
@@ -23,6 +23,8 @@ class TrackType(Enum):
     DRUM2 = "drum2"
     DRUM3 = "drum3"
     DRUM4 = "drum4"
+    MIDI1 = "midi1"
+    MIDI2 = "midi2"
 
 
 TRACK_CHANNEL = {
@@ -32,6 +34,8 @@ TRACK_CHANNEL = {
     TrackType.DRUM2: 9,
     TrackType.DRUM3: 9,
     TrackType.DRUM4: 9,
+    TrackType.MIDI1: MIDI1_CHANNEL,
+    TrackType.MIDI2: MIDI2_CHANNEL,
 }
 
 DRUM_TRACK_NOTE = {
