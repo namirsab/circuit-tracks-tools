@@ -51,6 +51,7 @@ _morph_counter = 0
 mcp = FastMCP(
     "Circuit Tracks",
     instructions="Control a Novation Circuit Tracks synthesizer via MIDI",
+    log_level="WARNING",
 )
 
 
