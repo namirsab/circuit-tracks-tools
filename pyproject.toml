@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "circuit-tracks-tools"
-version = "0.1.0"
+version = "0.0.1"
 description = "Python library and MCP server for controlling Novation Circuit Tracks via MIDI"
 license = "MIT"
 readme = "README.md"
