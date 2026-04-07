@@ -112,9 +112,11 @@ def server():
 class TestConnection:
     def test_list_midi_ports(self, server):
         srv, _ = server
-        result = srv.list_midi_ports()
-        assert "output_ports" in result
-        assert "input_ports" in result
+        with patch("circuit_tracks.midi.MidiConnection.list_output_ports", return_value=["MockPort"]), \
+             patch("circuit_tracks.midi.MidiConnection.list_input_ports", return_value=["MockPort"]):
+            result = srv.list_midi_ports()
+        assert result["output_ports"] == ["MockPort"]
+        assert result["input_ports"] == ["MockPort"]
 
     def test_connection_status(self, server):
         srv, mock_midi = server
