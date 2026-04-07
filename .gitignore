@@ -1,4 +1,6 @@
+.DS_Store
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *.egg-info/
 dist/
@@ -7,5 +9,6 @@ venv/
 .venv/
 *.pdf
 .claude/
+plans/
 *.mcp.json
 .env
