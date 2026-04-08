@@ -12,8 +12,10 @@ from circuit_tracks.ncs_parser import (
 )
 from circuit_tracks.song import (
     SongData,
+    ncs_to_song,
     parse_song,
     song_to_ncs,
+    _song_data_to_dict,
 )
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "example-projects-ncs"
@@ -382,6 +384,197 @@ class TestSongToNcs:
 
         pat_b = get_drum_pattern(ncs, 0, 1)
         assert pat_b.steps[4].active
+
+
+# --- ncs_to_song tests ---
+
+
+class TestNcsToSong:
+    def test_roundtrip_header(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        assert song2.name.strip() == "Test Techno"
+        assert song2.bpm == 130
+        assert song2.swing == 55
+        assert song2.color == 3
+
+    def test_roundtrip_scale(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        assert song2.scale_root == "D"
+        assert song2.scale_type == "natural minor"
+
+    def test_synth_note_offset(self):
+        """NCS notes are stored +12 vs external MIDI; ncs_to_song subtracts 12."""
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        # intro synth1 step 0 was note=62 (single note → "note" key)
+        step0 = song2.patterns["pattern_0"].tracks["synth1"]["steps"]["0"]
+        assert step0["note"] == 62
+
+    def test_chord_notes(self):
+        """Multi-note steps round-trip correctly."""
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        step8 = song2.patterns["pattern_0"].tracks["synth1"]["steps"]["8"]
+        assert sorted(step8["notes"]) == [62, 65, 69]
+
+    def test_gate_probability_conversion(self):
+        song_dict = {
+            "patterns": {
+                "a": {
+                    "length": 16,
+                    "tracks": {
+                        "synth1": {
+                            "steps": {
+                                "0": {"note": 60, "gate": 1.0, "probability": 1.0},
+                            }
+                        }
+                    },
+                }
+            }
+        }
+        song1 = parse_song(song_dict)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        step0 = song2.patterns["pattern_0"].tracks["synth1"]["steps"]["0"]
+        assert step0["gate"] == 1.0
+        assert step0["probability"] == 1.0
+
+    def test_empty_ncs_no_patterns(self):
+        ncs = parse_ncs(EMPTY_NCS)
+        song = ncs_to_song(ncs)
+        assert len(song.patterns) == 0
+        assert len(song.song) == 0
+
+    def test_drum_steps_roundtrip(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        drum1_steps = song2.patterns["pattern_0"].tracks["drum1"]["steps"]
+        assert "0" in drum1_steps
+        assert "4" in drum1_steps
+        assert "1" not in drum1_steps
+
+    def test_drum_velocity(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        drum2_steps = song2.patterns["pattern_0"].tracks["drum2"]["steps"]
+        assert drum2_steps["4"]["velocity"] == 80
+
+    def test_drum_configs_roundtrip(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        assert song2.sounds["drum1"].sample == 0
+        assert song2.sounds["drum2"].sample == 2
+
+    def test_synth_patch_name(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        assert song2.sounds["synth1"].name == "TestPad"
+
+    def test_fx_roundtrip(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        assert song2.fx.reverb["type"] == 2
+        assert song2.fx.reverb["decay"] == 80
+        assert song2.fx.delay["time"] == 64
+        assert song2.fx.delay["feedback"] == 70
+        assert song2.fx.reverb_sends["synth1"] == 40
+        assert song2.fx.delay_sends["synth1"] == 30
+
+    def test_sidechain_roundtrip(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        assert "synth1" in song2.fx.sidechain
+        assert song2.fx.sidechain["synth1"]["source"] == "drum1"
+        assert song2.fx.sidechain["synth1"]["depth"] == 80
+
+    def test_mixer_roundtrip(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        assert song2.mixer["synth1"].level == 110
+        assert song2.mixer["synth1"].pan == 50
+
+    def test_song_order_roundtrip(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        # Original: ["intro", "intro", "drop", "intro", "drop"]
+        # intro=slot0=pattern_0, drop=slot1=pattern_1
+        assert len(song2.song) == 5
+        assert song2.song == [
+            "pattern_0", "pattern_0", "pattern_1", "pattern_0", "pattern_1"
+        ]
+
+    def test_pattern_length_preserved(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+
+        # "intro" (pattern_0) had length 16, "drop" (pattern_1) had length 32
+        assert song2.patterns["pattern_0"].length == 16
+        assert song2.patterns["pattern_1"].length == 32
+
+    def test_song_data_to_dict(self):
+        song1 = parse_song(FULL_SONG)
+        ncs_bytes = song_to_ncs(song1, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+        d = _song_data_to_dict(song2)
+
+        assert d["name"].strip() == "Test Techno"
+        assert d["bpm"] == 130
+        assert "patterns" in d
+        assert "sounds" in d
+        assert "fx" in d
+
+    def test_real_ncs_files(self):
+        """Load real NCS files without crashing."""
+        if not EXAMPLES_DIR.exists():
+            pytest.skip("No example-projects-ncs directory")
+        for ncs_path in EXAMPLES_DIR.glob("*.ncs"):
+            ncs = parse_ncs(ncs_path)
+            song = ncs_to_song(ncs)
+            assert isinstance(song, SongData)
+            assert 40 <= song.bpm <= 240
 
 
 # --- Helpers ---

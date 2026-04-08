@@ -1450,6 +1450,65 @@ def export_song_to_project(slot: int = -1, name: str = "") -> dict:
     }
 
 
+@mcp.tool()
+def read_project(slot: int = 0) -> dict:
+    """Read a project from the Circuit Tracks and return its contents as a song.
+
+    Downloads the NCS project file from the device, parses it, and converts
+    it into the same song format used by load_song. The result is also stored
+    internally so it can be re-exported with export_song_to_project.
+
+    Requires a bidirectional MIDI connection (both input and output ports).
+
+    Args:
+        slot: Project slot number (0-63). Defaults to 0.
+    """
+    global _current_song, _current_project_slot
+
+    if not 0 <= slot <= 63:
+        return {"error": f"Invalid slot {slot}. Must be 0-63."}
+
+    midi = _midi
+    if not midi.is_connected:
+        return {"error": "Not connected. Use connect() first."}
+    if not midi.has_input:
+        return {
+            "error": "No MIDI input port available. "
+            "The input port is needed to receive the project data from the device. "
+            "Reconnect and ensure the Circuit Tracks input port is accessible."
+        }
+
+    from circuit_tracks.ncs_transfer import receive_ncs_project
+    from circuit_tracks.ncs_parser import parse_ncs_from_bytes
+    from circuit_tracks.song import ncs_to_song, _song_data_to_dict
+
+    try:
+        ncs_bytes = receive_ncs_project(midi, slot)
+    except Exception as e:
+        return {"error": f"Failed to receive project from device: {e}"}
+
+    try:
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+    except Exception as e:
+        return {"error": f"Failed to parse project data: {e}"}
+
+    try:
+        song_data = ncs_to_song(ncs)
+    except Exception as e:
+        return {"error": f"Failed to convert project to song: {e}"}
+
+    _current_song = song_data
+    _current_project_slot = slot
+
+    result = _song_data_to_dict(song_data)
+    result["_meta"] = {
+        "status": "read",
+        "slot": slot,
+        "raw_size": len(ncs_bytes),
+    }
+    return result
+
+
 def main():
     mcp.run(transport="stdio")
 

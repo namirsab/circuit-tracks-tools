@@ -160,3 +160,63 @@ F0 00 20 29 01 64 01 00 00 <slot> 00 <340 patch bytes> F7
 - The Phase 1 session "unlocks" flash writes
 
 Implementation: `send_patch_to_slot()` in `ncs_transfer.py`.
+
+## Project Transfer (Read)
+
+Reverse-engineered from Novation Components "Get Project from Circuit Tracks" flow.
+
+Reading a project reuses the same sub-commands as writing but in reverse:
+the host sends a single READ request, and the device streams the entire
+project back as data blocks.
+
+### Prerequisites
+
+A file management session must be open (OPEN_SESSION + directory handshake).
+Components typically lists the project directory first, then issues the read
+within the same session.
+
+### Sequence
+
+```
+Step  SubCmd  Dir           Description
+───── ─────── ───────────── ────────────────────────────────────
+  1   0x01    Host→Device   READ_REQUEST (WRITE_INIT with 0x02 flag)
+  2   0x01    Device→Host   READ_INIT response (file size)
+  3   0x02    Device→Host   READ_DATA block 1  (9383 bytes encoded)
+  ...
+ 22   0x02    Device→Host   READ_DATA block 20 (partial, 5886 bytes)
+ 23   0x03    Device→Host   READ_FINISH (CRC32)
+ 24   0x41    Host→Device   CLOSE SESSION
+```
+
+No per-block ACKs from host — the device streams all blocks continuously.
+
+### READ_REQUEST Payload (WRITE_INIT with read flag)
+```
+<8-byte address=0> <3-byte file_id> 02
+```
+The `02` byte is the **read flag** (vs `01` for write in WRITE_INIT).
+
+Example: read project slot 36 → `00 00 00 00 00 00 00 00 03 00 24 02`
+
+### READ_INIT Response
+```
+<8-byte address=0> <3-byte file_id> 01 00 00 00 <5 size nibbles>
+```
+Same format as WRITE_INIT but sent Device→Host. Size confirms 160,780 bytes.
+
+### READ_DATA Blocks
+```
+<8-byte address> <3-byte file_id> <MSB-interleave-encoded data>
+```
+Same format as WRITE_DATA but Device→Host. 20 full blocks (8192 raw bytes
+each = 9363 encoded + 11 header = 9383 total) plus one partial final block.
+
+### READ_FINISH
+```
+<8-byte address> <3-byte file_id> <8 CRC32 nibbles>
+```
+Device sends CRC32 for verification. Host should validate against
+`zlib.crc32()` of the reassembled raw data.
+
+Implementation: `receive_ncs_project()` in `ncs_transfer.py`.

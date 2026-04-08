@@ -9,6 +9,7 @@ venv/
 .venv/
 *.pdf
 .claude/
+docs/journal/
 plans/
 *.mcp.json
 .env

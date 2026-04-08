@@ -100,6 +100,16 @@ _SCALE_TYPE = {
     "todi": 13, "whole tone": 14, "chromatic": 15,
 }
 
+# Reverse lookup dicts for ncs_to_song
+_SCALE_ROOT_REVERSE = {0: "C", 1: "C#", 2: "D", 3: "D#", 4: "E", 5: "F",
+                       6: "F#", 7: "G", 8: "G#", 9: "A", 10: "A#", 11: "B"}
+_SCALE_TYPE_REVERSE = {v: k for k, v in _SCALE_TYPE.items() if k != "minor"}
+_SC_SOURCE_REVERSE = {v: k for k, v in _SC_SOURCE.items()}
+_SEND_INDEX_REVERSE = {v: k for k, v in _SEND_INDEX.items()}
+
+# Synth engine param offsets to include in ncs_to_song output (skip mod matrix)
+_SYNTH_ENGINE_PARAM_MAX_OFFSET = 123
+
 
 # --- Data structures ---
 
@@ -584,6 +594,440 @@ def export_song_to_device(
         slot=slot,
         filename=song.name.strip()[:16] or "Song",
     )
+
+
+# --- NCS to SongData (reverse conversion) ---
+
+
+def ncs_to_song(ncs: NCSFile) -> SongData:
+    """Convert an NCSFile to a SongData structure.
+
+    This is the reverse of song_to_ncs(). It reads the binary NCS project
+    data and reconstructs a SongData with patterns, sounds, FX, mixer, and
+    song order.
+
+    Args:
+        ncs: Parsed NCSFile structure.
+
+    Returns:
+        SongData representing the project contents.
+    """
+    song = SongData()
+
+    # Header
+    song.name = ncs.header.name.strip()
+    song.color = ncs.header.color
+
+    # Timing
+    song.bpm = ncs.timing.tempo
+    song.swing = ncs.timing.swing
+
+    # Scale
+    song.scale_root = _SCALE_ROOT_REVERSE.get(ncs.project_settings.scale_root, "C")
+    song.scale_type = _SCALE_TYPE_REVERSE.get(ncs.project_settings.scale_type, "chromatic")
+
+    # Scan pattern slots 0-7 for non-empty patterns
+    pattern_names: dict[int, str] = {}  # slot_idx -> pattern name
+
+    for slot_idx in range(PATTERNS_PER_TRACK):
+        if _is_slot_non_empty(ncs, slot_idx):
+            pat_name = f"pattern_{slot_idx}"
+            pat_data = _read_pattern_slot(ncs, slot_idx)
+            song.patterns[pat_name] = pat_data
+            pattern_names[slot_idx] = pat_name
+
+    # Synth patches
+    for synth_name, patch_bytes in [("synth1", ncs.synth1_patch), ("synth2", ncs.synth2_patch)]:
+        sc = _parse_embedded_patch(patch_bytes)
+        if sc is not None:
+            song.sounds[synth_name] = sc
+
+    # Drum configs
+    for drum_idx in range(4):
+        cfg = ncs.drum_configs[drum_idx]
+        drum_name = f"drum{drum_idx + 1}"
+        sc = SoundConfig(
+            sample=cfg.patch_select,
+            level=cfg.level,
+            pitch=cfg.pitch,
+            decay=cfg.decay,
+            distortion=cfg.distortion,
+            eq=cfg.eq,
+            pan=cfg.pan,
+        )
+        song.sounds[drum_name] = sc
+
+    # FX
+    song.fx = _read_fx_from_ncs(ncs)
+
+    # Mixer
+    if ncs.fx.mixer_levels[0] != 100 or ncs.fx.mixer_pans[0] != 64:
+        song.mixer["synth1"] = MixerConfig(
+            level=ncs.fx.mixer_levels[0], pan=ncs.fx.mixer_pans[0],
+        )
+    if ncs.fx.mixer_levels[1] != 100 or ncs.fx.mixer_pans[1] != 64:
+        song.mixer["synth2"] = MixerConfig(
+            level=ncs.fx.mixer_levels[1], pan=ncs.fx.mixer_pans[1],
+        )
+
+    # Song order from scene chain
+    song.song = _read_song_order(ncs, pattern_names)
+
+    return song
+
+
+def _is_slot_non_empty(ncs: NCSFile, slot_idx: int) -> bool:
+    """Check if any track at a given pattern slot has data."""
+    # Synth tracks
+    for track_idx in range(2):
+        pat = get_synth_pattern(ncs, track_idx, slot_idx)
+        if any(s.assigned_note_mask != 0 for s in pat.steps):
+            return True
+        if pat.macro_locks or pat.mixer_locks:
+            return True
+
+    # Drum tracks
+    for drum_idx in range(4):
+        pat = get_drum_pattern(ncs, drum_idx, slot_idx)
+        if any(s.active for s in pat.steps):
+            return True
+        if pat.param_locks:
+            return True
+
+    # MIDI tracks
+    for midi_idx in range(2):
+        pat = get_midi_pattern(ncs, midi_idx, slot_idx)
+        if any(s.assigned_note_mask != 0 for s in pat.steps):
+            return True
+        if pat.macro_locks or pat.mixer_locks:
+            return True
+
+    return False
+
+
+def _read_pattern_slot(ncs: NCSFile, slot_idx: int) -> PatternData:
+    """Read all tracks at a pattern slot and build a PatternData."""
+    tracks: dict[str, dict] = {}
+    max_length = 1
+
+    # Synth tracks
+    for track_idx, track_name in enumerate(["synth1", "synth2"]):
+        pat = get_synth_pattern(ncs, track_idx, slot_idx)
+        track_data = _read_synth_track(pat)
+        if track_data:
+            tracks[track_name] = track_data
+            length = pat.settings.playback_end + 1
+            max_length = max(max_length, length)
+
+    # Drum tracks
+    for drum_idx in range(4):
+        track_name = f"drum{drum_idx + 1}"
+        pat = get_drum_pattern(ncs, drum_idx, slot_idx)
+        track_data = _read_drum_track(pat)
+        if track_data:
+            tracks[track_name] = track_data
+            length = pat.settings.playback_end + 1
+            max_length = max(max_length, length)
+
+    # MIDI tracks
+    for midi_idx, track_name in enumerate(["midi1", "midi2"]):
+        pat = get_midi_pattern(ncs, midi_idx, slot_idx)
+        track_data = _read_synth_track(pat)
+        if track_data:
+            tracks[track_name] = track_data
+            length = pat.settings.playback_end + 1
+            max_length = max(max_length, length)
+
+    return PatternData(length=max_length, tracks=tracks)
+
+
+def _read_synth_track(pat: SynthPattern) -> dict | None:
+    """Read a synth/MIDI pattern into a track data dict."""
+    steps: dict[str, dict] = {}
+    has_data = False
+
+    for i, step in enumerate(pat.steps):
+        if step.assigned_note_mask == 0:
+            continue
+        has_data = True
+        step_dict: dict = {}
+
+        # Read active notes
+        active = step.active_notes
+        if len(active) == 1:
+            note = active[0]
+            step_dict["note"] = note.note_number - 12
+            step_dict["velocity"] = note.velocity
+            step_dict["gate"] = round(note.gate / 6.0, 3)
+        elif len(active) > 1:
+            step_dict["notes"] = [n.note_number - 12 for n in active]
+            step_dict["velocity"] = active[0].velocity
+            step_dict["gate"] = round(active[0].gate / 6.0, 3)
+
+        step_dict["probability"] = round(step.probability / 7.0, 3)
+        steps[str(i)] = step_dict
+
+    # Track-level macro locks
+    macros: dict[str, dict[str, int]] = {}
+    for macro_num, positions in pat.macro_locks.items():
+        macro_dict: dict[str, int] = {}
+        for pos, val in positions.items():
+            macro_dict[str(pos)] = val
+        macros[str(macro_num)] = macro_dict
+
+    # Track-level mixer locks
+    mixer: dict[str, dict[str, int]] = {}
+    for param_name, positions in pat.mixer_locks.items():
+        mixer_dict: dict[str, int] = {}
+        for pos, val in positions.items():
+            mixer_dict[str(pos)] = val
+        mixer[param_name] = mixer_dict
+
+    if not has_data and not macros and not mixer:
+        return None
+
+    result: dict = {}
+    if steps:
+        result["steps"] = steps
+    if macros:
+        result["macros"] = macros
+    if mixer:
+        result["mixer"] = mixer
+    return result
+
+
+def _read_drum_track(pat: DrumPattern) -> dict | None:
+    """Read a drum pattern into a track data dict."""
+    steps: dict[str, dict] = {}
+    has_data = False
+
+    for i, step in enumerate(pat.steps):
+        if not step.active:
+            continue
+        has_data = True
+        step_dict: dict = {"velocity": step.velocity}
+        step_dict["probability"] = round(step.probability / 7.0, 3)
+        if step.drum_choice != DEFAULT_DRUM_CHOICE:
+            step_dict["sample"] = step.drum_choice
+        steps[str(i)] = step_dict
+
+    # Track-level param locks
+    params: dict[str, dict[str, int]] = {}
+    for param_name, positions in pat.param_locks.items():
+        param_dict: dict[str, int] = {}
+        for pos, val in positions.items():
+            param_dict[str(pos)] = val
+        params[param_name] = param_dict
+
+    if not has_data and not params:
+        return None
+
+    result: dict = {}
+    if steps:
+        result["steps"] = steps
+    if params:
+        result["params"] = params
+    return result
+
+
+def _parse_embedded_patch(patch_bytes: bytes) -> SoundConfig | None:
+    """Parse a 340-byte embedded synth patch into a SoundConfig."""
+    if len(patch_bytes) < 340:
+        return None
+
+    # Extract name (bytes 0-15 ASCII)
+    name = ""
+    for b in patch_bytes[0:16]:
+        if 32 <= b <= 126:
+            name += chr(b)
+    name = name.strip()
+
+    # Extract synth engine params (skip mod matrix params)
+    params: dict[str, int] = {}
+    for param_name, offset in _PARAM_OFFSETS.items():
+        # Skip mod matrix params (modN_sourceN, modN_depth, modN_destination)
+        if offset > _SYNTH_ENGINE_PARAM_MAX_OFFSET:
+            continue
+        if offset < len(patch_bytes):
+            params[param_name] = patch_bytes[offset]
+
+    return SoundConfig(name=name if name else None, params=params)
+
+
+def _read_fx_from_ncs(ncs: NCSFile) -> FXConfig:
+    """Read FX settings from an NCS file into an FXConfig."""
+    fx = FXConfig()
+
+    # Reverb params
+    fx.reverb = {
+        "type": ncs.fx.reverb_type,
+        "decay": ncs.fx.reverb_decay,
+        "damping": ncs.fx.reverb_damping,
+    }
+
+    # Delay params
+    fx.delay = {
+        "time": ncs.fx.delay_time,
+        "sync": ncs.fx.delay_sync,
+        "feedback": ncs.fx.delay_feedback,
+        "width": ncs.fx.delay_width,
+        "lr_ratio": ncs.fx.delay_lr_ratio,
+        "slew": ncs.fx.delay_slew,
+    }
+
+    # Reverb sends
+    for idx, val in enumerate(ncs.fx.reverb_sends):
+        track_name = _SEND_INDEX_REVERSE.get(idx)
+        if track_name and val != 0:
+            fx.reverb_sends[track_name] = val
+
+    # Delay sends
+    for idx, val in enumerate(ncs.fx.delay_sends):
+        track_name = _SEND_INDEX_REVERSE.get(idx)
+        if track_name and val != 0:
+            fx.delay_sends[track_name] = val
+
+    # Sidechain
+    for synth_name, sc_settings in [("synth1", ncs.fx.sidechain_s1),
+                                     ("synth2", ncs.fx.sidechain_s2)]:
+        source_name = _SC_SOURCE_REVERSE.get(sc_settings.source, "off")
+        if source_name != "off" or sc_settings.depth > 0:
+            fx.sidechain[synth_name] = {
+                "source": source_name,
+                "attack": sc_settings.attack,
+                "hold": sc_settings.hold,
+                "decay": sc_settings.decay,
+                "depth": sc_settings.depth,
+            }
+
+    # Preset indices
+    fx.reverb_preset = ncs.project_settings.reverb_preset
+    fx.delay_preset = ncs.project_settings.delay_preset
+
+    return fx
+
+
+def _read_song_order(ncs: NCSFile, pattern_names: dict[int, str]) -> list[str]:
+    """Read the song order from the scene chain."""
+    if not pattern_names:
+        return []
+
+    start = ncs.scene_chain.start
+    end = ncs.scene_chain.end
+
+    song_order: list[str] = []
+    for scene_idx in range(start, end + 1):
+        if scene_idx >= len(ncs.scenes):
+            break
+        scene = ncs.scenes[scene_idx]
+        # Read the first track chain's start value as the pattern slot index
+        slot_idx = scene.track_chains[0].start
+        pat_name = pattern_names.get(slot_idx)
+        if pat_name:
+            song_order.append(pat_name)
+
+    # If scene_chain is (0, 0) and slot 0 has a pattern, emit single-element list
+    if not song_order and 0 in pattern_names and start == 0 and end == 0:
+        # Check if scene 0 actually points to something
+        scene = ncs.scenes[0]
+        slot_idx = scene.track_chains[0].start
+        if slot_idx in pattern_names:
+            song_order.append(pattern_names[slot_idx])
+
+    return song_order
+
+
+def _song_data_to_dict(song: SongData) -> dict:
+    """Convert a SongData to a plain JSON-serializable dict.
+
+    Only includes non-None and non-empty fields for clean output.
+    """
+    d: dict = {
+        "name": song.name,
+        "bpm": song.bpm,
+        "swing": song.swing,
+        "color": song.color,
+        "scale": {
+            "root": song.scale_root,
+            "type": song.scale_type,
+        },
+    }
+
+    # Sounds
+    if song.sounds:
+        sounds: dict = {}
+        for track_name, sc in song.sounds.items():
+            s: dict = {}
+            if sc.preset is not None:
+                s["preset"] = sc.preset
+            if sc.name is not None:
+                s["name"] = sc.name
+            if sc.params:
+                s["params"] = sc.params
+            if sc.mod_matrix:
+                s["mod_matrix"] = sc.mod_matrix
+            if sc.macros:
+                s["macros"] = sc.macros
+            if sc.sample is not None:
+                s["sample"] = sc.sample
+            if sc.level is not None:
+                s["level"] = sc.level
+            if sc.pitch is not None:
+                s["pitch"] = sc.pitch
+            if sc.decay is not None:
+                s["decay"] = sc.decay
+            if sc.distortion is not None:
+                s["distortion"] = sc.distortion
+            if sc.eq is not None:
+                s["eq"] = sc.eq
+            if sc.pan is not None:
+                s["pan"] = sc.pan
+            if s:
+                sounds[track_name] = s
+        if sounds:
+            d["sounds"] = sounds
+
+    # FX
+    fx_dict: dict = {}
+    if song.fx.reverb:
+        fx_dict["reverb"] = song.fx.reverb
+    if song.fx.delay:
+        fx_dict["delay"] = song.fx.delay
+    if song.fx.reverb_sends:
+        fx_dict["reverb_sends"] = song.fx.reverb_sends
+    if song.fx.delay_sends:
+        fx_dict["delay_sends"] = song.fx.delay_sends
+    if song.fx.sidechain:
+        fx_dict["sidechain"] = song.fx.sidechain
+    if song.fx.reverb_preset is not None:
+        fx_dict["reverb_preset"] = song.fx.reverb_preset
+    if song.fx.delay_preset is not None:
+        fx_dict["delay_preset"] = song.fx.delay_preset
+    if fx_dict:
+        d["fx"] = fx_dict
+
+    # Mixer
+    if song.mixer:
+        mixer_dict: dict = {}
+        for track_name, mix_cfg in song.mixer.items():
+            mixer_dict[track_name] = {"level": mix_cfg.level, "pan": mix_cfg.pan}
+        d["mixer"] = mixer_dict
+
+    # Patterns
+    if song.patterns:
+        patterns_dict: dict = {}
+        for pat_name, pat_data in song.patterns.items():
+            pat_d: dict = {"length": pat_data.length}
+            if pat_data.tracks:
+                pat_d["tracks"] = pat_data.tracks
+            patterns_dict[pat_name] = pat_d
+        d["patterns"] = patterns_dict
+
+    # Song order
+    if song.song:
+        d["song"] = song.song
+
+    return d
 
 
 # --- Internal helpers ---

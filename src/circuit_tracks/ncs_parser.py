@@ -645,6 +645,32 @@ def parse_ncs(path: str | Path) -> NCSFile:
     return ncs
 
 
+def parse_ncs_from_bytes(data: bytes) -> NCSFile:
+    """Parse NCS data from raw bytes.
+
+    Writes to a temporary file and delegates to parse_ncs.
+
+    Args:
+        data: Raw NCS file bytes (160,780 bytes).
+
+    Returns:
+        Parsed NCSFile structure.
+
+    Raises:
+        ValueError: If data size or magic signature is invalid.
+    """
+    import tempfile
+    import os
+
+    with tempfile.NamedTemporaryFile(suffix=".ncs", delete=False) as f:
+        f.write(data)
+        tmp_path = f.name
+    try:
+        return parse_ncs(tmp_path)
+    finally:
+        os.unlink(tmp_path)
+
+
 def _parse_automation_locks(ncs: NCSFile) -> None:
     """Extract automation lock data from pre_data regions.
 

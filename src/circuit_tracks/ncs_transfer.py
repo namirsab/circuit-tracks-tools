@@ -262,6 +262,156 @@ def list_directory(
     return entries
 
 
+def receive_ncs_project(
+    midi: MidiConnection,
+    slot: int = 0,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> bytes:
+    """Read an NCS project file from the Circuit Tracks via SysEx.
+
+    Opens a file management session, sends a read request for the given
+    project slot, and captures the data blocks streamed back by the device.
+
+    Args:
+        midi: Connected MidiConnection with input port.
+        slot: Project slot number (0-63).
+        progress_callback: Called with (bytes_received, total_bytes) after each block.
+
+    Returns:
+        Raw NCS file bytes (160,780 bytes).
+
+    Raises:
+        ValueError: If slot is out of range.
+        RuntimeError: If the device doesn't respond or CRC check fails.
+    """
+    if not 0 <= slot <= 63:
+        raise ValueError(f"Slot must be 0-63, got {slot}")
+
+    midi._ensure_connected()
+    if not midi.has_input:
+        raise RuntimeError("Input port required to receive project data")
+
+    fid = file_id(slot)
+    header_len = len(_SYSEX_HEADER)
+
+    _drain_input(midi)
+
+    # 1. Open session
+    midi.send_sysex(_make_msg(_SUBCMD_OPEN_SESSION))
+    time.sleep(0.3)
+    _drain_input(midi)
+
+    # 2. Directory handshake
+    midi.send_sysex(_make_msg(_SUBCMD_DIR_CONTROL, [0x01]))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    midi.send_sysex(_make_msg(_SUBCMD_QUERY_INFO, [0x01, 0x00]))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    midi.send_sysex(_make_msg(_SUBCMD_DIR_CONTROL, [0x02]))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    midi.send_sysex(_make_msg(_SUBCMD_DIR_CONTROL, [0x03, 0x00]))
+    time.sleep(0.5)
+    _drain_input(midi)
+
+    # 3. Send READ request: WRITE_INIT with 0x02 flag
+    read_payload = block_address(0) + fid + [0x02]
+    midi.send_sysex(_make_msg(_SUBCMD_WRITE_INIT, read_payload))
+
+    # 4. Receive READ_INIT response (contains file size)
+    file_size = None
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        msg = midi._input_port.poll()
+        if msg is None:
+            time.sleep(0.005)
+            continue
+        if msg.type != "sysex":
+            continue
+        data = list(msg.data)
+        if (
+            len(data) >= header_len + 1 + 8 + 3 + 5
+            and data[:header_len] == _SYSEX_HEADER
+            and data[header_len] == _SUBCMD_WRITE_INIT
+        ):
+            # Extract size nibbles: after header(6) + subcmd(1) + addr(8) + fid(3) + flags(4)
+            size_offset = header_len + 1 + 8 + 3 + 4
+            size_nibbles = data[size_offset:size_offset + 5]
+            file_size = nibbles_to_int(size_nibbles)
+            break
+
+    if file_size is None:
+        midi.send_sysex(_make_msg(_SUBCMD_CLOSE_SESSION))
+        raise RuntimeError("No READ_INIT response from device")
+
+    if file_size != NCS_FILE_SIZE:
+        midi.send_sysex(_make_msg(_SUBCMD_CLOSE_SESSION))
+        raise RuntimeError(
+            f"Unexpected file size: {file_size} (expected {NCS_FILE_SIZE})"
+        )
+
+    # 5. Receive data blocks and WRITE_FINISH
+    raw_data = bytearray()
+    num_blocks = math.ceil(file_size / _BLOCK_SIZE)
+    crc_received = None
+    deadline = time.monotonic() + 60.0  # generous timeout for full transfer
+
+    while time.monotonic() < deadline:
+        msg = midi._input_port.poll()
+        if msg is None:
+            time.sleep(0.001)
+            continue
+        if msg.type != "sysex":
+            continue
+        data = list(msg.data)
+        if len(data) < header_len + 1 or data[:header_len] != _SYSEX_HEADER:
+            continue
+
+        subcmd = data[header_len]
+
+        if subcmd == _SUBCMD_WRITE_DATA:
+            # Data block: header(6) + subcmd(1) + addr(8) + fid(3) + encoded_data
+            encoded_start = header_len + 1 + 8 + 3
+            encoded = data[encoded_start:]
+            decoded = decode_msb_interleave(encoded)
+            raw_data.extend(decoded)
+
+            if progress_callback:
+                progress_callback(len(raw_data), file_size)
+
+        elif subcmd == _SUBCMD_WRITE_FINISH:
+            # Finish: header(6) + subcmd(1) + addr(8) + fid(3) + 8 CRC nibbles
+            crc_offset = header_len + 1 + 8 + 3
+            crc_nibbles = data[crc_offset:crc_offset + 8]
+            crc_received = nibbles_to_int(crc_nibbles)
+            break
+
+    # 6. Close session
+    midi.send_sysex(_make_msg(_SUBCMD_CLOSE_SESSION))
+    time.sleep(0.1)
+    _drain_input(midi)
+
+    if crc_received is None:
+        raise RuntimeError("Transfer incomplete: no WRITE_FINISH received")
+
+    # Trim to exact file size (last block may have padding)
+    raw_bytes = bytes(raw_data[:file_size])
+
+    # Verify CRC32
+    crc_computed = zlib.crc32(raw_bytes) & 0xFFFFFFFF
+    if crc_computed != crc_received:
+        raise RuntimeError(
+            f"CRC32 mismatch: computed 0x{crc_computed:08X}, "
+            f"received 0x{crc_received:08X}"
+        )
+
+    return raw_bytes
+
+
 def send_ncs_project(
     midi: MidiConnection,
     ncs_data: bytes,
