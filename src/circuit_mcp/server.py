@@ -33,6 +33,7 @@ from circuit_tracks.patch import (
 from circuit_tracks.ncs_transfer import send_ncs_project, send_patch_to_slot
 from circuit_tracks.sequencer import (
     VALID_TRACK_NAMES,
+    ClockGenerator,
     Pattern,
     SequencerEngine,
     Step,
@@ -42,6 +43,7 @@ from circuit_tracks.sequencer import (
 _midi = MidiConnection()
 _engine = SequencerEngine(_midi)
 _morph = MorphEngine(_midi)
+_clock = ClockGenerator(_midi)
 
 mcp = FastMCP(
     "Circuit Tracks",
@@ -737,16 +739,63 @@ def configure_macro(
 # --- Transport ---
 
 
+def _read_device_bpm(midi: MidiConnection) -> float:
+    """Read the current project BPM from the device via SysEx."""
+    from circuit_tracks.ncs_transfer import receive_ncs_project
+    from circuit_tracks.ncs_parser import TIMING_OFFSET
+
+    ncs_bytes = receive_ncs_project(midi, 0)
+    return float(ncs_bytes[TIMING_OFFSET])
+
+
 @mcp.tool()
-def transport(action: str) -> str:
+def transport(action: str, bpm: float | None = None) -> str:
     """Control the Circuit Tracks transport (sequencer start/stop).
+
+    For "start" and "continue", this also starts sending MIDI clock so the
+    device actually advances. If bpm is not provided, the current project
+    tempo is read from the device.
+
+    For "stop", the clock is stopped automatically.
 
     Args:
         action: One of "start", "stop", or "continue".
+        bpm: Tempo for the MIDI clock. If omitted, reads the device's current project tempo.
     """
     midi = _midi
-    midi.send_realtime(action)
-    return f"Sent transport: {action}"
+    if action in ("start", "continue"):
+        if bpm is None:
+            bpm = _read_device_bpm(midi)
+        _clock.start(bpm=bpm)
+        midi.send_realtime(action)
+        return f"Sent transport: {action} (clock at {bpm} BPM)"
+    elif action == "stop":
+        midi.send_realtime(action)
+        _clock.stop()
+        return "Sent transport: stop (clock stopped)"
+    else:
+        raise ValueError(f"Invalid action: {action}. Use 'start', 'stop', or 'continue'.")
+
+
+@mcp.tool()
+def start_clock(bpm: float = 120.0) -> str:
+    """Start sending MIDI timing clock (24ppqn) at the given BPM.
+
+    The Circuit Tracks will sync to this clock. Use transport("start") to
+    start the Circuit's sequencer once the clock is running.
+
+    Args:
+        bpm: Tempo in beats per minute.
+    """
+    _clock.start(bpm=bpm)
+    return f"Clock started at {bpm} BPM"
+
+
+@mcp.tool()
+def stop_clock() -> str:
+    """Stop sending MIDI timing clock."""
+    _clock.stop()
+    return "Clock stopped"
 
 
 # --- Info / Reference ---

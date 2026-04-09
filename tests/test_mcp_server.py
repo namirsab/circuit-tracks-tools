@@ -440,7 +440,7 @@ class TestMacros:
 class TestTransport:
     def test_transport_start(self, server):
         srv, mock_midi = server
-        result = srv.transport(action="start")
+        result = srv.transport(action="start", bpm=120)
         assert ("realtime", "start") in mock_midi.messages
 
     def test_transport_stop(self, server):
@@ -450,7 +450,7 @@ class TestTransport:
 
     def test_transport_continue(self, server):
         srv, mock_midi = server
-        result = srv.transport(action="continue")
+        result = srv.transport(action="continue", bpm=120)
         assert ("realtime", "continue") in mock_midi.messages
 
 

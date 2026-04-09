@@ -119,6 +119,61 @@ class Pattern:
         }
 
 
+class ClockGenerator:
+    """Standalone MIDI clock generator that sends 24ppqn timing clock."""
+
+    def __init__(self, midi: MidiConnection):
+        self._midi = midi
+        self._bpm: float = 120.0
+        self._running: bool = False
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    def start(self, bpm: float = 120.0) -> None:
+        self.stop()
+        with self._lock:
+            self._bpm = bpm
+            self._running = True
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            self._stop_event.set()
+            self._thread.join(timeout=3)
+        self._thread = None
+        with self._lock:
+            self._running = False
+
+    def set_bpm(self, bpm: float) -> None:
+        with self._lock:
+            self._bpm = bpm
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            with self._lock:
+                bpm = self._bpm
+            # 24 pulses per quarter note
+            interval = 60.0 / bpm / 24.0
+            start = time.perf_counter()
+            try:
+                self._midi.send_clock()
+            except Exception:
+                pass
+            elapsed = time.perf_counter() - start
+            wait = interval - elapsed
+            if wait > 0:
+                self._stop_event.wait(wait)
+        with self._lock:
+            self._running = False
+
+
 class SequencerEngine:
     def __init__(self, midi: MidiConnection):
         self._midi = midi
@@ -239,17 +294,8 @@ class SequencerEngine:
                 self._midi.all_notes_off(ch)
             except Exception:
                 pass
-        try:
-            self._midi.send_realtime("stop")
-        except Exception:
-            pass
 
     def _run(self) -> None:
-        try:
-            self._midi.send_realtime("start")
-        except Exception:
-            return
-
         step_index = 0
         pending_offs: list[tuple[float, int, int]] = []  # (off_time, channel, note)
 
