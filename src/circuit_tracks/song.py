@@ -6,9 +6,12 @@ project file for transfer to the hardware.
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from circuit_tracks.constants import (
     DELAY_PRESET_BY_NAME,
@@ -99,6 +102,63 @@ _SCALE_TYPE = {
     "hungarian minor": 10, "ukranian dorian": 11, "marva": 12,
     "todi": 13, "whole tone": 14, "chromatic": 15,
 }
+
+# Scale type integer -> semitone intervals from root
+_SCALE_INTERVALS: dict[int, list[int]] = {
+    0:  [0, 2, 3, 5, 7, 8, 10],                              # Natural Minor
+    1:  [0, 2, 4, 5, 7, 9, 11],                              # Major
+    2:  [0, 2, 3, 5, 7, 9, 10],                              # Dorian
+    3:  [0, 1, 3, 5, 7, 8, 10],                              # Phrygian
+    4:  [0, 2, 4, 5, 7, 9, 10],                              # Mixolydian
+    5:  [0, 2, 3, 5, 7, 9, 11],                              # Melodic Minor
+    6:  [0, 2, 3, 5, 7, 8, 11],                              # Harmonic Minor
+    7:  [0, 2, 3, 4, 5, 7, 9, 10],                           # Bebop Dorian
+    8:  [0, 3, 5, 6, 7, 10],                                 # Blues
+    9:  [0, 3, 5, 7, 10],                                    # Minor Pentatonic
+    10: [0, 2, 3, 6, 7, 8, 11],                              # Hungarian Minor
+    11: [0, 2, 3, 6, 7, 9, 10],                              # Ukrainian Dorian
+    12: [0, 1, 4, 6, 7, 9, 11],                              # Marva
+    13: [0, 1, 3, 6, 7, 8, 11],                              # Todi
+    14: [0, 2, 4, 6, 8, 10],                                 # Whole Tone
+    15: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],             # Chromatic
+}
+
+
+def quantize_to_scale(note: int, root: int, scale_type: int) -> int:
+    """Snap a MIDI note to the nearest note in a scale.
+
+    Args:
+        note: MIDI note number (0-127).
+        root: Scale root as semitone offset from C (0-11).
+        scale_type: Scale type index (0-15, matching Circuit Tracks values).
+
+    Returns:
+        The nearest MIDI note number that belongs to the scale.
+        On ties (equidistant from two scale notes), rounds up to match
+        Circuit Tracks hardware behavior.
+    """
+    if scale_type == 15:  # Chromatic — every note is in scale
+        return note
+
+    intervals = _SCALE_INTERVALS.get(scale_type)
+    if intervals is None:
+        return note
+
+    # Check candidates across nearby octaves to handle boundary cases
+    best = note
+    best_dist = 128
+    for octave in range((note // 12) - 1, (note // 12) + 2):
+        for interval in intervals:
+            candidate = octave * 12 + root + interval
+            if candidate < 0 or candidate > 127:
+                continue
+            dist = abs(candidate - note)
+            if dist < best_dist or (dist == best_dist and candidate > best):
+                best_dist = dist
+                best = candidate
+
+    return best
+
 
 # Reverse lookup dicts for ncs_to_song
 _SCALE_ROOT_REVERSE = {0: "C", 1: "C#", 2: "D", 3: "D#", 4: "E", 5: "F",
@@ -317,7 +377,63 @@ def parse_song(d: dict) -> SongData:
     if len(song.song) > 16:
         raise ValueError(f"Song has {len(song.song)} sections, max 16 (scenes).")
 
+    # Quantize notes to scale so MIDI preview and NCS export match (DEV-0017)
+    _quantize_song_notes(song)
+
     return song
+
+
+def _quantize_song_notes(song: SongData) -> int:
+    """Quantize all synth/MIDI track notes in a SongData to its scale.
+
+    Modifies the song in place. Drum tracks are not affected.
+
+    Returns:
+        Number of notes that were changed.
+    """
+    root = _SCALE_ROOT.get(song.scale_root, 0)
+    scale_type = _SCALE_TYPE.get(song.scale_type.lower(), 15)
+
+    if scale_type == 15:  # Chromatic — no quantization needed
+        return 0
+
+    changed = 0
+    for pat_name, pat_data in song.patterns.items():
+        for track_name, track_data in pat_data.tracks.items():
+            if track_name not in ("synth1", "synth2", "midi1", "midi2"):
+                continue
+
+            steps = track_data.get("steps", {})
+            for idx_str, step_data in steps.items():
+                if not isinstance(step_data, dict):
+                    continue
+
+                if "note" in step_data:
+                    original = step_data["note"]
+                    quantized = quantize_to_scale(original, root, scale_type)
+                    if quantized != original:
+                        step_data["note"] = quantized
+                        changed += 1
+                        logger.debug(
+                            "Quantized note %d -> %d (pattern=%s, track=%s, step=%s)",
+                            original, quantized, pat_name, track_name, idx_str,
+                        )
+
+                if "notes" in step_data:
+                    notes = step_data["notes"]
+                    new_notes = []
+                    for n in notes:
+                        q = quantize_to_scale(n, root, scale_type)
+                        if q != n:
+                            changed += 1
+                            logger.debug(
+                                "Quantized note %d -> %d (pattern=%s, track=%s, step=%s)",
+                                n, q, pat_name, track_name, idx_str,
+                            )
+                        new_notes.append(q)
+                    step_data["notes"] = new_notes
+
+    return changed
 
 
 # --- Load into sequencer ---
@@ -477,6 +593,10 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
     ncs.project_settings.scale_root = _SCALE_ROOT.get(song.scale_root, 0)
     ncs.project_settings.scale_type = _SCALE_TYPE.get(song.scale_type.lower(), 14)
 
+    # Scale integers for note quantization in _write_synth_steps (DEV-0017)
+    _sr = ncs.project_settings.scale_root
+    _st = ncs.project_settings.scale_type
+
     # Build pattern slot mapping: unique patterns -> NCS slot indices 0-7
     if song.song:
         # Preserve order from song list
@@ -499,7 +619,7 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
             if track_name in ("synth1", "synth2"):
                 track_idx = 0 if track_name == "synth1" else 1
                 ncs_pat = get_synth_pattern(ncs, track_idx, slot_idx)
-                _write_synth_steps(ncs_pat, steps_raw, ncs_length)
+                _write_synth_steps(ncs_pat, steps_raw, ncs_length, _sr, _st)
                 _write_track_macros(ncs_pat, track_data, ncs_length)
                 _write_mixer_locks(ncs_pat, track_data, ncs_length)
                 ncs_pat.settings.playback_end = ncs_length - 1
@@ -514,7 +634,7 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
             elif track_name in ("midi1", "midi2"):
                 midi_idx = 0 if track_name == "midi1" else 1
                 ncs_pat = get_midi_pattern(ncs, midi_idx, slot_idx)
-                _write_synth_steps(ncs_pat, steps_raw, ncs_length)
+                _write_synth_steps(ncs_pat, steps_raw, ncs_length, _sr, _st)
                 _write_track_macros(ncs_pat, track_data, ncs_length)
                 _write_mixer_locks(ncs_pat, track_data, ncs_length)
                 ncs_pat.settings.playback_end = ncs_length - 1
@@ -629,10 +749,13 @@ def ncs_to_song(ncs: NCSFile) -> SongData:
     # Scan pattern slots 0-7 for non-empty patterns
     pattern_names: dict[int, str] = {}  # slot_idx -> pattern name
 
+    _root_int = ncs.project_settings.scale_root
+    _type_int = ncs.project_settings.scale_type
+
     for slot_idx in range(PATTERNS_PER_TRACK):
         if _is_slot_non_empty(ncs, slot_idx):
             pat_name = f"pattern_{slot_idx}"
-            pat_data = _read_pattern_slot(ncs, slot_idx)
+            pat_data = _read_pattern_slot(ncs, slot_idx, _root_int, _type_int)
             song.patterns[pat_name] = pat_data
             pattern_names[slot_idx] = pat_name
 
@@ -705,7 +828,9 @@ def _is_slot_non_empty(ncs: NCSFile, slot_idx: int) -> bool:
     return False
 
 
-def _read_pattern_slot(ncs: NCSFile, slot_idx: int) -> PatternData:
+def _read_pattern_slot(
+    ncs: NCSFile, slot_idx: int, scale_root: int = 0, scale_type: int = 15,
+) -> PatternData:
     """Read all tracks at a pattern slot and build a PatternData."""
     tracks: dict[str, dict] = {}
     max_length = 1
@@ -713,7 +838,7 @@ def _read_pattern_slot(ncs: NCSFile, slot_idx: int) -> PatternData:
     # Synth tracks
     for track_idx, track_name in enumerate(["synth1", "synth2"]):
         pat = get_synth_pattern(ncs, track_idx, slot_idx)
-        track_data = _read_synth_track(pat)
+        track_data = _read_synth_track(pat, scale_root, scale_type)
         if track_data:
             tracks[track_name] = track_data
             length = pat.settings.playback_end + 1
@@ -732,7 +857,7 @@ def _read_pattern_slot(ncs: NCSFile, slot_idx: int) -> PatternData:
     # MIDI tracks
     for midi_idx, track_name in enumerate(["midi1", "midi2"]):
         pat = get_midi_pattern(ncs, midi_idx, slot_idx)
-        track_data = _read_synth_track(pat)
+        track_data = _read_synth_track(pat, scale_root, scale_type)
         if track_data:
             tracks[track_name] = track_data
             length = pat.settings.playback_end + 1
@@ -741,7 +866,9 @@ def _read_pattern_slot(ncs: NCSFile, slot_idx: int) -> PatternData:
     return PatternData(length=max_length, tracks=tracks)
 
 
-def _read_synth_track(pat: SynthPattern) -> dict | None:
+def _read_synth_track(
+    pat: SynthPattern, scale_root: int = 0, scale_type: int = 15,
+) -> dict | None:
     """Read a synth/MIDI pattern into a track data dict."""
     steps: dict[str, dict] = {}
     has_data = False
@@ -753,14 +880,18 @@ def _read_synth_track(pat: SynthPattern) -> dict | None:
         step_dict: dict = {}
 
         # Read active notes
+        # Device plays: quantize(ncs_note, 0, type) + root - 12
         active = step.active_notes
         if len(active) == 1:
             note = active[0]
-            step_dict["note"] = note.note_number - 12
+            step_dict["note"] = quantize_to_scale(note.note_number, 0, scale_type) - 12 + scale_root
             step_dict["velocity"] = note.velocity
             step_dict["gate"] = round(note.gate / 6.0, 3)
         elif len(active) > 1:
-            step_dict["notes"] = [n.note_number - 12 for n in active]
+            step_dict["notes"] = [
+                quantize_to_scale(n.note_number, 0, scale_type) - 12 + scale_root
+                for n in active
+            ]
             step_dict["velocity"] = active[0].velocity
             step_dict["gate"] = round(active[0].gate / 6.0, 3)
 
@@ -1069,6 +1200,7 @@ def _build_patch_bytes(sc: SoundConfig) -> bytes:
 
 def _write_synth_steps(
     ncs_pat: SynthPattern, steps_raw: dict, length: int,
+    scale_root: int = 0, scale_type: int = 15,
 ) -> None:
     """Write sequencer step data into an NCS SynthPattern."""
     for idx_str, step_data in steps_raw.items():
@@ -1083,12 +1215,14 @@ def _write_synth_steps(
         ncs_step = ncs_pat.steps[idx]
 
         # Write notes
+        # Device plays: quantize(ncs_note, 0, type) + root - 12
+        # So we store: quantize(midi_note - root, 0, type) + 12
         mask = 0
         for i, note in enumerate(step.notes[:NOTES_PER_STEP]):
             mask |= 1 << i
+            c_relative = quantize_to_scale(note - scale_root, 0, scale_type)
             ncs_step.notes[i] = NCSNote(
-                # Circuit Tracks plays NCS notes 1 octave below external MIDI
-                note_number=max(0, min(127, note + 12)),
+                note_number=max(0, min(127, c_relative + 12)),
                 gate=max(1, min(6, round(step.gate * 6))),
                 delay=0,
                 velocity=max(0, min(127, step.velocity)),

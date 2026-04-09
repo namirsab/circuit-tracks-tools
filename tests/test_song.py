@@ -14,6 +14,7 @@ from circuit_tracks.song import (
     SongData,
     ncs_to_song,
     parse_song,
+    quantize_to_scale,
     song_to_ncs,
     _song_data_to_dict,
 )
@@ -223,15 +224,15 @@ class TestSongToNcs:
         pat = get_synth_pattern(ncs, 0, 0)  # synth1, pattern 0
         step0 = pat.steps[0]
         assert step0.assigned_note_mask == 0x01  # one note
-        assert step0.notes[0].note_number == 74  # MIDI 62 + 12 NCS offset
+        assert step0.notes[0].note_number == 72  # MIDI 62 - root 2 + 12
         assert step0.notes[0].velocity == 100
 
         # Step 8 has a chord (3 notes)
         step8 = pat.steps[8]
         assert step8.assigned_note_mask == 0x07  # bits 0,1,2
-        assert step8.notes[0].note_number == 74  # MIDI 62 + 12
-        assert step8.notes[1].note_number == 77  # MIDI 65 + 12
-        assert step8.notes[2].note_number == 81  # MIDI 69 + 12
+        assert step8.notes[0].note_number == 72  # MIDI 62 - root 2 + 12
+        assert step8.notes[1].note_number == 75  # MIDI 65 - root 2 + 12
+        assert step8.notes[2].note_number == 79  # MIDI 69 - root 2 + 12
 
     def test_drum_pattern_written(self):
         song = parse_song(FULL_SONG)
@@ -575,6 +576,177 @@ class TestNcsToSong:
             song = ncs_to_song(ncs)
             assert isinstance(song, SongData)
             assert 40 <= song.bpm <= 240
+
+
+# --- Scale quantization tests (DEV-0017) ---
+
+
+class TestQuantizeToScale:
+    def test_chromatic_is_noop(self):
+        assert quantize_to_scale(61, 0, 15) == 61
+
+    def test_note_in_scale_unchanged(self):
+        # D (62) is in D minor (root=2, type=0)
+        assert quantize_to_scale(62, 2, 0) == 62
+
+    def test_snap_up_on_tie(self):
+        # C# (61) in C major (root=0, type=1): C=60 (dist 1), D=62 (dist 1) -> up = 62
+        assert quantize_to_scale(61, 0, 1) == 62
+
+    def test_snap_up_on_tie_2(self):
+        # Eb (63) in C major: D=62 (dist 1), E=64 (dist 1) -> tie -> up = 64
+        assert quantize_to_scale(63, 0, 1) == 64
+
+    def test_snap_up_on_tie_3(self):
+        # A (69) in C minor (root=0, type=0): Ab=68 (dist 1), Bb=70 (dist 1) -> up = 70
+        assert quantize_to_scale(69, 0, 0) == 70
+
+    def test_root_note_always_in_scale(self):
+        for scale_type in range(16):
+            for root in range(12):
+                note = 60 + root
+                assert quantize_to_scale(note, root, scale_type) == note
+
+    def test_boundary_note_0(self):
+        # C (0) is in C major
+        assert quantize_to_scale(0, 0, 1) == 0
+
+    def test_boundary_note_127(self):
+        result = quantize_to_scale(127, 0, 1)
+        assert 0 <= result <= 127
+
+    def test_blues_scale(self):
+        # Blues from C: [0,3,5,6,7,10] = C,Eb,F,F#,G,Bb
+        # D (62): Eb=63 dist 1, C=60 dist 2 -> snap to Eb
+        assert quantize_to_scale(62, 0, 8) == 63
+
+    def test_pentatonic(self):
+        # Minor pentatonic from A: root=9, [0,3,5,7,10] -> A,C,D,E,G
+        # B (71): C=72 dist 1, A=69 dist 2 -> snap to C
+        assert quantize_to_scale(71, 9, 9) == 72
+
+    def test_g_minor_all_degrees(self):
+        # G minor (root=7, type=0): G,A,Bb,C,D,Eb,F
+        # G=67, A=69, Bb=70, C=72, D=74, Eb=75, F=77
+        for note in [67, 69, 70, 72, 74, 75, 77]:
+            assert quantize_to_scale(note, 7, 0) == note
+
+
+class TestParseSongQuantization:
+    def test_out_of_scale_note_quantized(self):
+        song = parse_song({
+            "scale": {"root": "C", "type": "major"},
+            "patterns": {"a": {"length": 16, "tracks": {
+                "synth1": {"steps": {"0": {"note": 61}}},  # C# -> D (rounds up on tie)
+            }}},
+        })
+        assert song.patterns["a"].tracks["synth1"]["steps"]["0"]["note"] == 62
+
+    def test_chord_notes_quantized(self):
+        song = parse_song({
+            "scale": {"root": "C", "type": "major"},
+            "patterns": {"a": {"length": 16, "tracks": {
+                "synth1": {"steps": {"0": {"notes": [60, 61, 63]}}},
+            }}},
+        })
+        # 60=C (in scale), 61=C# (-> 62=D, rounds up), 63=Eb (-> 64=E, rounds up)
+        assert song.patterns["a"].tracks["synth1"]["steps"]["0"]["notes"] == [60, 62, 64]
+
+    def test_chromatic_no_quantization(self):
+        song = parse_song({
+            "scale": {"root": "C", "type": "chromatic"},
+            "patterns": {"a": {"length": 16, "tracks": {
+                "synth1": {"steps": {"0": {"note": 61}}},
+            }}},
+        })
+        assert song.patterns["a"].tracks["synth1"]["steps"]["0"]["note"] == 61
+
+    def test_drum_tracks_not_quantized(self):
+        song = parse_song({
+            "scale": {"root": "C", "type": "major"},
+            "patterns": {"a": {"length": 16, "tracks": {
+                "drum1": {"steps": {"0": {"velocity": 100}}},
+            }}},
+        })
+        assert song.patterns["a"].tracks["drum1"]["steps"]["0"] == {"velocity": 100}
+
+    def test_in_scale_notes_unchanged(self):
+        # D minor: D(62), F(65), A(69) are all in scale
+        song = parse_song({
+            "scale": {"root": "D", "type": "minor"},
+            "patterns": {"a": {"length": 16, "tracks": {
+                "synth1": {"steps": {
+                    "0": {"note": 62},
+                    "1": {"notes": [62, 65, 69]},
+                }},
+            }}},
+        })
+        assert song.patterns["a"].tracks["synth1"]["steps"]["0"]["note"] == 62
+        assert song.patterns["a"].tracks["synth1"]["steps"]["1"]["notes"] == [62, 65, 69]
+
+    def test_midi_tracks_quantized(self):
+        song = parse_song({
+            "scale": {"root": "C", "type": "major"},
+            "patterns": {"a": {"length": 16, "tracks": {
+                "midi1": {"steps": {"0": {"note": 61}}},  # C# -> D (rounds up)
+            }}},
+        })
+        assert song.patterns["a"].tracks["midi1"]["steps"]["0"]["note"] == 62
+
+    def test_songdata_scale_preserved(self):
+        """parse_song preserves scale metadata even after quantization."""
+        song = parse_song({
+            "scale": {"root": "G", "type": "minor"},
+            "patterns": {"a": {"length": 16, "tracks": {
+                "synth1": {"steps": {"0": {"note": 66}}},  # F# -> F (65) or G (67)
+            }}},
+        })
+        assert song.scale_root == "G"
+        assert song.scale_type == "minor"
+
+
+class TestNcsScaleExport:
+    def test_scale_preserved_in_ncs(self):
+        song = parse_song({
+            "scale": {"root": "D", "type": "minor"},
+            "patterns": {"a": {"length": 16, "tracks": {
+                "synth1": {"steps": {"0": {"note": 62}}},
+            }}},
+        })
+        ncs_bytes = song_to_ncs(song, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        assert ncs.project_settings.scale_root == 2   # D
+        assert ncs.project_settings.scale_type == 0   # natural minor
+
+    def test_quantized_note_stored_in_ncs(self):
+        song = parse_song({
+            "scale": {"root": "C", "type": "major"},
+            "patterns": {"a": {"length": 16, "tracks": {
+                "synth1": {"steps": {"0": {"note": 61}}},  # C#
+            }}},
+        })
+        ncs_bytes = song_to_ncs(song, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        pat = get_synth_pattern(ncs, 0, 0)
+        # C# (61) quantized to D (62, rounds up), stored as (62-0)+12=74
+        assert pat.steps[0].notes[0].note_number == 74
+
+    def test_roundtrip_preserves_in_scale_notes(self):
+        """Read project -> re-export should not change in-scale notes."""
+        song = parse_song({
+            "scale": {"root": "D", "type": "minor"},
+            "patterns": {"a": {"length": 16, "tracks": {
+                "synth1": {"steps": {"0": {"note": 62}}},  # D, in scale
+            }}},
+        })
+        ncs_bytes = song_to_ncs(song, template_path=EMPTY_NCS)
+        ncs = parse_ncs_from_bytes(ncs_bytes)
+        song2 = ncs_to_song(ncs)
+        ncs_bytes2 = song_to_ncs(song2, template_path=EMPTY_NCS)
+        ncs2 = parse_ncs_from_bytes(ncs_bytes2)
+        pat = get_synth_pattern(ncs2, 0, 0)
+        # D (62) stored as (62 - root 2) + 12 = 72
+        assert pat.steps[0].notes[0].note_number == 72
 
 
 # --- Helpers ---

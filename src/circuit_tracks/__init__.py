@@ -8,7 +8,7 @@ from circuit_tracks.ncs_transfer import send_ncs_project, send_patch_to_slot
 from circuit_tracks.patch import parse_patch_data, request_current_patch, send_current_patch
 from circuit_tracks.patch_builder import PatchBuilder
 from circuit_tracks.sequencer import Pattern, SequencerEngine, Step, Track, TrackType
-from circuit_tracks.song import export_song_to_device, load_song_to_sequencer, parse_song
+from circuit_tracks.song import export_song_to_device, load_song_to_sequencer, parse_song, quantize_to_scale
 
 __all__ = [
     "DEFAULT_MACROS",
@@ -27,6 +27,7 @@ __all__ = [
     "parse_ncs",
     "parse_patch_data",
     "parse_song",
+    "quantize_to_scale",
     "request_current_patch",
     "send_current_patch",
     "send_ncs_project",
