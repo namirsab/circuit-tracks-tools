@@ -2,10 +2,8 @@
 
 import asyncio
 import os
-from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.prompts.base import UserMessage
 
 from circuit_tracks.constants import (
     DRUMS_CHANNEL,
@@ -47,12 +45,9 @@ _engine = SequencerEngine(_midi)
 _morph = MorphEngine(_midi)
 _clock = ClockGenerator(_midi)
 
-_content_dir = Path(__file__).parent / "content"
-_INSTRUCTIONS = (_content_dir / "instructions.md").read_text()
-
 mcp = FastMCP(
     "Circuit Tracks",
-    instructions=_INSTRUCTIONS,
+    instructions="Control a Novation Circuit Tracks synthesizer via MIDI",
     log_level="WARNING",
 )
 
@@ -1590,68 +1585,6 @@ def read_project(slot: int = 0) -> dict:
         "raw_size": len(ncs_bytes),
     }
     return result
-
-
-# ---------------------------------------------------------------------------
-# MCP Resources
-# ---------------------------------------------------------------------------
-
-@mcp.resource("circuit://guide/genre-recipes")
-def genre_recipes() -> str:
-    """Genre-specific recipes: BPM ranges, sound design tips, drum patterns, and FX settings for common electronic music genres."""
-    return (_content_dir / "genre-recipes.md").read_text()
-
-
-@mcp.resource("circuit://guide/song-format")
-def song_format_reference() -> str:
-    """Complete reference for the load_song JSON format with a fully annotated example."""
-    return (_content_dir / "song-format.md").read_text()
-
-
-# ---------------------------------------------------------------------------
-# MCP Prompts
-# ---------------------------------------------------------------------------
-
-@mcp.prompt()
-def create_track(genre: str = "techno", mood: str = "dark", bpm: int = 128) -> list[UserMessage]:
-    """Start a new music session on the Circuit Tracks."""
-    return [UserMessage(
-        f"Let's create a {mood} {genre} track at {bpm} BPM on the Circuit Tracks. "
-        f"Connect to the device, create appropriate synth patches and drum patterns "
-        f"for this style. Build a 2-bar loop first and let me hear it before expanding."
-    )]
-
-
-@mcp.prompt()
-def design_sound(synth: int = 1, description: str = "warm evolving pad") -> list[UserMessage]:
-    """Design a synth patch from a description."""
-    return [UserMessage(
-        f"Design a synth patch for synth {synth} on the Circuit Tracks that sounds like: "
-        f"{description}. Use create_synth_patch with appropriate oscillator, filter, "
-        f"envelope, LFO, and effect settings. Configure all 8 macro knobs for "
-        f"expressive control. Play some notes so I can hear the result."
-    )]
-
-
-@mcp.prompt()
-def modify_project(slot: int = 0, description: str = "") -> list[UserMessage]:
-    """Read a project from the Circuit Tracks and modify it."""
-    action = f" Then: {description}" if description else ""
-    return [UserMessage(
-        f"Read project from slot {slot} on the Circuit Tracks and show me what's in it "
-        f"— patterns, sounds, FX, song structure.{action}"
-    )]
-
-
-@mcp.prompt()
-def live_performance() -> list[UserMessage]:
-    """Start a live performance session with real-time parameter morphing."""
-    return [UserMessage(
-        "Let's do a live performance on the Circuit Tracks. Start the sequencer with "
-        "the current pattern, then use morphs and parameter changes to evolve the sound "
-        "in real time. Sweep filters, mute/unmute tracks, queue pattern transitions, "
-        "and create builds and breakdowns. Narrate what you're doing as we go."
-    )]
 
 
 def main():
