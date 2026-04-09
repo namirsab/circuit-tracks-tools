@@ -1010,9 +1010,9 @@ def _parse_embedded_patch(patch_bytes: bytes) -> SoundConfig | None:
     for i in range(_MOD_SLOTS):
         addr = _MOD_START + i * 4
         source = patch_bytes[addr]
-        dest = patch_bytes[addr + 1]
+        source2 = patch_bytes[addr + 1]
         raw_depth = patch_bytes[addr + 2]
-        source2 = patch_bytes[addr + 3]
+        dest = patch_bytes[addr + 3]
         # Skip empty slots (depth 64 = no modulation, source 0 + dest 0)
         if raw_depth == 64 and source == 0 and dest == 0:
             continue
