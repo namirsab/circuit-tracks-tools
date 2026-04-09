@@ -2,8 +2,10 @@
 
 import asyncio
 import os
+from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.prompts.base import UserMessage
 
 from circuit_tracks.constants import (
     DRUMS_CHANNEL,
@@ -45,9 +47,12 @@ _engine = SequencerEngine(_midi)
 _morph = MorphEngine(_midi)
 _clock = ClockGenerator(_midi)
 
+_content_dir = Path(__file__).parent / "content"
+_INSTRUCTIONS = (_content_dir / "instructions.md").read_text()
+
 mcp = FastMCP(
     "Circuit Tracks",
-    instructions="Control a Novation Circuit Tracks synthesizer via MIDI",
+    instructions=_INSTRUCTIONS,
     log_level="WARNING",
 )
 
@@ -434,6 +439,8 @@ def set_synth_params(synth: int, params: dict[str, int]) -> str:
     set_params = []
     errors = []
 
+    synth_key = f"synth{synth}"
+
     for param_name, value in params.items():
         if param_name in SYNTH_CC:
             cc = SYNTH_CC[param_name]
@@ -445,6 +452,12 @@ def set_synth_params(synth: int, params: dict[str, int]) -> str:
             set_params.append(f"{param_name}={value}")
         else:
             errors.append(param_name)
+            continue
+        # Keep in-memory song in sync so exports include live tweaks
+        if _current_song and synth_key in _current_song.sounds:
+            sc = _current_song.sounds[synth_key]
+            if sc.params is not None:
+                sc.params[param_name] = value
 
     result = f"Synth {synth}: set {len(set_params)} params — {', '.join(set_params)}"
     if errors:
@@ -483,6 +496,12 @@ def set_drum_params(drum: int, params: dict[str, int]) -> str:
         cc = drum_params[param_name]
         midi.control_change(DRUMS_CHANNEL, cc, value)
         set_params.append(f"{param_name}={value}")
+        # Keep in-memory song in sync so exports include live tweaks
+        drum_key = f"drum{drum}"
+        if _current_song and drum_key in _current_song.sounds:
+            sc = _current_song.sounds[drum_key]
+            if hasattr(sc, param_name) and getattr(sc, param_name) is not None:
+                setattr(sc, param_name, value)
 
     result = f"Drum {drum}: set {len(set_params)} params — {', '.join(set_params)}"
     if errors:
@@ -1043,6 +1062,22 @@ def create_synth_patch(
     midi = _midi
     send_current_patch(midi, synth, patch_bytes)
 
+    # Keep in-memory song in sync so exports include the new patch
+    if _current_song is not None:
+        from circuit_tracks.song import SoundConfig
+        synth_key = f"synth{synth}"
+        # Build full params dict from the patch bytes
+        all_params = {}
+        for pname, offset in _PARAM_OFFSETS.items():
+            all_params[pname] = patch_bytes[offset]
+        _current_song.sounds[synth_key] = SoundConfig(
+            preset=preset,
+            name=name,
+            params=all_params,
+            mod_matrix=mod_matrix,
+            macros=macros,
+        )
+
     return {
         "synth": synth,
         "name": name,
@@ -1463,8 +1498,7 @@ def export_song_to_project(slot: int = -1, name: str = "") -> dict:
     By default, exports to the currently selected project slot (set via
     select_project). Pass an explicit slot to override.
 
-    Note: Synth patches are NOT stored in the .ncs file (they are separate
-    on the device). Use save_synth_patch to persist patches to flash slots.
+    Synth patches from the song are included in the .ncs project file.
 
     Args:
         slot: Target project slot (0-63). Defaults to the currently selected project.
@@ -1556,6 +1590,68 @@ def read_project(slot: int = 0) -> dict:
         "raw_size": len(ncs_bytes),
     }
     return result
+
+
+# ---------------------------------------------------------------------------
+# MCP Resources
+# ---------------------------------------------------------------------------
+
+@mcp.resource("circuit://guide/genre-recipes")
+def genre_recipes() -> str:
+    """Genre-specific recipes: BPM ranges, sound design tips, drum patterns, and FX settings for common electronic music genres."""
+    return (_content_dir / "genre-recipes.md").read_text()
+
+
+@mcp.resource("circuit://guide/song-format")
+def song_format_reference() -> str:
+    """Complete reference for the load_song JSON format with a fully annotated example."""
+    return (_content_dir / "song-format.md").read_text()
+
+
+# ---------------------------------------------------------------------------
+# MCP Prompts
+# ---------------------------------------------------------------------------
+
+@mcp.prompt()
+def create_track(genre: str = "techno", mood: str = "dark", bpm: int = 128) -> list[UserMessage]:
+    """Start a new music session on the Circuit Tracks."""
+    return [UserMessage(
+        f"Let's create a {mood} {genre} track at {bpm} BPM on the Circuit Tracks. "
+        f"Connect to the device, create appropriate synth patches and drum patterns "
+        f"for this style. Build a 2-bar loop first and let me hear it before expanding."
+    )]
+
+
+@mcp.prompt()
+def design_sound(synth: int = 1, description: str = "warm evolving pad") -> list[UserMessage]:
+    """Design a synth patch from a description."""
+    return [UserMessage(
+        f"Design a synth patch for synth {synth} on the Circuit Tracks that sounds like: "
+        f"{description}. Use create_synth_patch with appropriate oscillator, filter, "
+        f"envelope, LFO, and effect settings. Configure all 8 macro knobs for "
+        f"expressive control. Play some notes so I can hear the result."
+    )]
+
+
+@mcp.prompt()
+def modify_project(slot: int = 0, description: str = "") -> list[UserMessage]:
+    """Read a project from the Circuit Tracks and modify it."""
+    action = f" Then: {description}" if description else ""
+    return [UserMessage(
+        f"Read project from slot {slot} on the Circuit Tracks and show me what's in it "
+        f"— patterns, sounds, FX, song structure.{action}"
+    )]
+
+
+@mcp.prompt()
+def live_performance() -> list[UserMessage]:
+    """Start a live performance session with real-time parameter morphing."""
+    return [UserMessage(
+        "Let's do a live performance on the Circuit Tracks. Start the sequencer with "
+        "the current pattern, then use morphs and parameter changes to evolve the sound "
+        "in real time. Sweep filters, mute/unmute tracks, queue pattern transitions, "
+        "and create builds and breakdowns. Narrate what you're doing as we go."
+    )]
 
 
 def main():

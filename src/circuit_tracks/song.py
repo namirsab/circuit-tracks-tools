@@ -608,6 +608,26 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
     else:
         pattern_slots = {name: i for i, name in enumerate(song.patterns.keys())}
 
+    # Set consistent length on ALL pattern slots and ALL tracks upfront.
+    # This ensures every track in every slot has the correct length, even
+    # tracks that have no step data in a given pattern.
+    default_length = 32
+    if song.patterns:
+        default_length = max(p.length for p in song.patterns.values())
+    for slot_idx in range(PATTERNS_PER_TRACK):
+        # Used slots get their own length; unused slots get the default
+        if slot_idx in pattern_slots.values():
+            pat_name = next(n for n, s in pattern_slots.items() if s == slot_idx)
+            end = min(song.patterns[pat_name].length, STEPS_PER_PATTERN) - 1
+        else:
+            end = min(default_length, STEPS_PER_PATTERN) - 1
+        for track_idx in range(2):
+            get_synth_pattern(ncs, track_idx, slot_idx).settings.playback_end = end
+        for drum_idx in range(4):
+            get_drum_pattern(ncs, drum_idx, slot_idx).settings.playback_end = end
+        for midi_idx in range(2):
+            get_midi_pattern(ncs, midi_idx, slot_idx).settings.playback_end = end
+
     # Write patterns into NCS slots
     for pat_name, slot_idx in pattern_slots.items():
         pat_data = song.patterns[pat_name]
@@ -622,14 +642,12 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
                 _write_synth_steps(ncs_pat, steps_raw, ncs_length, _sr, _st)
                 _write_track_macros(ncs_pat, track_data, ncs_length)
                 _write_mixer_locks(ncs_pat, track_data, ncs_length)
-                ncs_pat.settings.playback_end = ncs_length - 1
 
             elif track_name.startswith("drum"):
                 drum_idx = int(track_name[-1]) - 1  # 0-3
                 ncs_pat = get_drum_pattern(ncs, drum_idx, slot_idx)
                 _write_drum_steps(ncs_pat, steps_raw, ncs_length, song, track_name)
                 _write_drum_param_locks(ncs_pat, track_data, ncs_length)
-                ncs_pat.settings.playback_end = ncs_length - 1
 
             elif track_name in ("midi1", "midi2"):
                 midi_idx = 0 if track_name == "midi1" else 1
@@ -637,7 +655,6 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
                 _write_synth_steps(ncs_pat, steps_raw, ncs_length, _sr, _st)
                 _write_track_macros(ncs_pat, track_data, ncs_length)
                 _write_mixer_locks(ncs_pat, track_data, ncs_length)
-                ncs_pat.settings.playback_end = ncs_length - 1
 
     # Synth patches
     for synth_name, attr in [("synth1", "synth1_patch"), ("synth2", "synth2_patch")]:
@@ -966,6 +983,10 @@ def _parse_embedded_patch(patch_bytes: bytes) -> SoundConfig | None:
     if len(patch_bytes) < 340:
         return None
 
+    from circuit_tracks.constants import (
+        MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS, MACRO_DESTINATIONS,
+    )
+
     # Extract name (bytes 0-15 ASCII)
     name = ""
     for b in patch_bytes[0:16]:
@@ -982,7 +1003,65 @@ def _parse_embedded_patch(patch_bytes: bytes) -> SoundConfig | None:
         if offset < len(patch_bytes):
             params[param_name] = patch_bytes[offset]
 
-    return SoundConfig(name=name if name else None, params=params)
+    # Extract mod matrix (20 slots, 4 bytes each, starting at offset 124)
+    _MOD_START = 124
+    _MOD_SLOTS = 20
+    mod_matrix: list[dict] = []
+    for i in range(_MOD_SLOTS):
+        addr = _MOD_START + i * 4
+        source = patch_bytes[addr]
+        dest = patch_bytes[addr + 1]
+        raw_depth = patch_bytes[addr + 2]
+        source2 = patch_bytes[addr + 3]
+        # Skip empty slots (depth 64 = no modulation, source 0 + dest 0)
+        if raw_depth == 64 and source == 0 and dest == 0:
+            continue
+        entry: dict = {
+            "source": MOD_MATRIX_SOURCES.get(source, source),
+            "dest": MOD_MATRIX_DESTINATIONS.get(dest, dest),
+            "depth": raw_depth - 64,  # Convert raw 0-127 to signed -64..+63
+        }
+        if source2 != 0:
+            entry["source2"] = MOD_MATRIX_SOURCES.get(source2, source2)
+        mod_matrix.append(entry)
+
+    # Extract macros (8 macros, 17 bytes each, starting at offset 204)
+    _MACRO_START = 204
+    _MACRO_COUNT = 8
+    _MACRO_SIZE = 17
+    _MACRO_TARGETS = 4
+    macros: dict[str, dict] = {}
+    for m in range(_MACRO_COUNT):
+        base = _MACRO_START + m * _MACRO_SIZE
+        position = patch_bytes[base]
+        targets: list[dict] = []
+        for t in range(_MACRO_TARGETS):
+            tb = base + 1 + t * 4
+            dest_idx = patch_bytes[tb]
+            start = patch_bytes[tb + 1]
+            end = patch_bytes[tb + 2]
+            depth = patch_bytes[tb + 3]
+            # Skip empty targets (dest=0, start=0, end=127, depth=64 is sentinel)
+            if dest_idx == 0 and start == 0 and end == 127 and depth == 64:
+                continue
+            targets.append({
+                "dest": MACRO_DESTINATIONS.get(dest_idx, dest_idx),
+                "start": start,
+                "end": end,
+                "depth": depth,
+            })
+        if targets:
+            macro_cfg: dict = {"targets": targets}
+            if position != 0:
+                macro_cfg["position"] = position
+            macros[str(m + 1)] = macro_cfg
+
+    return SoundConfig(
+        name=name if name else None,
+        params=params,
+        mod_matrix=mod_matrix if mod_matrix else None,
+        macros=macros if macros else None,
+    )
 
 
 def _read_fx_from_ncs(ncs: NCSFile) -> FXConfig:
