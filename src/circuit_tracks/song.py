@@ -701,7 +701,7 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
     if song.song:
         for scene_idx, pat_name in enumerate(song.song):
             slot = pattern_slots[pat_name]
-            # All tracks point to the same pattern slot
+            # All tracks play a single pattern: start == end
             track_chains = {i: (slot, slot) for i in range(NUM_TRACKS)}
             set_scene(ncs, scene_idx, track_chains)
         set_scene_chain(ncs, start=0, end=len(song.song) - 1)
@@ -1122,7 +1122,7 @@ def _read_song_order(ncs: NCSFile, pattern_names: dict[int, str]) -> list[str]:
     if not pattern_names:
         return []
 
-    start = ncs.scene_chain.start
+    start = ncs.scene_chain.scene_chain_start
     end = ncs.scene_chain.end
 
     song_order: list[str] = []
@@ -1130,17 +1130,16 @@ def _read_song_order(ncs: NCSFile, pattern_names: dict[int, str]) -> list[str]:
         if scene_idx >= len(ncs.scenes):
             break
         scene = ncs.scenes[scene_idx]
-        # Read the first track chain's start value as the pattern slot index
-        slot_idx = scene.track_chains[0].start
+        # byte[0] (end field) holds the pattern slot index
+        slot_idx = scene.track_chains[0].end
         pat_name = pattern_names.get(slot_idx)
         if pat_name:
             song_order.append(pat_name)
 
     # If scene_chain is (0, 0) and slot 0 has a pattern, emit single-element list
     if not song_order and 0 in pattern_names and start == 0 and end == 0:
-        # Check if scene 0 actually points to something
         scene = ncs.scenes[0]
-        slot_idx = scene.track_chains[0].start
+        slot_idx = scene.track_chains[0].end
         if slot_idx in pattern_names:
             song_order.append(pattern_names[slot_idx])
 

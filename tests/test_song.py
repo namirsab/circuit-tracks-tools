@@ -309,15 +309,17 @@ class TestSongToNcs:
         assert ncs.scene_chain.start == 0
         assert ncs.scene_chain.end == 4
 
-        # Scene 0 -> pattern 0 (intro)
+        # Scene 0 -> pattern 0 (intro): start=0, end=0
         for tc in ncs.scenes[0].track_chains:
             assert tc.start == 0
             assert tc.end == 0
 
-        # Scene 2 -> pattern 1 (drop)
+        # Scene 2 -> pattern 1 (drop): start=1, end=1
         for tc in ncs.scenes[2].track_chains:
             assert tc.start == 1
             assert tc.end == 1
+            # Verify byte layout: [end, 0, 0, start]
+            assert tc.to_bytes() == bytes([1, 0, 0, 1])
 
     def test_gate_and_probability_mapping(self):
         song_dict = {

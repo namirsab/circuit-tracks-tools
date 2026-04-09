@@ -109,23 +109,29 @@ Each of the 16 scenes contains:
 
 | Byte Offset | Size | Description |
 |-------------|------|-------------|
-| 0 | 8 | Scene header (purpose partially unknown) |
+| 0 | 8 | Scene header — byte 7 holds the start index of the scene's track chains (or 0 if unset) |
 | 8 | 32 | 8 track chain entries, 4 bytes each |
 
 Track order within a scene: Synth 1, Synth 2, MIDI 1, MIDI 2, Drum 1, Drum 2, Drum 3, Drum 4.
 
 ### Chain Entry Format (4 bytes)
 
-Used for scene chains, pattern chains, and per-scene track assignments:
+Used for scene track assignments and pattern chains:
 
 | Byte | Description |
 |------|-------------|
 | 0 | End index (0-7, inclusive) |
-| 1 | Start index (0-7) |
-| 2 | Padding (must be 0) |
-| 3 | Padding (must be 0) |
+| 1 | 0 (unused) |
+| 2 | 0 (unused) |
+| 3 | Start index (0-7) |
 
-When start = end = 0, the chain is inactive (single pattern mode).
+A single-pattern entry has start = end (e.g. `03 00 00 03` plays only pattern 4).
+A chain entry spans from start to end inclusive (e.g. `05 00 00 02` chains patterns 3–6).
+When all bytes are 0 the track uses the default (pattern 1).
+
+The **scene chain** entry at offset +648 uses a slightly different layout:
+byte 0 = end scene index, byte 1 = start scene index (typically 0),
+bytes 2-3 carry other metadata.
 
 ---
 
@@ -748,7 +754,7 @@ The following fields have been observed in the binary data but their purpose has
 | 0x30 | 4 bytes | 0 | Always zeros in all observed files. |
 | Drum config byte 3 | 1 byte | 127 (0x7F) | Per drum track. Possibly EQ max or filter cutoff default. |
 | Drum config byte 10 | 1 byte | 0 | Per drum track. Always 0. |
-| Scene header bytes 0-7 | 8 bytes | varies | First 8 bytes of each 40-byte scene block. |
+| Scene header bytes 0-6 | 7 bytes | 0 | First 7 bytes of each 40-byte scene block. Always zeros in observed files. |
 | Sidechain S2 extra bytes | 2 bytes | 0 | Two extra bytes after S2 sidechain params. |
 | Tail preamble bytes 0-15 | 16 bytes | mostly 0 | WASM references `synthTrackInfo`, `drumMuteStates`, `defaultDrumChoices`, `midiTrackInfo` in this region. |
 | ~~Automation data layout~~ | ~~variable~~ | ~~0xFF~~ | **Documented** — see Automation Data (P-Locks) section above. Synth: 12 slots (8 macros + reverb/delay/level/pan). Drum: 8 slots (pitch/decay/distortion/eq + reverb/delay/level/pan). |

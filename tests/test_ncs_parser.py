@@ -374,9 +374,14 @@ def test_set_pattern_chain_helper() -> None:
 def test_set_scene_helper() -> None:
     """Test the set_scene convenience function."""
     ncs = parse_ncs(EMPTY_NCS)
-    set_scene(ncs, 0, {0: (0, 3), 4: (0, 1)})  # Scene 1: S1=1-4, D1=1-2
+    set_scene(ncs, 0, {0: (1, 3), 4: (0, 1)})  # S1=patterns 2-4, D1=patterns 1-2
+    assert ncs.scenes[0].track_chains[0].start == 1
     assert ncs.scenes[0].track_chains[0].end == 3
+    assert ncs.scenes[0].track_chains[4].start == 0
     assert ncs.scenes[0].track_chains[4].end == 1
+    # Verify byte layout: [end, 0, 0, start]
+    assert ncs.scenes[0].track_chains[0].to_bytes() == bytes([3, 0, 0, 1])
+    assert ncs.scenes[0].track_chains[4].to_bytes() == bytes([1, 0, 0, 0])
 
 
 # --- FX tests ---

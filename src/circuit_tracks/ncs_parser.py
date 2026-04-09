@@ -323,18 +323,38 @@ class NCSTimingSection:
 
 @dataclass
 class ChainEntry:
-    """A pattern or scene chain entry (4 bytes): {end, start, padding, padding}."""
+    """A 4-byte chain entry used for scene tracks, pattern chains, and scene chain.
 
-    end: int = 0    # end index (0-indexed, inclusive)
-    start: int = 0  # start index (0-indexed)
-    raw_extra: bytes = field(default_factory=lambda: bytes(2))
+    Byte layout for scene track entries and pattern chains:
+      byte[0] = chain end index (0-based, inclusive)
+      byte[1] = 0
+      byte[2] = 0
+      byte[3] = chain start index (0-based)
+
+    For scene chain entries, byte[1] is the start (always 0) and byte[3]
+    has a different meaning.  Use ``scene_chain_start`` for scene chains.
+    """
+
+    end: int = 0    # byte[0]: end index
+    start: int = 0  # byte[3]: start index (for scene tracks / pattern chains)
+    _byte1: int = 0  # byte[1]: scene chain start (always 0)
+    _byte2: int = 0  # byte[2]: always 0
+
+    @property
+    def scene_chain_start(self) -> int:
+        """Start index for scene chain entries (byte[1])."""
+        return self._byte1
+
+    @scene_chain_start.setter
+    def scene_chain_start(self, value: int) -> None:
+        self._byte1 = value
 
     def to_bytes(self) -> bytes:
-        return bytes([self.end, self.start]) + self.raw_extra
+        return bytes([self.end, self._byte1, self._byte2, self.start])
 
     @classmethod
     def from_bytes(cls, data: bytes) -> ChainEntry:
-        return cls(end=data[0], start=data[1], raw_extra=data[2:4])
+        return cls(end=data[0], start=data[3], _byte1=data[1], _byte2=data[2])
 
 
 @dataclass
@@ -1108,19 +1128,32 @@ def set_pattern_chain(ncs: NCSFile, track: int, start: int = 0, end: int = 0) ->
 
 
 def set_scene(ncs: NCSFile, scene_index: int, track_chains: dict[int, tuple[int, int]]) -> None:
-    """Set a scene's pattern chain assignments.
+    """Set a scene's per-track pattern chain assignments.
+
+    Hardware byte layout per track entry:
+      byte[0] = chain end index (0-based, inclusive)
+      byte[1] = 0
+      byte[2] = 0
+      byte[3] = chain start index (0-based)
 
     Args:
         scene_index: 0-15
-        track_chains: dict of {track_index: (start, end)} for each track to assign
+        track_chains: dict of {track_index: (start, end)} for each track
     """
     scene = ncs.scenes[scene_index]
+    max_start = 0
     for track, (start, end) in track_chains.items():
         scene.track_chains[track].start = start
         scene.track_chains[track].end = end
+        if start > max_start:
+            max_start = start
+    # Scene header byte[7] stores the start index of the first track (or max)
+    hdr = bytearray(scene.header)
+    hdr[7] = max_start
+    scene.header = bytes(hdr)
 
 
 def set_scene_chain(ncs: NCSFile, start: int = 0, end: int = 0) -> None:
-    """Set the scene chain range."""
-    ncs.scene_chain.start = start
+    """Set the scene chain range (uses byte[1] for start, byte[0] for end)."""
+    ncs.scene_chain.scene_chain_start = start
     ncs.scene_chain.end = end
