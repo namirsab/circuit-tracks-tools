@@ -298,9 +298,19 @@ Automation for block N is stored in block N+1's pre-data region (between block N
 | 6 | 36-41 | Level |
 | 7 | 42-47 | Pan (truncated: last 16 bytes missing) |
 
-**Layout per slot**: Each slot has 6 lanes of 32 positions = 192 positions total. These form a continuous buffer where positions map to sub-step timing. For a 16-step pattern: 192 / 16 = 12 sub-positions per step. For 32 steps: 6 sub-positions per step.
+**Layout per slot**: Each slot has 6 lanes of 32 positions = 192 positions total. Data is stored in **lane-major order**: all 32 positions for lane 0, then lane 1, etc. The number of sub-positions per step depends on the pattern length: `positions_per_step = 192 / num_steps` (e.g., 12 for 16-step patterns, 6 for 32-step patterns).
 
-**Values**: 0x00-0x7F = locked parameter value. 0xFF = no automation (pass-through). For step-level locks, all sub-positions within the step are set to the same value.
+**Indexing formula**: To read/write a value for a given slot and step:
+
+```
+base_offset    = slot × 192
+flat_idx       = step × positions_per_step
+lane           = flat_idx ÷ 32   (integer division)
+pos            = flat_idx mod 32
+byte_offset    = base_offset + (lane × 32) + pos
+```
+
+**Values**: 0x00-0x7F = locked parameter value. 0xFF = no automation (pass-through). For step-level locks, all sub-positions within the step are set to the same value. For sub-step (fractional) locks, only the nearest sub-position is set.
 
 ---
 
@@ -744,7 +754,68 @@ The Circuit Tracks supports 16 scale types (values 0-15). Based on the User Guid
 | 14 | Whole Tone |
 | 15 | Chromatic |
 
-## Appendix F: Known Unknowns
+## Appendix F: FX Preset Tables
+
+The preset indices stored in the tail preamble (section 6.1) map to the following parameter values. These were captured from hardware and are not documented in the Programmer's Reference Guide.
+
+### Reverb Presets
+
+| Index | Type | Decay | Damping |
+|-------|------|-------|---------|
+| 0 | 0 (Chamber) | 80 | 120 |
+| 1 | 1 (Small Room) | 90 | 100 |
+| 2 | 2 (Large Room) | 80 | 80 |
+| 3 | 2 (Large Room) | 100 | 110 |
+| 4 | 3 (Small Hall) | 90 | 100 |
+| 5 | 4 (Large Hall) | 105 | 105 |
+| 6 | 5 (Great Hall) | 90 | 80 |
+| 7 | 5 (Great Hall) | 120 | 115 |
+
+### Delay Presets
+
+| Index | Time | Sync | Feedback | Width | L/R Ratio | Slew |
+|-------|------|------|----------|-------|-----------|------|
+| 0 | 3 | 0 | 100 | 115 | 5 (2:1) | 115 |
+| 1 | 6 | 0 | 45 | 104 | 6 (1:2) | 26 |
+| 2 | 0 | 2 | 63 | 62 | 5 (2:1) | 40 |
+| 3 | 0 | 4 | 25 | 10 | 5 (2:1) | 75 |
+| 4 | 0 | 5 | 59 | 15 | 5 (2:1) | 39 |
+| 5 | 0 | 7 | 15 | 34 | 6 (1:2) | 56 |
+| 6 | 0 | 7 | 75 | 115 | 5 (2:1) | 98 |
+| 7 | 0 | 7 | 75 | 75 | 3 (3:2) | 23 |
+| 8 | 0 | 8 | 80 | 10 | 6 (1:2) | 68 |
+| 9 | 0 | 9 | 50 | 100 | 5 (2:1) | 33 |
+| 10 | 0 | 10 | 82 | 23 | 5 (2:1) | 56 |
+| 11 | 0 | 10 | 78 | 88 | 6 (1:2) | 47 |
+| 12 | 0 | 10 | 33 | 127 | 3 (3:2) | 33 |
+| 13 | 0 | 11 | 50 | 60 | 6 (1:2) | 86 |
+| 14 | 0 | 12 | 24 | 90 | 3 (3:2) | 106 |
+| 15 | 0 | 12 | 50 | 115 | 5 (2:1) | 111 |
+
+## Appendix G: Factory Drum Sample Names
+
+The Circuit Tracks ships with 64 factory samples (indices 0-63), organized in 4 pages of 16. The `patch_select` field in drum track configs (section 6.4) uses these indices directly. Custom samples loaded via Components will replace these names.
+
+| Index | Name | Index | Name | Index | Name | Index | Name |
+|-------|------|-------|------|-------|------|-------|------|
+| 0 | Kick A1 | 16 | Kick B1 | 32 | Kick C1 | 48 | Kick D1 |
+| 1 | Kick A2 | 17 | Kick B2 | 33 | Kick C2 | 49 | Kick D2 |
+| 2 | Snare A1 | 18 | Snare B1 | 34 | Snare C1 | 50 | Snare D1 |
+| 3 | Snare A2 | 19 | Snare B2 | 35 | Snare C2 | 51 | Snare D2 |
+| 4 | Closed HH A1 | 20 | Closed HH B1 | 36 | Closed HH C1 | 52 | Closed HH D1 |
+| 5 | Closed HH A2 | 21 | Closed HH B2 | 37 | Closed HH C2 | 53 | Closed HH D2 |
+| 6 | Open HH A1 | 22 | Open HH B1 | 38 | Open HH C1 | 54 | Open HH D1 |
+| 7 | Open HH A2 | 23 | Open HH B2 | 39 | Open HH C2 | 55 | Open HH D2 |
+| 8 | Perc A1 | 24 | Perc B1 | 40 | Perc C1 | 56 | Perc D1 |
+| 9 | Perc A2 | 25 | Perc B2 | 41 | Perc C2 | 57 | Perc D2 |
+| 10 | Perc A3 | 26 | Perc B3 | 42 | Perc C3 | 58 | Perc D3 |
+| 11 | Perc A4 | 27 | Perc B4 | 43 | Perc C4 | 59 | Perc D4 |
+| 12 | Melodic A1 | 28 | Melodic B1 | 44 | Melodic C1 | 60 | Melodic D1 |
+| 13 | Melodic A2 | 29 | Melodic B2 | 45 | Melodic C2 | 61 | Melodic D2 |
+| 14 | Melodic A3 | 30 | Melodic B3 | 46 | Melodic C3 | 62 | Melodic D3 |
+| 15 | Melodic A4 | 31 | Melodic B4 | 47 | Melodic C4 | 63 | Melodic D4 |
+
+## Appendix H: Known Unknowns
 
 The following fields have been observed in the binary data but their purpose has not been determined:
 
