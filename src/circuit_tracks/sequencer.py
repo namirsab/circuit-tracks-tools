@@ -53,6 +53,7 @@ class Step:
     notes: list[int] = field(default_factory=lambda: [60])
     velocity: int = 100
     gate: float = 0.5
+    tie: bool = False
     enabled: bool = True
     probability: float = 1.0
     sample: int | None = None
@@ -68,6 +69,8 @@ class Step:
             s.velocity = int(d["velocity"])
         if "gate" in d:
             s.gate = float(d["gate"])
+        if "tie" in d:
+            s.tie = bool(d["tie"])
         if "enabled" in d:
             s.enabled = bool(d["enabled"])
         if "probability" in d:
@@ -78,6 +81,8 @@ class Step:
 
     def to_dict(self) -> dict:
         d: dict = {"notes": self.notes, "velocity": self.velocity, "gate": self.gate}
+        if self.tie:
+            d["tie"] = True
         if not self.enabled:
             d["enabled"] = False
         if self.probability < 1.0:

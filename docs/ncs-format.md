@@ -221,13 +221,13 @@ The Circuit Tracks supports 6-voice polyphony per step. Each note slot:
 | Byte | Field | Range | Default | Description |
 |------|-------|-------|---------|-------------|
 | 0 | noteNumber | 0-127 | 0 | Note number — **offset from standard MIDI by +12** (see note below). 0 when slot is unused. |
-| 1 | gate | 0-255 | 0 | Gate length in micro-ticks. 6 micro-ticks = 1 step. |
+| 1 | gate | 0-255 | 0 | Bit 7: tie-forward flag. Bits 0-6: gate length in micro-ticks (6 per step, max 96 = 16 steps). |
 | 2 | delay | 0-5 | 0 | Micro-step offset (0 = on the beat). |
 | 3 | velocity | 0-127 | 96 (0x60) | MIDI velocity. |
 
 **NCS note number vs MIDI note number**: The Circuit Tracks internal sequencer plays NCS note numbers one octave (12 semitones) lower than the same note number received via external MIDI. For example, NCS noteNumber 60 plays the same pitch as external MIDI note 48. To store a note that should sound like MIDI note N, write N + 12 to the NCS. This was confirmed experimentally: a note recorded on the hardware as middle C stores noteNumber 60 in the NCS, but sending MIDI note 60 externally to the same patch produces a pitch one octave higher. The `keyboard_octave` patch parameter (byte 35) does NOT affect internal sequencer playback — tested with values 64 and 69 producing identical results. This appears to be undocumented Novation behavior.
 
-**Gate encoding**: Each sequencer step is divided into 6 micro-ticks. A gate value of 6 means exactly 1 step long. A gate of 24 (0x18) means 4 steps. Values exceeding 192 (32 steps x 6) represent tied/sustained notes that extend beyond the pattern.
+**Gate encoding**: Bit 7 is the **tie-forward flag** — when set, the note sustains into the next triggered step without retriggering. Bits 0-6 hold the gate length in micro-ticks (6 per step). Maximum useful value is 96 (16 steps). Examples: `0x06` = 1 step, `0x18` = 4 steps, `0x60` = 16 steps, `0xE0` = 16 steps + tie forward. For notes longer than 16 steps, chain multiple steps with tie forward (e.g. two 16-step tied notes = 32 steps). **Confirmed on hardware.**
 
 **Empty note slot**: `[0x00, 0x00, 0x00, 0x60]` (note=0, gate=0, delay=0, velocity=96).
 
