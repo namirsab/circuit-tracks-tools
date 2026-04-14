@@ -246,139 +246,110 @@ class SongData:
 def parse_song(d: dict) -> SongData:
     """Parse and validate a song JSON dict into a SongData object.
 
-    Raises ValueError on invalid input.
+    Uses Pydantic schema validation to reject unknown/invalid keys,
+    then converts to the internal SongData dataclass for downstream use.
+
+    Raises ValueError or pydantic.ValidationError on invalid input.
     """
-    song = SongData()
+    from pydantic import ValidationError as PydanticValidationError
 
-    # Top-level fields
-    song.name = str(d.get("name", "Song"))
-    song.bpm = int(d.get("bpm", 120))
-    if not 40 <= song.bpm <= 240:
-        raise ValueError(f"BPM must be 40-240, got {song.bpm}")
-    song.swing = int(d.get("swing", 50))
-    song.color = int(d.get("color", 8))
+    from circuit_tracks.song_schema import SongSchema
 
-    # Scale
-    scale = d.get("scale", {})
-    song.scale_root = str(scale.get("root", "C"))
-    song.scale_type = str(scale.get("type", "chromatic"))
-    if song.scale_root not in _SCALE_ROOT:
-        raise ValueError(f"Unknown scale root: {song.scale_root!r}. Valid: {list(_SCALE_ROOT.keys())}")
-    if song.scale_type.lower() not in _SCALE_TYPE:
-        raise ValueError(f"Unknown scale type: {song.scale_type!r}. Valid: {list(_SCALE_TYPE.keys())}")
-
-    # Sounds
-    for track_name, sound_data in d.get("sounds", {}).items():
-        if track_name not in VALID_TRACK_NAMES:
-            raise ValueError(f"Invalid sound track '{track_name}'. Must be one of: {sorted(VALID_TRACK_NAMES)}")
-        sc = SoundConfig()
-        if isinstance(sound_data, dict):
-            sc.preset = sound_data.get("preset")
-            sc.name = sound_data.get("name")
-            sc.params = sound_data.get("params")
-            sc.mod_matrix = sound_data.get("mod_matrix")
-            sc.macros = sound_data.get("macros")
-            sc.sample = sound_data.get("sample")
-            sc.level = sound_data.get("level")
-            sc.pitch = sound_data.get("pitch")
-            sc.decay = sound_data.get("decay")
-            sc.distortion = sound_data.get("distortion")
-            sc.eq = sound_data.get("eq")
-            sc.pan = sound_data.get("pan")
-        song.sounds[track_name] = sc
-
-    # FX
-    fx_data = d.get("fx", {})
-    reverb_preset = fx_data.get("reverb_preset")
-    delay_preset = fx_data.get("delay_preset")
-    # Validate preset values
-    if reverb_preset is not None:
-        if isinstance(reverb_preset, str):
-            if reverb_preset.lower() not in REVERB_PRESET_BY_NAME:
-                raise ValueError(
-                    f"Unknown reverb preset: {reverb_preset!r}. "
-                    f"Valid: {list(REVERB_PRESET_BY_NAME.keys())} or 0-7"
-                )
-        elif isinstance(reverb_preset, int):
-            if not 0 <= reverb_preset <= 7:
-                raise ValueError(f"Reverb preset index must be 0-7, got {reverb_preset}")
-    if delay_preset is not None:
-        if isinstance(delay_preset, str):
-            if delay_preset.lower() not in DELAY_PRESET_BY_NAME:
-                raise ValueError(
-                    f"Unknown delay preset: {delay_preset!r}. "
-                    f"Valid: {list(DELAY_PRESET_BY_NAME.keys())} or 0-15"
-                )
-        elif isinstance(delay_preset, int):
-            if not 0 <= delay_preset <= 15:
-                raise ValueError(f"Delay preset index must be 0-15, got {delay_preset}")
-    song.fx = FXConfig(
-        reverb=fx_data.get("reverb", {}),
-        delay=fx_data.get("delay", {}),
-        reverb_sends=fx_data.get("reverb_sends", {}),
-        delay_sends=fx_data.get("delay_sends", {}),
-        sidechain=fx_data.get("sidechain", {}),
-        reverb_preset=reverb_preset,
-        delay_preset=delay_preset,
-    )
-    # Validate send track names
-    for name in list(song.fx.reverb_sends) + list(song.fx.delay_sends):
-        if name not in _SEND_INDEX:
-            raise ValueError(f"Invalid send track '{name}'. Valid: {list(_SEND_INDEX.keys())}")
-    for name in song.fx.sidechain:
-        if name not in ("synth1", "synth2"):
-            raise ValueError(f"Sidechain only applies to synth1/synth2, got '{name}'")
-
-    # Mixer
-    for track_name, mix_data in d.get("mixer", {}).items():
-        if track_name not in ("synth1", "synth2"):
-            raise ValueError(f"Mixer only supports synth1/synth2, got '{track_name}'")
-        song.mixer[track_name] = MixerConfig(
-            level=int(mix_data.get("level", 100)),
-            pan=int(mix_data.get("pan", 64)),
-        )
-
-    # Patterns (required)
-    patterns_data = d.get("patterns", {})
-    if not patterns_data:
-        raise ValueError("Song must have at least one pattern")
-    for pat_name, pat_data in patterns_data.items():
-        length = int(pat_data.get("length", 16))
-        tracks = pat_data.get("tracks", {})
-        for track_name in tracks:
-            if track_name not in VALID_TRACK_NAMES:
-                raise ValueError(
-                    f"Invalid track '{track_name}' in pattern '{pat_name}'. "
-                    f"Must be one of: {sorted(VALID_TRACK_NAMES)}"
-                )
-            # Validate step indices
-            steps = tracks[track_name].get("steps", {})
-            for idx_str in steps:
-                idx = int(idx_str)
-                if idx < 0 or idx >= length:
-                    raise ValueError(
-                        f"Step index {idx} out of range for pattern '{pat_name}' (length={length})"
-                    )
-        song.patterns[pat_name] = PatternData(length=length, tracks=tracks)
-
-    # Song structure
-    song.song = list(d.get("song", []))
-    for pat_name in song.song:
-        if pat_name not in song.patterns:
-            raise ValueError(f"Song references unknown pattern '{pat_name}'")
-
-    # Hardware limits
-    unique_patterns = set(song.song) if song.song else set(song.patterns.keys())
-    if len(unique_patterns) > PATTERNS_PER_TRACK:
-        raise ValueError(
-            f"Too many unique patterns ({len(unique_patterns)}). "
-            f"Circuit Tracks supports max {PATTERNS_PER_TRACK}."
-        )
-    if len(song.song) > 16:
-        raise ValueError(f"Song has {len(song.song)} sections, max 16 (scenes).")
+    try:
+        validated = SongSchema.model_validate(d)
+    except PydanticValidationError as e:
+        raise ValueError(str(e)) from e
+    song = _schema_to_song_data(validated)
 
     # Quantize notes to scale so MIDI preview and NCS export match (DEV-0017)
     _quantize_song_notes(song)
+
+    return song
+
+
+def _schema_to_song_data(v: object) -> SongData:
+    """Convert a validated SongSchema to the internal SongData dataclass.
+
+    Keeps downstream code (sequencer, NCS export) unchanged by producing
+    the same dict-based structures they expect.
+    """
+    song = SongData()
+
+    song.name = v.name
+    song.bpm = v.bpm
+    song.swing = v.swing
+    song.color = v.color
+    song.scale_root = v.scale.root
+    song.scale_type = v.scale.type
+
+    # Sounds — convert Pydantic models back to the SoundConfig dataclass
+    if v.sounds:
+        for track_name, sound_model in v.sounds.items():
+            sc = SoundConfig()
+            if hasattr(sound_model, "preset"):
+                # SynthSoundConfig
+                sc.preset = sound_model.preset
+                sc.name = sound_model.name
+                sc.params = sound_model.params
+                # Convert mod matrix entries back to dicts
+                if sound_model.mod_matrix:
+                    sc.mod_matrix = [
+                        entry.model_dump(exclude_none=True, exclude={"destination"})
+                        for entry in sound_model.mod_matrix
+                    ]
+                # Convert macro configs back to dicts
+                if sound_model.macros:
+                    sc.macros = {
+                        k: cfg.model_dump() for k, cfg in sound_model.macros.items()
+                    }
+            else:
+                # DrumSoundConfig
+                sc.sample = sound_model.sample
+                sc.level = sound_model.level
+                sc.pitch = sound_model.pitch
+                sc.decay = sound_model.decay
+                sc.distortion = sound_model.distortion
+                sc.eq = sound_model.eq
+                sc.pan = sound_model.pan
+            song.sounds[track_name] = sc
+
+    # FX — convert back to dict-based FXConfig dataclass
+    if v.fx:
+        fx = v.fx
+        song.fx = FXConfig(
+            reverb=fx.reverb.model_dump(exclude_none=True) if fx.reverb else {},
+            delay=fx.delay.model_dump(exclude_none=True) if fx.delay else {},
+            reverb_sends=dict(fx.reverb_sends) if fx.reverb_sends else {},
+            delay_sends=dict(fx.delay_sends) if fx.delay_sends else {},
+            sidechain={
+                k: sc.model_dump(exclude_none=True)
+                for k, sc in fx.sidechain.items()
+            } if fx.sidechain else {},
+            reverb_preset=fx.reverb_preset,
+            delay_preset=fx.delay_preset,
+        )
+
+    # Mixer
+    if v.mixer:
+        for track_name, mix_model in v.mixer.items():
+            song.mixer[track_name] = MixerConfig(
+                level=mix_model.level,
+                pan=mix_model.pan,
+            )
+
+    # Patterns — convert back to raw dicts for downstream compatibility
+    for pat_name, pat_model in v.patterns.items():
+        tracks_raw: dict[str, dict] = {}
+        for track_name, track_model in pat_model.tracks.items():
+            tracks_raw[track_name] = track_model.model_dump(
+                exclude_none=True, exclude_defaults=True,
+            )
+        song.patterns[pat_name] = PatternData(
+            length=pat_model.length, tracks=tracks_raw,
+        )
+
+    # Song structure
+    song.song = list(v.song) if v.song else []
 
     return song
 
@@ -903,14 +874,20 @@ def _read_synth_track(
             note = active[0]
             step_dict["note"] = quantize_to_scale(note.note_number, 0, scale_type) - 12 + scale_root
             step_dict["velocity"] = note.velocity
-            step_dict["gate"] = round(note.gate / 6.0, 3)
+            raw_gate = note.gate
+            step_dict["gate"] = round((raw_gate & 0x7F) / 6.0, 3)
+            if raw_gate & 0x80:
+                step_dict["tie"] = True
         elif len(active) > 1:
             step_dict["notes"] = [
                 quantize_to_scale(n.note_number, 0, scale_type) - 12 + scale_root
                 for n in active
             ]
             step_dict["velocity"] = active[0].velocity
-            step_dict["gate"] = round(active[0].gate / 6.0, 3)
+            raw_gate = active[0].gate
+            step_dict["gate"] = round((raw_gate & 0x7F) / 6.0, 3)
+            if raw_gate & 0x80:
+                step_dict["tie"] = True
 
         step_dict["probability"] = round(step.probability / 7.0, 3)
         steps[str(i)] = step_dict
@@ -1299,15 +1276,28 @@ def _write_synth_steps(
         for i, note in enumerate(step.notes[:NOTES_PER_STEP]):
             mask |= 1 << i
             c_relative = quantize_to_scale(note - scale_root, 0, scale_type)
+            gate_ticks = max(1, min(96, round(step.gate * 6)))
+            if step.tie:
+                gate_ticks |= 0x80
             ncs_step.notes[i] = NCSNote(
                 note_number=max(0, min(127, c_relative + 12)),
-                gate=max(1, min(6, round(step.gate * 6))),
+                gate=gate_ticks,
                 delay=0,
                 velocity=max(0, min(127, step.velocity)),
             )
 
         ncs_step.assigned_note_mask = mask
         ncs_step.probability = max(0, min(7, round(step.probability * 7)))
+
+        # Catch common mistake: "params" on synth steps is not supported.
+        # Synth p-locks use "macros" (macro number -> value) on steps,
+        # or track-level "macros" (macro number -> {step -> value}).
+        if isinstance(step_data, dict) and "params" in step_data:
+            raise ValueError(
+                f"Synth step {idx}: 'params' is not supported on synth steps. "
+                f"Use 'macros' instead (e.g. \"macros\": {{\"1\": 80}}) to p-lock "
+                f"via macro knobs, or use track-level 'macros' for automation."
+            )
 
         # Write macro locks (p-locks)
         macros = step_data.get("macros") if isinstance(step_data, dict) else None

@@ -156,10 +156,15 @@ _MACRO_SIZE = 17  # 1 (position) + 4 * 4 (targets)
 _MACRO_TARGETS = 4
 
 
+def _normalize_mod_name(s: str) -> str:
+    """Normalize a mod matrix name: lowercase, underscores to spaces."""
+    return s.lower().replace("_", " ")
+
+
 def _resolve_mod_source(s: int | str) -> int:
     if isinstance(s, int):
         return s
-    key = s.lower()
+    key = _normalize_mod_name(s)
     if key in MOD_SOURCE_BY_NAME:
         return MOD_SOURCE_BY_NAME[key]
     raise ValueError(f"Unknown mod source: {s!r}. Valid: {list(MOD_MATRIX_SOURCES.values())}")
@@ -168,7 +173,7 @@ def _resolve_mod_source(s: int | str) -> int:
 def _resolve_mod_dest(d: int | str) -> int:
     if isinstance(d, int):
         return d
-    key = d.lower()
+    key = _normalize_mod_name(d)
     if key in MOD_DEST_BY_NAME:
         return MOD_DEST_BY_NAME[key]
     raise ValueError(f"Unknown mod destination: {d!r}. Valid: {list(MOD_MATRIX_DESTINATIONS.values())}")
@@ -568,6 +573,29 @@ class PatchBuilder:
         if len(targets) > _MACRO_TARGETS:
             raise ValueError(f"Maximum {_MACRO_TARGETS} targets per macro, got {len(targets)}")
 
+        _VALID_TARGET_KEYS = {"dest", "start", "end", "depth"}
+        _WRONG_KEY_HINTS = {
+            "param": "dest",
+            "parameter": "dest",
+            "destination": "dest",
+            "min": "start",
+            "max": "end",
+        }
+        for i, t in enumerate(targets):
+            for key in t:
+                if key not in _VALID_TARGET_KEYS:
+                    hint = _WRONG_KEY_HINTS.get(key)
+                    if hint:
+                        raise ValueError(
+                            f"Macro {macro_num} target {i}: unknown key {key!r}, "
+                            f"did you mean {hint!r}? "
+                            f"Valid keys: {sorted(_VALID_TARGET_KEYS)}"
+                        )
+                    raise ValueError(
+                        f"Macro {macro_num} target {i}: unknown key {key!r}. "
+                        f"Valid keys: {sorted(_VALID_TARGET_KEYS)}"
+                    )
+
         base = _MACRO_START + (macro_num - 1) * _MACRO_SIZE
         self._bytes[base] = _clamp(position)
 
@@ -575,7 +603,12 @@ class PatchBuilder:
             tb = base + 1 + i * 4
             if i < len(targets):
                 t = targets[i]
-                self._bytes[tb] = _resolve_macro_dest(t.get("dest", 0))
+                if "dest" not in t:
+                    raise ValueError(
+                        f"Macro {macro_num} target {i}: missing required key 'dest'. "
+                        f"Example: {{\"dest\": \"filter_frequency\", \"start\": 0, \"end\": 127}}"
+                    )
+                self._bytes[tb] = _resolve_macro_dest(t["dest"])
                 self._bytes[tb + 1] = _clamp(t.get("start", 0))
                 self._bytes[tb + 2] = _clamp(t.get("end", 127))
                 self._bytes[tb + 3] = _clamp(t.get("depth", 127))

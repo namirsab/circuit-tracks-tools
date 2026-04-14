@@ -38,6 +38,17 @@ from circuit_tracks.sequencer import (
     SequencerEngine,
     Step,
 )
+from circuit_tracks.song_schema import (
+    MacroConfig,
+    MacroNumber,
+    MacroTargetInput,
+    ModMatrixEntry,
+    SequencerStepConfig,
+    SequencerTrackConfig,
+    SongSchema,
+    SynthPreset,
+    TrackName,
+)
 
 
 _midi = MidiConnection()
@@ -45,9 +56,23 @@ _engine = SequencerEngine(_midi)
 _morph = MorphEngine(_midi)
 _clock = ClockGenerator(_midi)
 
+
+def _get_song_schema() -> dict:
+    """Lazily load and cache the song JSON Schema."""
+    if not hasattr(_get_song_schema, "_cache"):
+        from circuit_tracks.song_schema import get_song_json_schema
+        _get_song_schema._cache = get_song_json_schema()
+    return _get_song_schema._cache
+
 mcp = FastMCP(
     "Circuit Tracks",
-    instructions="Control a Novation Circuit Tracks synthesizer via MIDI",
+    instructions=(
+        "Control a Novation Circuit Tracks synthesizer via MIDI. "
+        "IMPORTANT: Before calling create_synth_patch, edit_synth_patch, or load_song, "
+        "call get_parameter_reference to get the exact valid parameter names, "
+        "mod matrix sources/destinations, and macro destinations. "
+        "Do NOT guess or abbreviate parameter names — use the exact strings returned."
+    ),
     log_level="WARNING",
 )
 
@@ -184,38 +209,27 @@ def _parse_track_data(track_name: str, track_data: dict) -> tuple[dict[int, Step
 @mcp.tool()
 def set_pattern(
     name: str,
-    tracks: dict[str, dict],
+    tracks: dict[TrackName, SequencerTrackConfig],
     length: int = 16,
 ) -> str:
-    """Define a named pattern with tracks and steps. This is the primary tool for creating music.
+    """Define a named pattern with tracks and steps for live sequencer preview.
 
-    The sequencer mirrors the Circuit Tracks: 8 tracks (synth1, synth2, drum1-4, midi1, midi2),
-    each with up to 32 steps. Steps are 16th notes at the given BPM.
-
+    The sequencer mirrors the Circuit Tracks: 8 tracks, each with up to 32 steps.
     Only specify steps that have notes — absent step indices are rests.
-    Drum tracks ignore the note field (each drum has a fixed trigger note).
-    MIDI tracks output to external gear via MIDI (channels 3-4).
+    Drum tracks ignore note/gate fields (each drum has a fixed trigger note).
 
     Args:
-        name: Pattern name (e.g., "intro", "verse", "drop", "breakdown").
-        tracks: Dict of track data keyed by track name. Track names:
-            "synth1", "synth2", "drum1", "drum2", "drum3", "drum4", "midi1", "midi2".
-            Each track value is a dict with:
-              "steps": dict of step_index (as string) -> step data.
-              Step data fields (all optional, have defaults):
-                - note (int): MIDI note, default 60. Ignored for drum tracks.
-                - notes (list[int]): Multiple notes for chords.
-                - velocity (int): 0-127, default 100.
-                - gate (float): 0.0-1.0, fraction of step duration, default 0.5.
-                - probability (float): 0.0-1.0, chance of playing, default 1.0.
-                - enabled (bool): default True.
-        length: Pattern length in steps (default 16, any multiple of 16).
+        name: Pattern name (e.g., "intro", "verse", "drop").
+        tracks: Track data keyed by track name. Step fields are strictly validated.
+        length: Pattern length in steps (default 16).
     """
     pattern = Pattern(length=length)
-    for track_name, track_data in tracks.items():
-        if track_name not in VALID_TRACK_NAMES:
-            return f"Invalid track '{track_name}'. Must be one of: {', '.join(sorted(VALID_TRACK_NAMES))}"
-        steps, num_steps = _parse_track_data(track_name, track_data)
+    for track_name, track_config in tracks.items():
+        if isinstance(track_config, dict):
+            track_dict = track_config
+        else:
+            track_dict = track_config.model_dump(exclude_defaults=True, exclude_none=True)
+        steps, num_steps = _parse_track_data(track_name, track_dict)
         track = pattern.tracks[track_name]
         track.steps = steps
         track.num_steps = num_steps
@@ -228,24 +242,25 @@ def set_pattern(
 @mcp.tool()
 def set_track(
     pattern_name: str,
-    track: str,
-    steps: dict[str, dict],
+    track: TrackName,
+    steps: dict[str, SequencerStepConfig],
     clear_existing: bool = True,
 ) -> str:
     """Update a single track within a pattern. Use this to add/modify parts while the sequencer runs.
 
     Args:
         pattern_name: Name of the pattern to modify.
-        track: Track name: "synth1", "synth2", "drum1", "drum2", "drum3", "drum4", "midi1", "midi2".
-        steps: Dict of step_index (as string) -> step data (same format as set_pattern).
+        track: Track name.
+        steps: Step index (as string) -> step data. Step fields are strictly validated.
         clear_existing: If True (default), replace all steps. If False, merge with existing.
     """
-    if track not in VALID_TRACK_NAMES:
-        return f"Invalid track '{track}'. Must be one of: {', '.join(sorted(VALID_TRACK_NAMES))}"
-
     parsed_steps: dict[int, Step] = {}
-    for idx_str, step_data in steps.items():
-        parsed_steps[int(idx_str)] = Step.from_dict(step_data)
+    for idx_str, step_config in steps.items():
+        if isinstance(step_config, dict):
+            step_dict = step_config
+        else:
+            step_dict = step_config.model_dump(exclude_defaults=True, exclude_none=True)
+        parsed_steps[int(idx_str)] = Step.from_dict(step_dict)
 
     _engine.set_track(pattern_name, track, parsed_steps, clear=clear_existing)
     mode = "replaced" if clear_existing else "merged"
@@ -718,31 +733,31 @@ def get_macros() -> dict:
 def configure_macro(
     macro: int,
     name: str,
-    targets: list[dict],
+    targets: list[MacroTargetInput],
 ) -> str:
     """Configure what a macro knob controls. Changes take effect immediately.
 
     Args:
         macro: Macro number (1-8).
         name: Display name for this macro (e.g., "Filter Sweep").
-        targets: List of parameter targets, each a dict with:
-          - param (str): Parameter name (e.g., "filter_frequency").
-          - min (int): Value when knob is at 0. Default 0.
-          - max (int): Value when knob is at 127. Default 127.
-          Use min > max to invert the control direction.
+        targets: List of parameter targets. Each target's param must be an
+            exact synth parameter name from get_parameter_reference.
     """
     if not 1 <= macro <= 8:
         return f"Invalid macro {macro}. Must be 1-8."
 
     parsed_targets = []
     for t in targets:
-        param = t.get("param", "")
+        if isinstance(t, dict):
+            param, min_val, max_val = t.get("param", ""), t.get("min", 0), t.get("max", 127)
+        else:
+            param, min_val, max_val = t.param, t.min, t.max
         if param not in SYNTH_CC and param not in SYNTH_NRPN:
             return f"Unknown param '{param}'. Must be a valid synth parameter name."
         parsed_targets.append(MacroTarget(
             param=param,
-            min_val=t.get("min", 0),
-            max_val=t.get("max", 127),
+            min_val=min_val,
+            max_val=max_val,
         ))
 
     _macros[macro] = {"name": name, "targets": parsed_targets}
@@ -962,51 +977,31 @@ def create_synth_patch(
     synth: int,
     name: str,
     params: dict[str, int] | None = None,
-    mod_matrix: list[dict] | None = None,
-    macros: dict[str, dict] | None = None,
-    preset: str | None = None,
+    mod_matrix: list[ModMatrixEntry] | None = None,
+    macros: dict[MacroNumber, MacroConfig] | None = None,
+    preset: SynthPreset | None = None,
 ) -> dict:
     """Create a synth patch from scratch and send it to the Circuit Tracks.
 
     Unlike edit_synth_patch (which reads then modifies the current patch), this
     builds a complete patch from an init template. Use for full sound design.
 
-    Preset names: "pad", "bass", "lead", "pluck" (or None for init patch).
-
     IMPORTANT: Use get_parameter_reference to get the exact parameter names.
-    Unrecognised param names are silently ignored.
 
-    Mod matrix entries: {"source": str/int, "dest": str/int, "depth": int, "source2": str/int}
-    Depth is SIGNED: -64 to +63 (0 = no modulation, positive = positive mod).
-      e.g. depth=5 means subtle positive modulation, depth=-20 means moderate negative.
-    Sources: direct, velocity, keyboard, LFO 1+, LFO 1+/-, LFO 2+, LFO 2+/-,
-             env amp, env filter, env 3
-    Destinations: osc 1 & 2 pitch, osc 1/2 pitch, osc 1/2 v-sync,
-                  osc 1/2 pulse width / index, osc 1/2 level, noise level,
-                  ring modulation 1*2 level, filter drive amount,
-                  filter frequency, filter resonance, LFO 1/2 rate,
-                  amp/filter envelope decay
+    Mod matrix source/dest use SPACE-separated names ("filter frequency"),
+    NOT snake_case. Depth is signed: -64 to +63 (0 = no modulation).
 
-    Macro entries: {macro_num: {"targets": [{"dest": str/int, "start": int, "end": int, "depth": int}]}}
-    Macro dest uses parameter names (filter_frequency, env1_attack, etc.) or indices 0-70.
-
-    Standard macro layout (follow this order, be creative but use the names as an orientation)
-        1. Oscillator 
-        2. Oscillator Mod
-        3. Amp Envelope
-        4. Filter Envelope
-        5. Filter Frequency
-        6. Resonance
-        7. Modulation
-        8. FX
+    Standard macro layout (be creative but use these names as orientation):
+        1. Oscillator  2. Oscillator Mod  3. Amp Envelope  4. Filter Envelope
+        5. Filter Frequency  6. Resonance  7. Modulation  8. FX
 
     Args:
         synth: Synth number (1 or 2).
         name: Patch name (up to 16 chars).
-        params: Dict of parameter_name -> value.
-        mod_matrix: List of mod routing dicts.
-        macros: Dict of macro_num (str) -> config dict with "targets" list.
-        preset: Optional preset name as starting point.
+        params: Dict of parameter_name -> value (0-127).
+        mod_matrix: Mod routing entries.
+        macros: Macro knob configs keyed by number ('1'-'8').
+        preset: Base preset to start from.
     """
     if synth not in (1, 2):
         return {"error": f"Invalid synth number {synth}. Must be 1 or 2."}
@@ -1029,29 +1024,39 @@ def create_synth_patch(
                 builder._bytes[_PARAM_OFFSETS[param_name]] = max(0, min(127, int(value)))
 
     # Apply mod matrix
+    mod_matrix_raw = None
     if mod_matrix:
         builder.clear_mods()
+        mod_matrix_raw = []
         for entry in mod_matrix:
-            # Depth is accepted as signed (-64 to +63) and converted to
-            # raw 0-127 (where 64 = no modulation).
-            raw_depth = entry.get("depth", 16)
+            if isinstance(entry, dict):
+                source = entry.get("source", entry.get("source1", 0))
+                dest = entry.get("dest", entry.get("destination", 0))
+                depth = entry.get("depth", 16)
+                source2 = entry.get("source2", 0)
+                mod_matrix_raw.append(entry)
+            else:
+                source, dest, depth, source2 = entry.source1, entry.dest, entry.depth, entry.source2
+                mod_matrix_raw.append(entry.model_dump(exclude_none=True, exclude={"destination"}))
+            raw_depth = depth
             if -64 <= raw_depth <= 63:
                 raw_depth = raw_depth + 64
-            # else assume caller already passed raw 0-127
-            builder.add_mod(
-                source=entry.get("source", 0),
-                destination=entry.get("dest", 0),
-                depth=raw_depth,
-                source2=entry.get("source2", 0),
-            )
+            builder.add_mod(source=source, destination=dest, depth=raw_depth, source2=source2)
 
     # Apply macros
+    macros_raw: dict[str, dict] | None = None
     if macros:
+        macros_raw = {}
         for macro_num_str, config in macros.items():
-            macro_num = int(macro_num_str)
-            targets = config.get("targets", [])
-            position = config.get("position", 0)
-            builder.set_macro(macro_num, targets, position=position)
+            if isinstance(config, dict):
+                targets = config.get("targets", [])
+                position = config.get("position", 0)
+                macros_raw[macro_num_str] = config
+            else:
+                targets = [t.model_dump() for t in config.targets]
+                position = config.position
+                macros_raw[macro_num_str] = config.model_dump()
+            builder.set_macro(int(macro_num_str), targets, position=position)
 
     patch_bytes = list(builder.build())
     midi = _midi
@@ -1061,7 +1066,6 @@ def create_synth_patch(
     if _current_song is not None:
         from circuit_tracks.song import SoundConfig
         synth_key = f"synth{synth}"
-        # Build full params dict from the patch bytes
         all_params = {}
         for pname, offset in _PARAM_OFFSETS.items():
             all_params[pname] = patch_bytes[offset]
@@ -1069,8 +1073,8 @@ def create_synth_patch(
             preset=preset,
             name=name,
             params=all_params,
-            mod_matrix=mod_matrix,
-            macros=macros,
+            mod_matrix=mod_matrix_raw,
+            macros=macros_raw,
         )
 
     return {
@@ -1200,6 +1204,7 @@ def get_parameter_reference() -> dict:
             "macro_destinations": MACRO_DESTINATIONS,
         },
         "presets": ["pad", "bass", "lead", "pluck"],
+        "song_format": _get_song_schema(),
     }
 
 
@@ -1412,65 +1417,33 @@ _current_project_slot: int | None = None  # Tracks last selected project slot
 
 
 @mcp.tool()
-def load_song(song: dict) -> dict:
+def load_song(song: SongSchema) -> dict:
     """Load a complete song into the MCP's internal sequencer for preview.
 
     This does NOT write anything to the Circuit Tracks project storage.
-    Synth patches and drum samples are sent to the device for live preview,
-    but patterns, FX, mixer, and song structure stay in the MCP sequencer
-    only. Use start_sequencer to play back, then export_song_to_project
-    to save permanently to a project slot on the device.
+    Use start_sequencer to play back, then export_song_to_project to save.
 
-    The song format:
-    {
-      "name": "My Song",
-      "bpm": 120,
-      "swing": 50,
-      "scale": {"root": "C", "type": "minor"},
-      "sounds": {
-        "synth1": {"preset": "pad", "name": "WarmPad", "params": {...}, "mod_matrix": [...], "macros": {...}},
-        "synth2": {"preset": "bass"},
-        "drum1": {"sample": 0}, "drum2": {"sample": 2},
-        "drum3": {"sample": 42}, "drum4": {"sample": 46}
-      },
-      "fx": {
-        "reverb_preset": 3,
-        "delay_preset": 5,
-        "reverb": {"type": 2, "decay": 80, "damping": 60},
-        "delay": {"time": 64, "feedback": 70},
-        "reverb_sends": {"synth1": 40, "drum2": 10},
-        "delay_sends": {"synth1": 30},
-        "sidechain": {"synth1": {"source": "drum1", "depth": 80}}
-      },
-      "mixer": {"synth1": {"level": 100, "pan": 64}},
-      "patterns": {
-        "intro": {"length": 16, "tracks": {
-          "synth1": {"steps": {"0": {"note": 60, "velocity": 100, "gate": 0.8}}},
-          "drum1": {"steps": {"0": {}, "4": {}, "8": {}, "12": {}}}
-        }}
-      },
-      "song": ["intro", "verse", "chorus", "verse", "chorus"]
-    }
+    The song parameter is strictly validated — unknown keys are rejected.
+    Use get_parameter_reference for valid synth param names, mod matrix
+    sources/destinations, and macro destinations.
 
-    Synth presets: "pad", "bass", "lead", "pluck" (or omit for init patch).
-    Sounds.params uses the same parameter names as create_synth_patch.
-    Pattern step format is identical to set_pattern.
-    Drum steps: {} = trigger at default velocity. "note" field ignored.
-    All sections optional except "patterns".
-
-    Args:
-        song: Complete song description dict.
+    IMPORTANT NOTES:
+    - Mod matrix source/dest use SPACE-separated names ("filter frequency"),
+      NOT snake_case ("filter_frequency"). These differ from synth param names.
+    - Synth p-locks use "macros" key (NOT "p-locks", NOT "params",
+      NOT "macro_knob1"). Per-step: {"macros": {"1": 80, "5": 110}}.
+      Track-level: {"macros": {"1": {"0": 40, "8": 80}}}.
+    - Drum p-locks use track-level "params": {"pitch": {"0": 30}}.
     """
     global _current_song
-    from circuit_tracks.song import parse_song, load_song_to_sequencer
+    from circuit_tracks.song import _schema_to_song_data, _quantize_song_notes, load_song_to_sequencer
 
-    try:
-        song_data = parse_song(song)
-    except ValueError as e:
-        return {"error": str(e)}
+    # SongSchema is already validated by FastMCP, convert to internal dataclass
+    song_data = _schema_to_song_data(song)
+    _quantize_song_notes(song_data)
+    _current_song = song_data
 
     result = load_song_to_sequencer(song_data, _engine, _midi)
-    _current_song = song_data
 
     return {
         "status": "loaded",
