@@ -6,23 +6,19 @@ from pathlib import Path
 import pytest
 
 from circuit_tracks.ncs_parser import (
-    NCSFile,
-    NCSNote,
-    SynthStep,
+    NUM_SCENES,
+    NUM_TRACKS,
+    TRACK_D1,
+    TRACK_D4,
+    TRACK_S1,
+    TRACK_S2,
     get_drum_pattern,
     get_synth_pattern,
     parse_ncs,
     serialize_ncs,
-    write_ncs,
     set_pattern_chain,
     set_scene,
-    set_scene_chain,
-    NUM_TRACKS,
-    NUM_SCENES,
-    TRACK_S1,
-    TRACK_S2,
-    TRACK_D1,
-    TRACK_D4,
+    write_ncs,
 )
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "example-projects-ncs"
@@ -40,14 +36,24 @@ MIDI_NCS = EXAMPLES_DIR / "MIDISettings.ncs"
 
 
 ALL_FILES = [
-    "Empty.ncs", "2 notes.ncs", "WithDrums.ncs",
-    "ScaleAndFX.ncs", "MixerAndSends.ncs", "SceneAndChains.ncs",
-    "TiedNote.ncs", "MIDISettings.ncs",
-    "MuteAndLevels.ncs", "SceneTest2.ncs",
-    "ChainD1Only.ncs", "FXBypass.ncs",
-    "NightChain.ncs", "NightChainWithScenes.ncs",
-    "Nightdrive3Fixed.ncs", "FXTestFixed.ncs",
-    "DelaySendD1Only.ncs", "DelaySendS2Only.ncs",
+    "Empty.ncs",
+    "2 notes.ncs",
+    "WithDrums.ncs",
+    "ScaleAndFX.ncs",
+    "MixerAndSends.ncs",
+    "SceneAndChains.ncs",
+    "TiedNote.ncs",
+    "MIDISettings.ncs",
+    "MuteAndLevels.ncs",
+    "SceneTest2.ncs",
+    "ChainD1Only.ncs",
+    "FXBypass.ncs",
+    "NightChain.ncs",
+    "NightChainWithScenes.ncs",
+    "Nightdrive3Fixed.ncs",
+    "FXTestFixed.ncs",
+    "DelaySendD1Only.ncs",
+    "DelaySendS2Only.ncs",
     "FXFinal.ncs",
 ]
 
@@ -180,13 +186,13 @@ def test_drums_with_drums() -> None:
     for track in range(4):
         pat = get_drum_pattern(ncs, track=track, pattern=0)
         # Step 0 (index 0) should be active
-        assert pat.steps[0].active, f"Drum {track+1} step 0 should be active"
+        assert pat.steps[0].active, f"Drum {track + 1} step 0 should be active"
         assert pat.steps[0].velocity == 0x60  # default velocity
         # Step 8 (index 8) should be active
-        assert pat.steps[8].active, f"Drum {track+1} step 8 should be active"
+        assert pat.steps[8].active, f"Drum {track + 1} step 8 should be active"
         # Other steps should be inactive
         for i in [1, 2, 3, 4, 5, 6, 7, 9, 10, 15]:
-            assert not pat.steps[i].active, f"Drum {track+1} step {i} should be inactive"
+            assert not pat.steps[i].active, f"Drum {track + 1} step {i} should be inactive"
 
 
 def test_drums_empty() -> None:
@@ -196,7 +202,7 @@ def test_drums_empty() -> None:
     for track in range(4):
         pat = get_drum_pattern(ncs, track=track, pattern=0)
         for i, step in enumerate(pat.steps):
-            assert not step.active, f"Drum {track+1} step {i} should be inactive"
+            assert not step.active, f"Drum {track + 1} step {i} should be inactive"
 
 
 def test_drum_probability_default() -> None:
@@ -450,7 +456,7 @@ def test_fx_sidechain() -> None:
 def test_fx_mixer_level_zero() -> None:
     """MuteAndLevels: S1 level set to 0."""
     ncs = parse_ncs(EXAMPLES_DIR / "MuteAndLevels.ncs")
-    assert ncs.fx.mixer_levels[0] == 0   # S1 = 0
+    assert ncs.fx.mixer_levels[0] == 0  # S1 = 0
     assert ncs.fx.mixer_levels[1] == 100  # S2 unchanged
 
 
@@ -464,9 +470,10 @@ def test_fx_roundtrip_write() -> None:
     ncs.fx.mixer_levels[0] = 50
 
     data = serialize_ncs(ncs)
-    ncs2 = parse_ncs.__wrapped__(data) if hasattr(parse_ncs, '__wrapped__') else None
+    ncs2 = parse_ncs.__wrapped__(data) if hasattr(parse_ncs, "__wrapped__") else None
     # Re-parse from bytes
     import tempfile
+
     with tempfile.NamedTemporaryFile(suffix=".ncs", delete=False) as f:
         f.write(data)
         f.flush()

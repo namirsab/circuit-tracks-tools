@@ -19,8 +19,8 @@ Patch binary layout (340 bytes, from Programmer's Reference Guide v3):
 
 from circuit_tracks.constants import (
     SYSEX_MANUFACTURER_ID,
-    SYSEX_PRODUCT_TYPE,
     SYSEX_PRODUCT_NUMBER,
+    SYSEX_PRODUCT_TYPE,
 )
 from circuit_tracks.midi import MidiConnection
 
@@ -48,7 +48,6 @@ _PARAM_OFFSETS: dict[str, int] = {
     "portamento_rate": 33,
     "pre_glide": 34,
     "keyboard_octave": 35,
-
     # --- Oscillator 1 (36-44) ---
     "osc1_wave": 36,
     "osc1_wave_interpolate": 37,
@@ -59,7 +58,6 @@ _PARAM_OFFSETS: dict[str, int] = {
     "osc1_semitones": 42,
     "osc1_cents": 43,
     "osc1_pitchbend": 44,
-
     # --- Oscillator 2 (45-53) ---
     "osc2_wave": 45,
     "osc2_wave_interpolate": 46,
@@ -70,7 +68,6 @@ _PARAM_OFFSETS: dict[str, int] = {
     "osc2_semitones": 51,
     "osc2_cents": 52,
     "osc2_pitchbend": 53,
-
     # --- Mixer (54-59) ---
     "osc1_level": 54,
     "osc2_level": 55,
@@ -78,7 +75,6 @@ _PARAM_OFFSETS: dict[str, int] = {
     "noise_level": 57,
     "pre_fx_level": 58,
     "post_fx_level": 59,
-
     # --- Filter (60-68) ---
     "routing": 60,
     "drive": 61,
@@ -89,28 +85,24 @@ _PARAM_OFFSETS: dict[str, int] = {
     "filter_resonance": 66,
     "filter_q_normalize": 67,
     "env2_to_filter_freq": 68,
-
     # --- Envelope 1 / Amp (69-73) ---
     "env1_velocity": 69,
     "env1_attack": 70,
     "env1_decay": 71,
     "env1_sustain": 72,
     "env1_release": 73,
-
     # --- Envelope 2 / Filter (74-78) ---
     "env2_velocity": 74,
     "env2_attack": 75,
     "env2_decay": 76,
     "env2_sustain": 77,
     "env2_release": 78,
-
     # --- Envelope 3 (79-83) ---
     "env3_delay": 79,
     "env3_attack": 80,
     "env3_decay": 81,
     "env3_sustain": 82,
     "env3_release": 83,
-
     # --- LFO 1 (84-91) ---
     "lfo1_waveform": 84,
     "lfo1_phase_offset": 85,
@@ -120,7 +112,6 @@ _PARAM_OFFSETS: dict[str, int] = {
     "lfo1_rate": 89,
     "lfo1_rate_sync": 90,
     "lfo1_flags": 91,  # bit0=OneShot, bit1=KeySync, bit2=CommonSync, bit3=DelayTrigger, bit4-5=FadeMode
-
     # --- LFO 2 (92-99) ---
     "lfo2_waveform": 92,
     "lfo2_phase_offset": 93,
@@ -130,11 +121,9 @@ _PARAM_OFFSETS: dict[str, int] = {
     "lfo2_rate": 97,
     "lfo2_rate_sync": 98,
     "lfo2_flags": 99,  # same bitfield as LFO1, FadeMode bits use values 4-7
-
     # --- Effects (100-102) ---
     "distortion_level": 100,
     "chorus_level": 102,
-
     # --- Equaliser (105-110) ---
     "eq_bass_frequency": 105,
     "eq_bass_level": 106,
@@ -142,7 +131,6 @@ _PARAM_OFFSETS: dict[str, int] = {
     "eq_mid_level": 108,
     "eq_treble_frequency": 109,
     "eq_treble_level": 110,
-
     # --- Distortion & Chorus details (116-123) ---
     "distortion_type": 116,
     "distortion_compensation": 117,
@@ -214,7 +202,7 @@ def parse_patch_data(sysex_data: list[int]) -> dict:
         return {"error": f"Patch data too short: {len(patch_bytes)} bytes, expected {_PATCH_SIZE}"}
 
     # Extract patch name (ASCII, 16 chars at offset 0)
-    name_bytes = patch_bytes[_PATCH_NAME_OFFSET:_PATCH_NAME_OFFSET + _PATCH_NAME_LENGTH]
+    name_bytes = patch_bytes[_PATCH_NAME_OFFSET : _PATCH_NAME_OFFSET + _PATCH_NAME_LENGTH]
     name = "".join(chr(b) for b in name_bytes if 32 <= b <= 126).strip()
 
     # Category and genre
@@ -228,7 +216,7 @@ def parse_patch_data(sysex_data: list[int]) -> dict:
             params[param_name] = patch_bytes[addr]
 
     # Raw hex of the parameter region for inspection
-    raw_param_hex = " ".join(f"{b:02x}" for b in patch_bytes[_PATCH_PARAMS_OFFSET:_PATCH_PARAMS_OFFSET + 100])
+    raw_param_hex = " ".join(f"{b:02x}" for b in patch_bytes[_PATCH_PARAMS_OFFSET : _PATCH_PARAMS_OFFSET + 100])
 
     return {
         "name": name,
@@ -301,7 +289,7 @@ def read_and_modify_patch(
         return {"error": "No response from device. Is it connected?"}
 
     patch_start = 8
-    patch_bytes = list(sysex_data[patch_start:patch_start + _PATCH_SIZE])
+    patch_bytes = list(sysex_data[patch_start : patch_start + _PATCH_SIZE])
 
     if len(patch_bytes) < _PATCH_SIZE:
         return {"error": f"Patch data too short: {len(patch_bytes)} bytes"}

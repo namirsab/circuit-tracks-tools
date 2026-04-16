@@ -30,15 +30,15 @@ Usage:
 from __future__ import annotations
 
 from circuit_tracks.constants import (
-    MACRO_DESTINATIONS,
     MACRO_DEST_BY_NAME,
-    MOD_MATRIX_SOURCES,
-    MOD_MATRIX_DESTINATIONS,
-    MOD_SOURCE_BY_NAME,
+    MACRO_DESTINATIONS,
     MOD_DEST_BY_NAME,
+    MOD_MATRIX_DESTINATIONS,
+    MOD_MATRIX_SOURCES,
+    MOD_SOURCE_BY_NAME,
     SYSEX_MANUFACTURER_ID,
-    SYSEX_PRODUCT_TYPE,
     SYSEX_PRODUCT_NUMBER,
+    SYSEX_PRODUCT_TYPE,
 )
 
 # --- Patch format constants ---
@@ -57,75 +57,75 @@ _INIT_PATCH[0:16] = _init_name
 # Reserved bytes 18-31 (already zero)
 
 # Voice (32-35)
-_INIT_PATCH[32] = 2    # PolyphonyMode (Poly)
-_INIT_PATCH[33] = 0    # PortamentoRate
-_INIT_PATCH[34] = 64   # PreGlide (center)
-_INIT_PATCH[35] = 64   # KeyboardOctave (center)
+_INIT_PATCH[32] = 2  # PolyphonyMode (Poly)
+_INIT_PATCH[33] = 0  # PortamentoRate
+_INIT_PATCH[34] = 64  # PreGlide (center)
+_INIT_PATCH[35] = 64  # KeyboardOctave (center)
 
 # Osc1 (36-44)
-_INIT_PATCH[36] = 2    # Wave (sawtooth)
+_INIT_PATCH[36] = 2  # Wave (sawtooth)
 _INIT_PATCH[37] = 127  # WaveInterpolate
-_INIT_PATCH[38] = 64   # PulseWidthIndex
-_INIT_PATCH[42] = 64   # Semitones (center)
-_INIT_PATCH[43] = 64   # Cents (center)
-_INIT_PATCH[44] = 76   # PitchBend (+12)
+_INIT_PATCH[38] = 64  # PulseWidthIndex
+_INIT_PATCH[42] = 64  # Semitones (center)
+_INIT_PATCH[43] = 64  # Cents (center)
+_INIT_PATCH[44] = 76  # PitchBend (+12)
 
 # Osc2 (45-53)
-_INIT_PATCH[45] = 2    # Wave (sawtooth)
+_INIT_PATCH[45] = 2  # Wave (sawtooth)
 _INIT_PATCH[46] = 127  # WaveInterpolate
-_INIT_PATCH[47] = 64   # PulseWidthIndex
-_INIT_PATCH[51] = 64   # Semitones (center)
-_INIT_PATCH[52] = 64   # Cents (center)
-_INIT_PATCH[53] = 76   # PitchBend (+12)
+_INIT_PATCH[47] = 64  # PulseWidthIndex
+_INIT_PATCH[51] = 64  # Semitones (center)
+_INIT_PATCH[52] = 64  # Cents (center)
+_INIT_PATCH[53] = 76  # PitchBend (+12)
 
 # Mixer (54-59)
 _INIT_PATCH[54] = 127  # Osc1Level
-_INIT_PATCH[58] = 64   # PreFXLevel (center)
-_INIT_PATCH[59] = 64   # PostFXLevel (center)
+_INIT_PATCH[58] = 64  # PreFXLevel (center)
+_INIT_PATCH[59] = 64  # PostFXLevel (center)
 
 # Filter (60-68)
-_INIT_PATCH[63] = 1    # Type (LP24)
+_INIT_PATCH[63] = 1  # Type (LP24)
 _INIT_PATCH[64] = 127  # Frequency (fully open)
-_INIT_PATCH[67] = 64   # QNormalise
-_INIT_PATCH[68] = 64   # Env2ToFreq (center)
+_INIT_PATCH[67] = 64  # QNormalise
+_INIT_PATCH[68] = 64  # Env2ToFreq (center)
 
 # Envelope 1 / Amp (69-73)
-_INIT_PATCH[69] = 64   # Velocity (center)
-_INIT_PATCH[70] = 2    # Attack
-_INIT_PATCH[71] = 90   # Decay
+_INIT_PATCH[69] = 64  # Velocity (center)
+_INIT_PATCH[70] = 2  # Attack
+_INIT_PATCH[71] = 90  # Decay
 _INIT_PATCH[72] = 127  # Sustain
-_INIT_PATCH[73] = 40   # Release
+_INIT_PATCH[73] = 40  # Release
 
 # Envelope 2 / Filter (74-78)
-_INIT_PATCH[74] = 64   # Velocity (center)
-_INIT_PATCH[75] = 2    # Attack
-_INIT_PATCH[76] = 75   # Decay
-_INIT_PATCH[77] = 35   # Sustain
-_INIT_PATCH[78] = 45   # Release
+_INIT_PATCH[74] = 64  # Velocity (center)
+_INIT_PATCH[75] = 2  # Attack
+_INIT_PATCH[76] = 75  # Decay
+_INIT_PATCH[77] = 35  # Sustain
+_INIT_PATCH[78] = 45  # Release
 
 # Envelope 3 (79-83)
-_INIT_PATCH[80] = 10   # Attack
-_INIT_PATCH[81] = 70   # Decay
-_INIT_PATCH[82] = 64   # Sustain
-_INIT_PATCH[83] = 40   # Release
+_INIT_PATCH[80] = 10  # Attack
+_INIT_PATCH[81] = 70  # Decay
+_INIT_PATCH[82] = 64  # Sustain
+_INIT_PATCH[83] = 40  # Release
 
 # LFO 1 (84-91)
-_INIT_PATCH[89] = 68   # Rate
+_INIT_PATCH[89] = 68  # Rate
 
 # LFO 2 (92-99)
-_INIT_PATCH[97] = 68   # Rate
+_INIT_PATCH[97] = 68  # Rate
 
 # EQ (105-110)
 _INIT_PATCH[105] = 64  # BassFrequency
 _INIT_PATCH[106] = 64  # BassLevel
 _INIT_PATCH[107] = 64  # MidFrequency
 _INIT_PATCH[108] = 64  # MidLevel
-_INIT_PATCH[109] = 125 # TrebleFrequency
+_INIT_PATCH[109] = 125  # TrebleFrequency
 _INIT_PATCH[110] = 64  # TrebleLevel
 
 # Distortion & Chorus details (116-123)
-_INIT_PATCH[117] = 100 # Distortion_Compensation
-_INIT_PATCH[118] = 1   # Chorus_Type (Chorus)
+_INIT_PATCH[117] = 100  # Distortion_Compensation
+_INIT_PATCH[118] = 1  # Chorus_Type (Chorus)
 _INIT_PATCH[119] = 20  # Chorus_Rate
 _INIT_PATCH[121] = 74  # Chorus_Feedback
 _INIT_PATCH[122] = 64  # Chorus_ModDepth
@@ -141,7 +141,7 @@ for _k in range(8):
     for _t in range(4):
         _tb = _kb + 1 + _t * 4
         _INIT_PATCH[_tb + 2] = 127  # EndPos
-        _INIT_PATCH[_tb + 3] = 64   # Depth
+        _INIT_PATCH[_tb + 3] = 64  # Depth
 
 _INIT_PATCH = bytes(_INIT_PATCH)
 
@@ -219,8 +219,13 @@ class PatchBuilder:
 
     # --- Voice ---
 
-    def voice(self, polyphony: int | None = None, portamento: int | None = None,
-              pre_glide: int | None = None, octave: int | None = None) -> PatchBuilder:
+    def voice(
+        self,
+        polyphony: int | None = None,
+        portamento: int | None = None,
+        pre_glide: int | None = None,
+        octave: int | None = None,
+    ) -> PatchBuilder:
         if polyphony is not None:
             self._bytes[32] = _clamp(polyphony, 0, 2)
         if portamento is not None:
@@ -233,11 +238,18 @@ class PatchBuilder:
 
     # --- Oscillators ---
 
-    def osc1(self, wave: int | None = None, interpolate: int | None = None,
-             pulse_width: int | None = None, sync_depth: int | None = None,
-             density: int | None = None, density_detune: int | None = None,
-             semitones: int | None = None, cents: int | None = None,
-             pitchbend: int | None = None) -> PatchBuilder:
+    def osc1(
+        self,
+        wave: int | None = None,
+        interpolate: int | None = None,
+        pulse_width: int | None = None,
+        sync_depth: int | None = None,
+        density: int | None = None,
+        density_detune: int | None = None,
+        semitones: int | None = None,
+        cents: int | None = None,
+        pitchbend: int | None = None,
+    ) -> PatchBuilder:
         if wave is not None:
             self._bytes[36] = _clamp(wave, 0, 29)
         if interpolate is not None:
@@ -258,11 +270,18 @@ class PatchBuilder:
             self._bytes[44] = _clamp(pitchbend, 52, 76)
         return self
 
-    def osc2(self, wave: int | None = None, interpolate: int | None = None,
-             pulse_width: int | None = None, sync_depth: int | None = None,
-             density: int | None = None, density_detune: int | None = None,
-             semitones: int | None = None, cents: int | None = None,
-             pitchbend: int | None = None) -> PatchBuilder:
+    def osc2(
+        self,
+        wave: int | None = None,
+        interpolate: int | None = None,
+        pulse_width: int | None = None,
+        sync_depth: int | None = None,
+        density: int | None = None,
+        density_detune: int | None = None,
+        semitones: int | None = None,
+        cents: int | None = None,
+        pitchbend: int | None = None,
+    ) -> PatchBuilder:
         if wave is not None:
             self._bytes[45] = _clamp(wave, 0, 29)
         if interpolate is not None:
@@ -285,9 +304,15 @@ class PatchBuilder:
 
     # --- Mixer ---
 
-    def mixer(self, osc1_level: int | None = None, osc2_level: int | None = None,
-              ring_mod: int | None = None, noise: int | None = None,
-              pre_fx: int | None = None, post_fx: int | None = None) -> PatchBuilder:
+    def mixer(
+        self,
+        osc1_level: int | None = None,
+        osc2_level: int | None = None,
+        ring_mod: int | None = None,
+        noise: int | None = None,
+        pre_fx: int | None = None,
+        post_fx: int | None = None,
+    ) -> PatchBuilder:
         if osc1_level is not None:
             self._set(54, osc1_level)
         if osc2_level is not None:
@@ -304,11 +329,18 @@ class PatchBuilder:
 
     # --- Filter ---
 
-    def filter(self, frequency: int | None = None, resonance: int | None = None,
-               drive: int | None = None, drive_type: int | None = None,
-               filter_type: int | None = None, routing: int | None = None,
-               tracking: int | None = None, q_normalize: int | None = None,
-               env2_to_freq: int | None = None) -> PatchBuilder:
+    def filter(
+        self,
+        frequency: int | None = None,
+        resonance: int | None = None,
+        drive: int | None = None,
+        drive_type: int | None = None,
+        filter_type: int | None = None,
+        routing: int | None = None,
+        tracking: int | None = None,
+        q_normalize: int | None = None,
+        env2_to_freq: int | None = None,
+    ) -> PatchBuilder:
         if routing is not None:
             self._bytes[60] = _clamp(routing, 0, 2)
         if drive is not None:
@@ -331,9 +363,14 @@ class PatchBuilder:
 
     # --- Envelopes ---
 
-    def env_amp(self, attack: int | None = None, decay: int | None = None,
-                sustain: int | None = None, release: int | None = None,
-                velocity: int | None = None) -> PatchBuilder:
+    def env_amp(
+        self,
+        attack: int | None = None,
+        decay: int | None = None,
+        sustain: int | None = None,
+        release: int | None = None,
+        velocity: int | None = None,
+    ) -> PatchBuilder:
         if velocity is not None:
             self._set(69, velocity)
         if attack is not None:
@@ -346,9 +383,14 @@ class PatchBuilder:
             self._set(73, release)
         return self
 
-    def env_filter(self, attack: int | None = None, decay: int | None = None,
-                   sustain: int | None = None, release: int | None = None,
-                   velocity: int | None = None) -> PatchBuilder:
+    def env_filter(
+        self,
+        attack: int | None = None,
+        decay: int | None = None,
+        sustain: int | None = None,
+        release: int | None = None,
+        velocity: int | None = None,
+    ) -> PatchBuilder:
         if velocity is not None:
             self._set(74, velocity)
         if attack is not None:
@@ -361,9 +403,14 @@ class PatchBuilder:
             self._set(78, release)
         return self
 
-    def env3(self, delay: int | None = None, attack: int | None = None,
-             decay: int | None = None, sustain: int | None = None,
-             release: int | None = None) -> PatchBuilder:
+    def env3(
+        self,
+        delay: int | None = None,
+        attack: int | None = None,
+        decay: int | None = None,
+        sustain: int | None = None,
+        release: int | None = None,
+    ) -> PatchBuilder:
         if delay is not None:
             self._set(79, delay)
         if attack is not None:
@@ -378,13 +425,21 @@ class PatchBuilder:
 
     # --- LFOs ---
 
-    def lfo1(self, waveform: int | None = None, rate: int | None = None,
-             phase_offset: int | None = None, slew_rate: int | None = None,
-             delay: int | None = None, delay_sync: int | None = None,
-             rate_sync: int | None = None, one_shot: bool | None = None,
-             key_sync: bool | None = None, common_sync: bool | None = None,
-             delay_trigger: bool | None = None,
-             fade_mode: int | None = None) -> PatchBuilder:
+    def lfo1(
+        self,
+        waveform: int | None = None,
+        rate: int | None = None,
+        phase_offset: int | None = None,
+        slew_rate: int | None = None,
+        delay: int | None = None,
+        delay_sync: int | None = None,
+        rate_sync: int | None = None,
+        one_shot: bool | None = None,
+        key_sync: bool | None = None,
+        common_sync: bool | None = None,
+        delay_trigger: bool | None = None,
+        fade_mode: int | None = None,
+    ) -> PatchBuilder:
         if waveform is not None:
             self._bytes[84] = _clamp(waveform, 0, 37)
         if phase_offset is not None:
@@ -415,13 +470,21 @@ class PatchBuilder:
         self._bytes[91] = flags
         return self
 
-    def lfo2(self, waveform: int | None = None, rate: int | None = None,
-             phase_offset: int | None = None, slew_rate: int | None = None,
-             delay: int | None = None, delay_sync: int | None = None,
-             rate_sync: int | None = None, one_shot: bool | None = None,
-             key_sync: bool | None = None, common_sync: bool | None = None,
-             delay_trigger: bool | None = None,
-             fade_mode: int | None = None) -> PatchBuilder:
+    def lfo2(
+        self,
+        waveform: int | None = None,
+        rate: int | None = None,
+        phase_offset: int | None = None,
+        slew_rate: int | None = None,
+        delay: int | None = None,
+        delay_sync: int | None = None,
+        rate_sync: int | None = None,
+        one_shot: bool | None = None,
+        key_sync: bool | None = None,
+        common_sync: bool | None = None,
+        delay_trigger: bool | None = None,
+        fade_mode: int | None = None,
+    ) -> PatchBuilder:
         if waveform is not None:
             self._bytes[92] = _clamp(waveform, 0, 37)
         if phase_offset is not None:
@@ -454,9 +517,15 @@ class PatchBuilder:
 
     # --- EQ ---
 
-    def eq(self, bass_freq: int | None = None, bass_level: int | None = None,
-           mid_freq: int | None = None, mid_level: int | None = None,
-           treble_freq: int | None = None, treble_level: int | None = None) -> PatchBuilder:
+    def eq(
+        self,
+        bass_freq: int | None = None,
+        bass_level: int | None = None,
+        mid_freq: int | None = None,
+        mid_level: int | None = None,
+        treble_freq: int | None = None,
+        treble_level: int | None = None,
+    ) -> PatchBuilder:
         if bass_freq is not None:
             self._set(105, bass_freq)
         if bass_level is not None:
@@ -473,8 +542,9 @@ class PatchBuilder:
 
     # --- Effects ---
 
-    def distortion(self, level: int | None = None, type: int | None = None,
-                   compensation: int | None = None) -> PatchBuilder:
+    def distortion(
+        self, level: int | None = None, type: int | None = None, compensation: int | None = None
+    ) -> PatchBuilder:
         if level is not None:
             self._set(100, level)
         if type is not None:
@@ -483,10 +553,16 @@ class PatchBuilder:
             self._set(117, compensation)
         return self
 
-    def chorus(self, level: int | None = None, type: int | None = None,
-               rate: int | None = None, rate_sync: int | None = None,
-               feedback: int | None = None, mod_depth: int | None = None,
-               delay: int | None = None) -> PatchBuilder:
+    def chorus(
+        self,
+        level: int | None = None,
+        type: int | None = None,
+        rate: int | None = None,
+        rate_sync: int | None = None,
+        feedback: int | None = None,
+        mod_depth: int | None = None,
+        delay: int | None = None,
+    ) -> PatchBuilder:
         if level is not None:
             self._set(102, level)
         if type is not None:
@@ -505,8 +581,9 @@ class PatchBuilder:
 
     # --- Mod Matrix ---
 
-    def add_mod(self, source: int | str, destination: int | str,
-                depth: int = 80, source2: int | str = 0) -> PatchBuilder:
+    def add_mod(
+        self, source: int | str, destination: int | str, depth: int = 80, source2: int | str = 0
+    ) -> PatchBuilder:
         """Add a modulation routing to the next available slot.
 
         Args:
@@ -543,8 +620,7 @@ class PatchBuilder:
 
     # --- Macros ---
 
-    def set_macro(self, macro_num: int, targets: list[dict],
-                  position: int = 0) -> PatchBuilder:
+    def set_macro(self, macro_num: int, targets: list[dict], position: int = 0) -> PatchBuilder:
         """Configure a hardware macro knob.
 
         The Circuit Tracks standard knob layout is:
@@ -592,8 +668,7 @@ class PatchBuilder:
                             f"Valid keys: {sorted(_VALID_TARGET_KEYS)}"
                         )
                     raise ValueError(
-                        f"Macro {macro_num} target {i}: unknown key {key!r}. "
-                        f"Valid keys: {sorted(_VALID_TARGET_KEYS)}"
+                        f"Macro {macro_num} target {i}: unknown key {key!r}. Valid keys: {sorted(_VALID_TARGET_KEYS)}"
                     )
 
         base = _MACRO_START + (macro_num - 1) * _MACRO_SIZE
@@ -606,7 +681,7 @@ class PatchBuilder:
                 if "dest" not in t:
                     raise ValueError(
                         f"Macro {macro_num} target {i}: missing required key 'dest'. "
-                        f"Example: {{\"dest\": \"filter_frequency\", \"start\": 0, \"end\": 127}}"
+                        f'Example: {{"dest": "filter_frequency", "start": 0, "end": 127}}'
                     )
                 self._bytes[tb] = _resolve_macro_dest(t["dest"])
                 self._bytes[tb + 1] = _clamp(t.get("start", 0))
@@ -633,9 +708,9 @@ class PatchBuilder:
             synth: Synth number (1 or 2)
         """
         synth_index = synth - 1
-        header = bytes([0xF0] + SYSEX_MANUFACTURER_ID
-                       + [SYSEX_PRODUCT_TYPE, SYSEX_PRODUCT_NUMBER,
-                          0x00, synth_index, 0x00])
+        header = bytes(
+            [0xF0] + SYSEX_MANUFACTURER_ID + [SYSEX_PRODUCT_TYPE, SYSEX_PRODUCT_NUMBER, 0x00, synth_index, 0x00]
+        )
         return header + self.build() + bytes([0xF7])
 
 
@@ -656,80 +731,95 @@ def _std_macros(builder: PatchBuilder, osc_wave: int = 2) -> PatchBuilder:
     """
     # Knob 1: use pulse_width for basic waveforms, wave_interpolate for wavetables
     if osc_wave >= 14:
-        knob1 = [{"dest": "osc1_wave_interpolate", "start": 0, "end": 127},
-                 {"dest": "osc2_wave_interpolate", "start": 0, "end": 127}]
+        knob1 = [
+            {"dest": "osc1_wave_interpolate", "start": 0, "end": 127},
+            {"dest": "osc2_wave_interpolate", "start": 0, "end": 127},
+        ]
     else:
-        knob1 = [{"dest": "osc1_pulse_width_index", "start": 0, "end": 127},
-                 {"dest": "osc2_pulse_width_index", "start": 0, "end": 127}]
+        knob1 = [
+            {"dest": "osc1_pulse_width_index", "start": 0, "end": 127},
+            {"dest": "osc2_pulse_width_index", "start": 0, "end": 127},
+        ]
 
-    return (builder
-            .set_macro(1, knob1)
-            .set_macro(2, [{"dest": "osc1_density", "start": 0, "end": 80},
-                           {"dest": "osc1_density_detune", "start": 0, "end": 60}])
-            .set_macro(3, [{"dest": "env1_attack", "start": 0, "end": 127},
-                           {"dest": "env1_release", "start": 0, "end": 127}])
-            .set_macro(4, [{"dest": "env2_attack", "start": 0, "end": 100},
-                           {"dest": "env2_decay", "start": 0, "end": 127}])
-            .set_macro(5, [{"dest": "filter_frequency", "start": 0, "end": 127}])
-            .set_macro(6, [{"dest": "filter_resonance", "start": 0, "end": 127}])
-            .set_macro(7, [{"dest": "osc2_cents", "start": 52, "end": 76}])
-            .set_macro(8, [{"dest": "distortion_level", "start": 0, "end": 90},
-                           {"dest": "chorus_level", "start": 0, "end": 80}]))
+    return (
+        builder.set_macro(1, knob1)
+        .set_macro(
+            2, [{"dest": "osc1_density", "start": 0, "end": 80}, {"dest": "osc1_density_detune", "start": 0, "end": 60}]
+        )
+        .set_macro(
+            3, [{"dest": "env1_attack", "start": 0, "end": 127}, {"dest": "env1_release", "start": 0, "end": 127}]
+        )
+        .set_macro(4, [{"dest": "env2_attack", "start": 0, "end": 100}, {"dest": "env2_decay", "start": 0, "end": 127}])
+        .set_macro(5, [{"dest": "filter_frequency", "start": 0, "end": 127}])
+        .set_macro(6, [{"dest": "filter_resonance", "start": 0, "end": 127}])
+        .set_macro(7, [{"dest": "osc2_cents", "start": 52, "end": 76}])
+        .set_macro(
+            8, [{"dest": "distortion_level", "start": 0, "end": 90}, {"dest": "chorus_level", "start": 0, "end": 80}]
+        )
+    )
 
 
 def preset_pad(name: str = "Pad") -> PatchBuilder:
     """Warm pad: detuned saws, slow attack/release, LP filter, chorus, LFO->filter."""
-    builder = (PatchBuilder(name)
-               .voice(polyphony=2)
-               .osc1(wave=2, density=10, density_detune=20)
-               .osc2(wave=2, semitones=64, cents=70)
-               .mixer(osc1_level=100, osc2_level=90)
-               .filter(frequency=65, resonance=15, filter_type=1, env2_to_freq=75)
-               .env_amp(attack=60, decay=90, sustain=127, release=80)
-               .env_filter(attack=30, decay=80, sustain=50, release=70)
-               .chorus(level=0, rate=30, feedback=60, mod_depth=70)
-               .add_mod("LFO 1+", "filter frequency", depth=75)
-               .lfo1(waveform=0, rate=40))
+    builder = (
+        PatchBuilder(name)
+        .voice(polyphony=2)
+        .osc1(wave=2, density=10, density_detune=20)
+        .osc2(wave=2, semitones=64, cents=70)
+        .mixer(osc1_level=100, osc2_level=90)
+        .filter(frequency=65, resonance=15, filter_type=1, env2_to_freq=75)
+        .env_amp(attack=60, decay=90, sustain=127, release=80)
+        .env_filter(attack=30, decay=80, sustain=50, release=70)
+        .chorus(level=0, rate=30, feedback=60, mod_depth=70)
+        .add_mod("LFO 1+", "filter frequency", depth=75)
+        .lfo1(waveform=0, rate=40)
+    )
     return _std_macros(builder, osc_wave=2)
 
 
 def preset_bass(name: str = "Bass") -> PatchBuilder:
     """Mono bass: saw, LP24 filter with resonance, fast envelope."""
-    builder = (PatchBuilder(name)
-               .voice(polyphony=0, octave=62)
-               .osc1(wave=2)
-               .osc2(wave=2, semitones=52)  # -12 semitones (sub)
-               .mixer(osc1_level=110, osc2_level=80)
-               .filter(frequency=50, resonance=10, filter_type=1, env2_to_freq=90)
-               .env_amp(attack=0, decay=70, sustain=100, release=20)
-               .env_filter(attack=0, decay=60, sustain=20, release=20))
+    builder = (
+        PatchBuilder(name)
+        .voice(polyphony=0, octave=62)
+        .osc1(wave=2)
+        .osc2(wave=2, semitones=52)  # -12 semitones (sub)
+        .mixer(osc1_level=110, osc2_level=80)
+        .filter(frequency=50, resonance=10, filter_type=1, env2_to_freq=90)
+        .env_amp(attack=0, decay=70, sustain=100, release=20)
+        .env_filter(attack=0, decay=60, sustain=20, release=20)
+    )
     return _std_macros(builder, osc_wave=2)
 
 
 def preset_lead(name: str = "Lead") -> PatchBuilder:
     """Mono lead: bright, portamento, distortion, LFO vibrato."""
-    builder = (PatchBuilder(name)
-               .voice(polyphony=0, portamento=30)
-               .osc1(wave=2)
-               .osc2(wave=13, semitones=76)  # square, +12
-               .mixer(osc1_level=100, osc2_level=60)
-               .filter(frequency=70, resonance=10, filter_type=1, env2_to_freq=70)
-               .env_amp(attack=2, decay=80, sustain=100, release=30)
-               .env_filter(attack=2, decay=70, sustain=40, release=30)
-               .distortion(level=40, type=0)
-               .add_mod("LFO 1+/-", "osc 1 & 2 pitch", depth=67)
-               .lfo1(waveform=0, rate=75, delay=40))
+    builder = (
+        PatchBuilder(name)
+        .voice(polyphony=0, portamento=30)
+        .osc1(wave=2)
+        .osc2(wave=13, semitones=76)  # square, +12
+        .mixer(osc1_level=100, osc2_level=60)
+        .filter(frequency=70, resonance=10, filter_type=1, env2_to_freq=70)
+        .env_amp(attack=2, decay=80, sustain=100, release=30)
+        .env_filter(attack=2, decay=70, sustain=40, release=30)
+        .distortion(level=40, type=0)
+        .add_mod("LFO 1+/-", "osc 1 & 2 pitch", depth=67)
+        .lfo1(waveform=0, rate=75, delay=40)
+    )
     return _std_macros(builder, osc_wave=2)
 
 
 def preset_pluck(name: str = "Pluck") -> PatchBuilder:
     """Pluck: fast attack, short decay, filter envelope sweep."""
-    builder = (PatchBuilder(name)
-               .voice(polyphony=2)
-               .osc1(wave=2)
-               .osc2(wave=1, cents=68)
-               .mixer(osc1_level=100, osc2_level=70)
-               .filter(frequency=40, resonance=15, filter_type=1, env2_to_freq=100)
-               .env_amp(attack=0, decay=80, sustain=0, release=40)
-               .env_filter(attack=0, decay=60, sustain=0, release=30))
+    builder = (
+        PatchBuilder(name)
+        .voice(polyphony=2)
+        .osc1(wave=2)
+        .osc2(wave=1, cents=68)
+        .mixer(osc1_level=100, osc2_level=70)
+        .filter(frequency=40, resonance=15, filter_type=1, env2_to_freq=100)
+        .env_amp(attack=0, decay=80, sustain=0, release=40)
+        .env_filter(attack=0, decay=60, sustain=0, release=30)
+    )
     return _std_macros(builder, osc_wave=2)

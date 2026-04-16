@@ -12,9 +12,9 @@ from pathlib import Path
 # MIDI channels (0-indexed for mido)
 SYNTH1_CHANNEL = 0  # Channel 1
 SYNTH2_CHANNEL = 1  # Channel 2
-DRUMS_CHANNEL = 9   # Channel 10
-MIDI1_CHANNEL = 2   # Channel 3
-MIDI2_CHANNEL = 3   # Channel 4
+DRUMS_CHANNEL = 9  # Channel 10
+MIDI1_CHANNEL = 2  # Channel 3
+MIDI2_CHANNEL = 3  # Channel 4
 PROJECT_CHANNEL = 15  # Channel 16
 
 # Drum trigger notes (on channel 10)
@@ -29,22 +29,20 @@ DRUM_NOTES = {
 # CC-based parameters: name -> cc_number
 SYNTH_CC = {
     # Voice
-    "polyphony_mode": 3,          # 0=Mono, 1=Mono AG, 2=Poly
+    "polyphony_mode": 3,  # 0=Mono, 1=Mono AG, 2=Poly
     "portamento_rate": 5,
-    "pre_glide": 9,               # 52-76 (-12 to 12), center=64
-    "keyboard_octave": 13,        # 58-69 (-6 to 5), center=64
-
+    "pre_glide": 9,  # 52-76 (-12 to 12), center=64
+    "keyboard_octave": 13,  # 58-69 (-6 to 5), center=64
     # Oscillator 1
-    "osc1_wave": 19,              # 0-29, see OSC_WAVEFORMS
+    "osc1_wave": 19,  # 0-29, see OSC_WAVEFORMS
     "osc1_wave_interpolate": 20,
-    "osc1_pulse_width_index": 21, # 0-127 (-64 to 63), center=127
+    "osc1_pulse_width_index": 21,  # 0-127 (-64 to 63), center=127
     "osc1_virtual_sync_depth": 22,
     "osc1_density": 24,
     "osc1_density_detune": 25,
-    "osc1_semitones": 26,         # 0-127 (-64 to 63), center=64
-    "osc1_cents": 27,             # 0-127 (-64 to 63), center=64
-    "osc1_pitchbend": 28,         # 52-76 (-12 to 12)
-
+    "osc1_semitones": 26,  # 0-127 (-64 to 63), center=64
+    "osc1_cents": 27,  # 0-127 (-64 to 63), center=64
+    "osc1_pitchbend": 28,  # 52-76 (-12 to 12)
     # Oscillator 2
     "osc2_wave": 29,
     "osc2_wave_interpolate": 30,
@@ -55,37 +53,32 @@ SYNTH_CC = {
     "osc2_semitones": 37,
     "osc2_cents": 39,
     "osc2_pitchbend": 40,
-
     # Mixer
     "osc1_level": 51,
     "osc2_level": 52,
     "ring_mod_level": 54,
     "noise_level": 56,
-    "pre_fx_level": 58,           # 52-82 (-12 to 18 dB), center=64
-    "post_fx_level": 59,          # 52-82 (-12 to 18 dB), center=64
-
+    "pre_fx_level": 58,  # 52-82 (-12 to 18 dB), center=64
+    "post_fx_level": 59,  # 52-82 (-12 to 18 dB), center=64
     # Filter
-    "routing": 60,                # 0=Normal, 1=Osc1 bypass, 2=Both bypass
+    "routing": 60,  # 0=Normal, 1=Osc1 bypass, 2=Both bypass
     "drive": 63,
-    "drive_type": 65,             # 0-6, see DISTORTION_TYPES
-    "filter_type": 68,            # 0-5, see FILTER_TYPES
+    "drive_type": 65,  # 0-6, see DISTORTION_TYPES
+    "filter_type": 68,  # 0-5, see FILTER_TYPES
     "filter_frequency": 74,
     "filter_tracking": 69,
     "filter_resonance": 71,
     "filter_q_normalize": 78,
-    "env2_to_filter_freq": 79,    # 0-127 (-64 to 63), center=64
-
+    "env2_to_filter_freq": 79,  # 0-127 (-64 to 63), center=64
     # Envelope 1 (Amp)
-    "env1_velocity": 108,         # 0-127 (-64 to 63), center=64
+    "env1_velocity": 108,  # 0-127 (-64 to 63), center=64
     "env1_attack": 73,
     "env1_decay": 75,
     "env1_sustain": 70,
     "env1_release": 72,
-
     # Effects
     "distortion_level": 91,
     "chorus_level": 93,
-
     # Macro knobs
     "macro_knob1": 80,
     "macro_knob2": 81,
@@ -105,28 +98,25 @@ SYNTH_NRPN = {
     "env2_decay": (0, 2),
     "env2_sustain": (0, 3),
     "env2_release": (0, 4),
-
     # Envelope 3
     "env3_delay": (0, 14),
     "env3_attack": (0, 15),
     "env3_decay": (0, 16),
     "env3_sustain": (0, 17),
     "env3_release": (0, 18),
-
     # LFO 1
-    "lfo1_waveform": (0, 70),     # 0-37, see LFO_WAVEFORMS
-    "lfo1_phase_offset": (0, 71), # 0-119 (0-357 degrees, steps of 3)
+    "lfo1_waveform": (0, 70),  # 0-37, see LFO_WAVEFORMS
+    "lfo1_phase_offset": (0, 71),  # 0-119 (0-357 degrees, steps of 3)
     "lfo1_slew_rate": (0, 72),
     "lfo1_delay": (0, 74),
-    "lfo1_delay_sync": (0, 75),   # 0-35
+    "lfo1_delay_sync": (0, 75),  # 0-35
     "lfo1_rate": (0, 76),
-    "lfo1_rate_sync": (0, 77),    # 0-35
-    "lfo1_one_shot": (0, 122),    # 12=OFF, 13=ON
-    "lfo1_key_sync": (0, 122),    # 14=OFF, 15=ON
-    "lfo1_common_sync": (0, 122), # 16=OFF, 17=ON
+    "lfo1_rate_sync": (0, 77),  # 0-35
+    "lfo1_one_shot": (0, 122),  # 12=OFF, 13=ON
+    "lfo1_key_sync": (0, 122),  # 14=OFF, 15=ON
+    "lfo1_common_sync": (0, 122),  # 16=OFF, 17=ON
     "lfo1_delay_trigger": (0, 122),  # 18=OFF, 19=ON
-    "lfo1_fade_mode": (0, 123),   # 0-3
-
+    "lfo1_fade_mode": (0, 123),  # 0-3
     # LFO 2
     "lfo2_waveform": (0, 79),
     "lfo2_phase_offset": (0, 80),
@@ -135,12 +125,11 @@ SYNTH_NRPN = {
     "lfo2_delay_sync": (0, 84),
     "lfo2_rate": (0, 85),
     "lfo2_rate_sync": (0, 86),
-    "lfo2_one_shot": (0, 122),    # 22=OFF, 23=ON
-    "lfo2_key_sync": (0, 122),    # 24=OFF, 25=ON
-    "lfo2_common_sync": (0, 122), # 26=OFF, 27=ON
+    "lfo2_one_shot": (0, 122),  # 22=OFF, 23=ON
+    "lfo2_key_sync": (0, 122),  # 24=OFF, 25=ON
+    "lfo2_common_sync": (0, 122),  # 26=OFF, 27=ON
     "lfo2_delay_trigger": (0, 122),  # 28=OFF, 29=ON
-    "lfo2_fade_mode": (0, 123),   # 4-7
-
+    "lfo2_fade_mode": (0, 123),  # 4-7
     # EQ
     "eq_bass_frequency": (0, 104),
     "eq_bass_level": (0, 105),
@@ -148,17 +137,15 @@ SYNTH_NRPN = {
     "eq_mid_level": (0, 107),
     "eq_treble_frequency": (0, 108),
     "eq_treble_level": (0, 109),
-
     # Distortion & Chorus details
-    "distortion_type": (1, 0),    # 0-6, see DISTORTION_TYPES
+    "distortion_type": (1, 0),  # 0-6, see DISTORTION_TYPES
     "distortion_compensation": (1, 1),
-    "chorus_type": (1, 24),       # 0=Phaser, 1=Chorus
+    "chorus_type": (1, 24),  # 0=Phaser, 1=Chorus
     "chorus_rate": (1, 25),
     "chorus_rate_sync": (1, 26),
     "chorus_feedback": (1, 27),
     "chorus_mod_depth": (1, 28),
     "chorus_delay": (1, 29),
-
     # Mod Matrix (slots 1-12, each has source1, source2, depth, destination)
     "mod1_source1": (1, 83),
     "mod1_source2": (1, 84),
@@ -260,7 +247,6 @@ PROJECT_CC = {
     "reverb_drum2_send": 106,
     "reverb_drum3_send": 109,
     "reverb_drum4_send": 110,
-
     # Delay send levels
     "delay_synth1_send": 111,
     "delay_synth2_send": 112,
@@ -268,13 +254,11 @@ PROJECT_CC = {
     "delay_drum2_send": 114,
     "delay_drum3_send": 115,
     "delay_drum4_send": 116,
-
     # Mixer
     "synth1_level": 12,
     "synth2_level": 14,
     "synth1_pan": 117,
     "synth2_pan": 118,
-
     # Master filter
     "master_filter_frequency": 74,  # 0-63=LP, 64=OFF, 65-127=HP
     "master_filter_resonance": 71,
@@ -282,28 +266,24 @@ PROJECT_CC = {
 
 PROJECT_NRPN = {
     # Reverb
-    "reverb_type": (1, 18),       # 0-5: Chamber/Small Room/Large Room/Small Hall/Large Hall/Great Hall
+    "reverb_type": (1, 18),  # 0-5: Chamber/Small Room/Large Room/Small Hall/Large Hall/Great Hall
     "reverb_decay": (1, 19),
     "reverb_damping": (1, 20),
-
     # FX bypass
-    "fx_bypass": (1, 21),         # 0=Off (FX enabled), 1=On (FX disabled)
-
+    "fx_bypass": (1, 21),  # 0=Off (FX enabled), 1=On (FX disabled)
     # Delay
     "delay_time": (1, 6),
-    "delay_time_sync": (1, 7),    # 0-35
+    "delay_time_sync": (1, 7),  # 0-35
     "delay_feedback": (1, 8),
     "delay_width": (1, 9),
-    "delay_lr_ratio": (1, 10),    # 0-12: various ratios
+    "delay_lr_ratio": (1, 10),  # 0-12: various ratios
     "delay_slew_rate": (1, 11),
-
     # Sidechain - Synth 1
-    "sidechain_synth1_source": (2, 55),   # 0-4: Drum1-4, OFF
+    "sidechain_synth1_source": (2, 55),  # 0-4: Drum1-4, OFF
     "sidechain_synth1_attack": (2, 56),
     "sidechain_synth1_hold": (2, 57),
     "sidechain_synth1_decay": (2, 58),
     "sidechain_synth1_depth": (2, 59),
-
     # Sidechain - Synth 2
     "sidechain_synth2_source": (2, 65),
     "sidechain_synth2_attack": (2, 66),
@@ -458,62 +438,62 @@ MOD_MATRIX_DESTINATIONS = {
 # Verified by dumping .syx patches with known macro assignments from hardware.
 # dest 0 and 40,43 are unverified best-guesses (marked with ?).
 MACRO_DESTINATIONS = {
-    0: "pre_fx_level",              # ? (unverified, likely)
-    1: "portamento_rate",           # confirmed
-    2: "post_fx_level",            # confirmed
-    3: "osc1_wave_interpolate",    # confirmed
-    4: "osc1_pulse_width_index",   # confirmed
+    0: "pre_fx_level",  # ? (unverified, likely)
+    1: "portamento_rate",  # confirmed
+    2: "post_fx_level",  # confirmed
+    3: "osc1_wave_interpolate",  # confirmed
+    4: "osc1_pulse_width_index",  # confirmed
     5: "osc1_virtual_sync_depth",  # confirmed
-    6: "osc1_density",             # confirmed
-    7: "osc1_density_detune",      # confirmed
-    8: "osc1_semitones",           # confirmed
-    9: "osc1_cents",               # confirmed
-    10: "osc2_wave_interpolate",   # confirmed
+    6: "osc1_density",  # confirmed
+    7: "osc1_density_detune",  # confirmed
+    8: "osc1_semitones",  # confirmed
+    9: "osc1_cents",  # confirmed
+    10: "osc2_wave_interpolate",  # confirmed
     11: "osc2_pulse_width_index",  # inferred (mirrors osc1)
-    12: "osc2_virtual_sync_depth", # confirmed
-    13: "osc2_density",            # inferred (mirrors osc1)
-    14: "osc2_density_detune",     # inferred (mirrors osc1)
-    15: "osc2_semitones",          # confirmed
-    16: "osc2_cents",              # confirmed
-    17: "osc1_level",              # confirmed
-    18: "osc2_level",              # confirmed
-    19: "ring_mod_level",          # confirmed
-    20: "noise_level",             # confirmed
-    21: "filter_frequency",        # confirmed
-    22: "filter_resonance",        # confirmed
-    23: "drive",                   # confirmed
-    24: "filter_tracking",         # confirmed
-    25: "env2_to_filter_freq",     # confirmed
-    26: "env1_attack",             # confirmed
-    27: "env1_decay",              # confirmed
-    28: "env1_sustain",            # confirmed
-    29: "env1_release",            # confirmed
-    30: "env2_attack",             # confirmed
-    31: "env2_decay",              # confirmed
-    32: "env2_sustain",            # confirmed
-    33: "env2_release",            # confirmed
-    34: "env3_delay",              # confirmed
-    35: "env3_attack",             # confirmed
-    36: "env3_decay",              # confirmed
-    37: "env3_sustain",            # confirmed
-    38: "env3_release",            # confirmed
-    39: "lfo1_rate",               # confirmed
-    40: "lfo1_delay",              # ? (unverified, likely)
-    41: "lfo1_slew_rate",          # confirmed
-    42: "lfo2_rate",               # confirmed
-    43: "lfo2_delay",              # ? (unverified, likely)
-    44: "lfo2_slew_rate",          # confirmed
-    45: "distortion_level",        # confirmed
-    46: "chorus_level",            # confirmed
-    47: "chorus_rate",             # confirmed
-    48: "chorus_feedback",         # confirmed
-    49: "chorus_mod_depth",        # confirmed
-    50: "chorus_delay",            # confirmed
-    51: "mod_matrix_1_depth",      # confirmed
-    52: "mod_matrix_2_depth",      # confirmed
-    53: "mod_matrix_3_depth",      # confirmed
-    54: "mod_matrix_4_depth",      # confirmed
-    55: "mod_matrix_5_depth",      # inferred (sequential)
+    12: "osc2_virtual_sync_depth",  # confirmed
+    13: "osc2_density",  # inferred (mirrors osc1)
+    14: "osc2_density_detune",  # inferred (mirrors osc1)
+    15: "osc2_semitones",  # confirmed
+    16: "osc2_cents",  # confirmed
+    17: "osc1_level",  # confirmed
+    18: "osc2_level",  # confirmed
+    19: "ring_mod_level",  # confirmed
+    20: "noise_level",  # confirmed
+    21: "filter_frequency",  # confirmed
+    22: "filter_resonance",  # confirmed
+    23: "drive",  # confirmed
+    24: "filter_tracking",  # confirmed
+    25: "env2_to_filter_freq",  # confirmed
+    26: "env1_attack",  # confirmed
+    27: "env1_decay",  # confirmed
+    28: "env1_sustain",  # confirmed
+    29: "env1_release",  # confirmed
+    30: "env2_attack",  # confirmed
+    31: "env2_decay",  # confirmed
+    32: "env2_sustain",  # confirmed
+    33: "env2_release",  # confirmed
+    34: "env3_delay",  # confirmed
+    35: "env3_attack",  # confirmed
+    36: "env3_decay",  # confirmed
+    37: "env3_sustain",  # confirmed
+    38: "env3_release",  # confirmed
+    39: "lfo1_rate",  # confirmed
+    40: "lfo1_delay",  # ? (unverified, likely)
+    41: "lfo1_slew_rate",  # confirmed
+    42: "lfo2_rate",  # confirmed
+    43: "lfo2_delay",  # ? (unverified, likely)
+    44: "lfo2_slew_rate",  # confirmed
+    45: "distortion_level",  # confirmed
+    46: "chorus_level",  # confirmed
+    47: "chorus_rate",  # confirmed
+    48: "chorus_feedback",  # confirmed
+    49: "chorus_mod_depth",  # confirmed
+    50: "chorus_delay",  # confirmed
+    51: "mod_matrix_1_depth",  # confirmed
+    52: "mod_matrix_2_depth",  # confirmed
+    53: "mod_matrix_3_depth",  # confirmed
+    54: "mod_matrix_4_depth",  # confirmed
+    55: "mod_matrix_5_depth",  # inferred (sequential)
     56: "mod_matrix_6_depth",
     57: "mod_matrix_7_depth",
     58: "mod_matrix_8_depth",
@@ -578,16 +558,16 @@ REVERB_PRESETS: dict[int, dict[str, int]] = {
 }
 
 DELAY_PRESETS: dict[int, dict[str, int]] = {
-    0:  {"time": 3, "sync": 0, "feedback": 100, "width": 115, "lr_ratio": 5, "slew": 115},
-    1:  {"time": 6, "sync": 0, "feedback": 45, "width": 104, "lr_ratio": 6, "slew": 26},
-    2:  {"time": 0, "sync": 2, "feedback": 63, "width": 62, "lr_ratio": 5, "slew": 40},
-    3:  {"time": 0, "sync": 4, "feedback": 25, "width": 10, "lr_ratio": 5, "slew": 75},
-    4:  {"time": 0, "sync": 5, "feedback": 59, "width": 15, "lr_ratio": 5, "slew": 39},
-    5:  {"time": 0, "sync": 7, "feedback": 15, "width": 34, "lr_ratio": 6, "slew": 56},
-    6:  {"time": 0, "sync": 7, "feedback": 75, "width": 115, "lr_ratio": 5, "slew": 98},
-    7:  {"time": 0, "sync": 7, "feedback": 75, "width": 75, "lr_ratio": 3, "slew": 23},
-    8:  {"time": 0, "sync": 8, "feedback": 80, "width": 10, "lr_ratio": 6, "slew": 68},
-    9:  {"time": 0, "sync": 9, "feedback": 50, "width": 100, "lr_ratio": 5, "slew": 33},
+    0: {"time": 3, "sync": 0, "feedback": 100, "width": 115, "lr_ratio": 5, "slew": 115},
+    1: {"time": 6, "sync": 0, "feedback": 45, "width": 104, "lr_ratio": 6, "slew": 26},
+    2: {"time": 0, "sync": 2, "feedback": 63, "width": 62, "lr_ratio": 5, "slew": 40},
+    3: {"time": 0, "sync": 4, "feedback": 25, "width": 10, "lr_ratio": 5, "slew": 75},
+    4: {"time": 0, "sync": 5, "feedback": 59, "width": 15, "lr_ratio": 5, "slew": 39},
+    5: {"time": 0, "sync": 7, "feedback": 15, "width": 34, "lr_ratio": 6, "slew": 56},
+    6: {"time": 0, "sync": 7, "feedback": 75, "width": 115, "lr_ratio": 5, "slew": 98},
+    7: {"time": 0, "sync": 7, "feedback": 75, "width": 75, "lr_ratio": 3, "slew": 23},
+    8: {"time": 0, "sync": 8, "feedback": 80, "width": 10, "lr_ratio": 6, "slew": 68},
+    9: {"time": 0, "sync": 9, "feedback": 50, "width": 100, "lr_ratio": 5, "slew": 33},
     10: {"time": 0, "sync": 10, "feedback": 82, "width": 23, "lr_ratio": 5, "slew": 56},
     11: {"time": 0, "sync": 10, "feedback": 78, "width": 88, "lr_ratio": 6, "slew": 47},
     12: {"time": 0, "sync": 10, "feedback": 33, "width": 127, "lr_ratio": 3, "slew": 33},
@@ -601,8 +581,8 @@ DELAY_PRESET_BY_NAME: dict[str, int] = {}
 
 # SysEx constants
 SYSEX_MANUFACTURER_ID = [0x00, 0x20, 0x29]  # Novation
-SYSEX_PRODUCT_TYPE = 0x01                     # Synth
-SYSEX_PRODUCT_NUMBER = 0x64                   # Circuit Tracks (100)
+SYSEX_PRODUCT_TYPE = 0x01  # Synth
+SYSEX_PRODUCT_NUMBER = 0x64  # Circuit Tracks (100)
 
 SYSEX_CMD_REPLACE_CURRENT_PATCH = 0x00
 SYSEX_CMD_REPLACE_PATCH = 0x01

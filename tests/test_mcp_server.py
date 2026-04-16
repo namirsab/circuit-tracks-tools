@@ -5,14 +5,14 @@ messages and return the expected results without requiring hardware.
 """
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Mock MIDI that records all sent messages
 # ---------------------------------------------------------------------------
+
 
 class MockMidi:
     """Records MIDI messages for assertion."""
@@ -79,12 +79,14 @@ class MockMidi:
 # Fixture: patch module globals before importing server
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def server():
     """Import server with mocked globals. Returns (module, mock_midi)."""
     mock_midi = MockMidi()
 
     import circuit_mcp.server as srv
+
     # Patch the module-level globals
     original_midi = srv._midi
     original_engine = srv._engine
@@ -92,8 +94,9 @@ def server():
 
     srv._midi = mock_midi
     # Re-create engine and morph with mock midi
-    from circuit_tracks.sequencer import SequencerEngine
     from circuit_tracks.morph import MorphEngine
+    from circuit_tracks.sequencer import SequencerEngine
+
     srv._engine = SequencerEngine(mock_midi)
     srv._morph = MorphEngine(mock_midi)
 
@@ -109,11 +112,14 @@ def server():
 # Connection tools
 # ---------------------------------------------------------------------------
 
+
 class TestConnection:
     def test_list_midi_ports(self, server):
         srv, _ = server
-        with patch("circuit_tracks.midi.MidiConnection.list_output_ports", return_value=["MockPort"]), \
-             patch("circuit_tracks.midi.MidiConnection.list_input_ports", return_value=["MockPort"]):
+        with (
+            patch("circuit_tracks.midi.MidiConnection.list_output_ports", return_value=["MockPort"]),
+            patch("circuit_tracks.midi.MidiConnection.list_input_ports", return_value=["MockPort"]),
+        ):
             result = srv.list_midi_ports()
         assert result["output_ports"] == ["MockPort"]
         assert result["input_ports"] == ["MockPort"]
@@ -128,6 +134,7 @@ class TestConnection:
 # ---------------------------------------------------------------------------
 # Note playing
 # ---------------------------------------------------------------------------
+
 
 class TestPlayNotes:
     def test_play_single_note(self, server):
@@ -165,6 +172,7 @@ class TestPlayNotes:
 # Synth parameter setting
 # ---------------------------------------------------------------------------
 
+
 class TestSynthParams:
     def test_set_synth_params_cc(self, server):
         srv, mock_midi = server
@@ -194,9 +202,7 @@ class TestSynthParams:
 
     def test_set_synth_params_mixed(self, server):
         srv, mock_midi = server
-        result = srv.set_synth_params(
-            synth=1, params={"filter_frequency": 80, "bad_param": 10}
-        )
+        result = srv.set_synth_params(synth=1, params={"filter_frequency": 80, "bad_param": 10})
         assert "filter_frequency=80" in result
         assert "Unknown params: bad_param" in result
 
@@ -204,6 +210,7 @@ class TestSynthParams:
 # ---------------------------------------------------------------------------
 # Drum parameter setting
 # ---------------------------------------------------------------------------
+
 
 class TestDrumParams:
     def test_set_drum_params(self, server):
@@ -232,6 +239,7 @@ class TestDrumParams:
 # Project params
 # ---------------------------------------------------------------------------
 
+
 class TestProjectParams:
     def test_set_project_params_cc(self, server):
         srv, mock_midi = server
@@ -254,6 +262,7 @@ class TestProjectParams:
 # Patch selection and program change
 # ---------------------------------------------------------------------------
 
+
 class TestPatchSelect:
     def test_select_patch_synth1(self, server):
         srv, mock_midi = server
@@ -263,7 +272,7 @@ class TestPatchSelect:
 
     def test_select_patch_synth2(self, server):
         srv, mock_midi = server
-        result = srv.select_patch(synth=2, patch_number=10)
+        srv.select_patch(synth=2, patch_number=10)
         assert ("pc", 1, 10) in mock_midi.messages
 
     def test_select_patch_invalid_synth(self, server):
@@ -278,13 +287,14 @@ class TestPatchSelect:
 
     def test_select_project(self, server):
         srv, mock_midi = server
-        result = srv.select_project(project_number=3)
+        srv.select_project(project_number=3)
         assert ("pc", 15, 3) in mock_midi.messages
 
 
 # ---------------------------------------------------------------------------
 # Pattern / sequencer tools
 # ---------------------------------------------------------------------------
+
 
 class TestPatternSequencer:
     def test_set_and_get_pattern(self, server):
@@ -354,6 +364,7 @@ class TestPatternSequencer:
 # Create synth patch
 # ---------------------------------------------------------------------------
 
+
 class TestCreatePatch:
     def test_create_patch_init(self, server):
         srv, mock_midi = server
@@ -413,10 +424,11 @@ class TestCreatePatch:
 # Macro tools
 # ---------------------------------------------------------------------------
 
+
 class TestMacros:
     def test_set_macro(self, server):
         srv, mock_midi = server
-        result = srv.set_macro(synth=1, macro=1, value=100)
+        srv.set_macro(synth=1, macro=1, value=100)
         cc_msgs = [m for m in mock_midi.messages if m[0] == "cc"]
         assert len(cc_msgs) > 0  # macro sends CC messages for target params
 
@@ -437,26 +449,28 @@ class TestMacros:
 # Transport
 # ---------------------------------------------------------------------------
 
+
 class TestTransport:
     def test_transport_start(self, server):
         srv, mock_midi = server
-        result = srv.transport(action="start", bpm=120)
+        srv.transport(action="start", bpm=120)
         assert ("realtime", "start") in mock_midi.messages
 
     def test_transport_stop(self, server):
         srv, mock_midi = server
-        result = srv.transport(action="stop")
+        srv.transport(action="stop")
         assert ("realtime", "stop") in mock_midi.messages
 
     def test_transport_continue(self, server):
         srv, mock_midi = server
-        result = srv.transport(action="continue", bpm=120)
+        srv.transport(action="continue", bpm=120)
         assert ("realtime", "continue") in mock_midi.messages
 
 
 # ---------------------------------------------------------------------------
 # Morph tools
 # ---------------------------------------------------------------------------
+
 
 class TestMorph:
     def test_morph_synth_params(self, server):
@@ -474,16 +488,12 @@ class TestMorph:
 
     def test_morph_synth_invalid_synth(self, server):
         srv, _ = server
-        result = srv.morph_synth_params(
-            synth=3, start={"filter_frequency": 20}, target={"filter_frequency": 100}
-        )
+        result = srv.morph_synth_params(synth=3, start={"filter_frequency": 20}, target={"filter_frequency": 100})
         assert "Invalid" in result
 
     def test_morph_unknown_param(self, server):
         srv, _ = server
-        result = srv.morph_synth_params(
-            synth=1, start={"bad_param": 0}, target={"bad_param": 100}
-        )
+        result = srv.morph_synth_params(synth=1, start={"bad_param": 0}, target={"bad_param": 100})
         assert "Unknown" in result
 
     def test_morph_mismatched_keys(self, server):
@@ -557,6 +567,7 @@ class TestMorph:
 # Parameter reference
 # ---------------------------------------------------------------------------
 
+
 class TestParameterReference:
     def test_get_parameter_reference_default(self, server):
         srv, _ = server
@@ -611,6 +622,7 @@ class TestParameterReference:
 # ---------------------------------------------------------------------------
 # Sequencer status
 # ---------------------------------------------------------------------------
+
 
 class TestSequencerStatus:
     def test_get_sequencer_status(self, server):

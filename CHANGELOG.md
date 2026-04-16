@@ -39,4 +39,19 @@ First public release.
 - Patch save using reverse-engineered Components protocol (Replace Patch SysEx doesn't work)
 - Gate encoding now correctly caps at 16 (one full step)
 
+## [0.1.1] — 2026-04-16
+
+### Added
+
+- Linting and formatting with [ruff](https://docs.astral.sh/ruff/) — configured in `pyproject.toml`
+- Pre-commit hooks for automatic lint and format checks on every commit
+- `dev` optional dependency group (`pip install -e ".[dev]"`) with pytest, ruff, and pre-commit
+
+### Fixed
+
+- Removed unused imports and variables across the codebase
+- Fixed undefined `NCSFile` name in `test_song.py`
+- Moved module-level logger in `song.py` after imports to satisfy E402
+
+[0.1.1]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/namirsab/circuit-tracks-tools/releases/tag/v0.1.0

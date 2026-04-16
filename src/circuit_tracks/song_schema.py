@@ -19,28 +19,70 @@ from pydantic import BaseModel, Field, model_validator
 # ---------------------------------------------------------------------------
 
 ScaleRoot = Literal[
-    "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab",
-    "A", "A#", "Bb", "B",
+    "C",
+    "C#",
+    "Db",
+    "D",
+    "D#",
+    "Eb",
+    "E",
+    "F",
+    "F#",
+    "Gb",
+    "G",
+    "G#",
+    "Ab",
+    "A",
+    "A#",
+    "Bb",
+    "B",
 ]
 
 ScaleType = Literal[
-    "natural minor", "minor", "major", "dorian", "phrygian", "mixolydian",
-    "melodic minor", "harmonic minor", "bebop dorian", "blues",
-    "minor pentatonic", "hungarian minor", "ukranian dorian", "marva", "todi",
-    "whole tone", "chromatic",
+    "natural minor",
+    "minor",
+    "major",
+    "dorian",
+    "phrygian",
+    "mixolydian",
+    "melodic minor",
+    "harmonic minor",
+    "bebop dorian",
+    "blues",
+    "minor pentatonic",
+    "hungarian minor",
+    "ukranian dorian",
+    "marva",
+    "todi",
+    "whole tone",
+    "chromatic",
 ]
 
 SynthPreset = Literal["pad", "bass", "lead", "pluck"]
 
 TrackName = Literal[
-    "synth1", "synth2", "drum1", "drum2", "drum3", "drum4", "midi1", "midi2",
+    "synth1",
+    "synth2",
+    "drum1",
+    "drum2",
+    "drum3",
+    "drum4",
+    "midi1",
+    "midi2",
 ]
 
 SynthTrackName = Literal["synth1", "synth2", "midi1", "midi2"]
 DrumTrackName = Literal["drum1", "drum2", "drum3", "drum4"]
 
 SendTrackName = Literal[
-    "synth1", "synth2", "drum1", "drum2", "drum3", "drum4", "midi1", "midi2",
+    "synth1",
+    "synth2",
+    "drum1",
+    "drum2",
+    "drum3",
+    "drum4",
+    "midi1",
+    "midi2",
 ]
 
 SidechainSource = Literal["drum1", "drum2", "drum3", "drum4", "off"]
@@ -49,26 +91,49 @@ MacroNumber = Literal["1", "2", "3", "4", "5", "6", "7", "8"]
 
 MixerAutomationParam = Literal["reverb_send", "delay_send", "level", "pan"]
 DrumAutomationParam = Literal[
-    "pitch", "decay", "distortion", "eq", "reverb_send", "delay_send",
-    "level", "pan",
+    "pitch",
+    "decay",
+    "distortion",
+    "eq",
+    "reverb_send",
+    "delay_send",
+    "level",
+    "pan",
 ]
 
 # Mod matrix source/destination names (space-separated, NOT snake_case).
 ModMatrixSource = Literal[
-    "direct", "velocity", "keyboard",
-    "LFO 1+", "LFO 1+/-", "LFO 2+", "LFO 2+/-",
-    "env amp", "env filter", "env 3",
+    "direct",
+    "velocity",
+    "keyboard",
+    "LFO 1+",
+    "LFO 1+/-",
+    "LFO 2+",
+    "LFO 2+/-",
+    "env amp",
+    "env filter",
+    "env 3",
 ]
 
 ModMatrixDestination = Literal[
-    "osc 1 & 2 pitch", "osc 1 pitch", "osc 2 pitch",
-    "osc 1 v-sync", "osc 2 v-sync",
-    "osc 1 pulse width / index", "osc 2 pulse width / index",
-    "osc 1 level", "osc 2 level", "noise level",
-    "ring modulation 1*2 level", "filter drive amount",
-    "filter frequency", "filter resonance",
-    "LFO 1 rate", "LFO 2 rate",
-    "amp envelope decay", "filter envelope decay",
+    "osc 1 & 2 pitch",
+    "osc 1 pitch",
+    "osc 2 pitch",
+    "osc 1 v-sync",
+    "osc 2 v-sync",
+    "osc 1 pulse width / index",
+    "osc 2 pulse width / index",
+    "osc 1 level",
+    "osc 2 level",
+    "noise level",
+    "ring modulation 1*2 level",
+    "filter drive amount",
+    "filter frequency",
+    "filter resonance",
+    "LFO 1 rate",
+    "LFO 2 rate",
+    "amp envelope decay",
+    "filter envelope decay",
 ]
 
 # Type alias for step-position -> value automation dicts.
@@ -83,6 +148,7 @@ AutomationLane = dict[str, Annotated[int, Field(ge=0, le=127)]]
 
 class ScaleConfig(BaseModel):
     """Musical scale applied to synth/MIDI note quantization."""
+
     root: ScaleRoot = "C"
     type: ScaleType = "chromatic"
 
@@ -94,6 +160,7 @@ class ScaleConfig(BaseModel):
 
 class ModMatrixEntry(BaseModel):
     """A single mod-matrix routing slot."""
+
     source1: ModMatrixSource | int = "direct"
     source2: ModMatrixSource | int = "direct"
     dest: ModMatrixDestination | int = Field(
@@ -101,11 +168,14 @@ class ModMatrixEntry(BaseModel):
     )
     # Alias so callers can use "destination" too (common in existing songs).
     destination: ModMatrixDestination | int | None = Field(
-        default=None, exclude=True,
+        default=None,
+        exclude=True,
         description="Alias for 'dest'. Either 'dest' or 'destination' may be used.",
     )
     depth: int = Field(
-        default=0, ge=-64, le=63,
+        default=0,
+        ge=-64,
+        le=63,
         description="Signed depth: -64 to +63. 0 = no modulation.",
     )
 
@@ -129,6 +199,7 @@ class ModMatrixEntry(BaseModel):
 
 class MacroTarget(BaseModel):
     """A single destination routed to a macro knob."""
+
     dest: str | int = Field(
         ...,
         description=(
@@ -143,6 +214,7 @@ class MacroTarget(BaseModel):
 
 class MacroConfig(BaseModel):
     """Configuration for one macro knob (1-8)."""
+
     targets: list[MacroTarget]
     position: int = Field(default=0, ge=0, le=127, description="Initial knob position.")
 
@@ -154,6 +226,7 @@ class MacroConfig(BaseModel):
 
 class SynthSoundConfig(BaseModel):
     """Synth engine patch configuration (synth1, synth2)."""
+
     preset: SynthPreset | None = Field(
         default=None,
         description="Base preset to start from before applying params.",
@@ -175,6 +248,7 @@ class SynthSoundConfig(BaseModel):
 
 class DrumSoundConfig(BaseModel):
     """Drum track sound configuration."""
+
     sample: int | None = Field(default=None, ge=0, le=63, description="Sample/patch index.")
     level: int | None = Field(default=None, ge=0, le=127)
     pitch: int | None = Field(default=None, ge=0, le=127)
@@ -190,11 +264,17 @@ class DrumSoundConfig(BaseModel):
 
 
 class SynthStepConfig(BaseModel):
-    """A single step in a synth or MIDI track. Only these fields are allowed — no others. Use 'macros' for p-locks, NOT 'params' or 'p-locks'."""
+    """A single step in a synth or MIDI track.
+
+    Only these fields are allowed — no others. Use 'macros' for p-locks, NOT 'params' or 'p-locks'.
+    """
+
     model_config = {"extra": "forbid"}
 
     note: int | None = Field(
-        default=None, ge=0, le=127,
+        default=None,
+        ge=0,
+        le=127,
         description="MIDI note number. Mutually exclusive with 'notes'.",
     )
     notes: list[Annotated[int, Field(ge=0, le=127)]] | None = Field(
@@ -203,7 +283,9 @@ class SynthStepConfig(BaseModel):
     )
     velocity: int | None = Field(default=None, ge=0, le=127)
     gate: float | None = Field(
-        default=None, ge=0.0, le=16.0,
+        default=None,
+        ge=0.0,
+        le=16.0,
         description="Gate length in steps (e.g. 0.5 = half step, 2.0 = two steps). Max 16.",
     )
     tie: bool = Field(
@@ -212,7 +294,9 @@ class SynthStepConfig(BaseModel):
     )
     enabled: bool = True
     probability: float | None = Field(
-        default=None, ge=0.0, le=1.0,
+        default=None,
+        ge=0.0,
+        le=1.0,
         description="Playback probability, 0.0 to 1.0.",
     )
     macros: dict[MacroNumber, Annotated[int, Field(ge=0, le=127)]] | None = Field(
@@ -226,19 +310,26 @@ class SynthStepConfig(BaseModel):
 
 class DrumStepConfig(BaseModel):
     """A single step in a drum track."""
+
     model_config = {"extra": "forbid"}
 
     velocity: int | None = Field(default=None, ge=0, le=127)
     enabled: bool = True
     probability: float | None = Field(
-        default=None, ge=0.0, le=1.0,
+        default=None,
+        ge=0.0,
+        le=1.0,
     )
     sample: int | None = Field(
-        default=None, ge=0, le=63,
+        default=None,
+        ge=0,
+        le=63,
         description="Per-step sample override.",
     )
     micro_step: int | None = Field(
-        default=None, ge=0, le=5,
+        default=None,
+        ge=0,
+        le=5,
         description="Micro-step offset within the step (0-5).",
     )
 
@@ -250,6 +341,7 @@ class DrumStepConfig(BaseModel):
 
 class SynthTrackConfig(BaseModel):
     """Track data for a synth or MIDI track within a pattern."""
+
     model_config = {"extra": "forbid"}
 
     steps: dict[str, SynthStepConfig] = Field(
@@ -275,6 +367,7 @@ class SynthTrackConfig(BaseModel):
 
 class DrumTrackConfig(BaseModel):
     """Track data for a drum track within a pattern."""
+
     model_config = {"extra": "forbid"}
 
     steps: dict[str, DrumStepConfig] = Field(
@@ -301,6 +394,7 @@ _DRUM_TRACKS = {"drum1", "drum2", "drum3", "drum4"}
 
 class PatternConfig(BaseModel):
     """A named pattern containing track data."""
+
     length: int = Field(default=16, ge=1, le=32, description="Pattern length in steps.")
     tracks: dict[TrackName, SynthTrackConfig | DrumTrackConfig] = Field(
         default_factory=dict,
@@ -345,6 +439,7 @@ class PatternConfig(BaseModel):
 
 class ReverbConfig(BaseModel):
     """Reverb engine parameters."""
+
     type: int | None = Field(default=None, ge=0, le=5)
     decay: int | None = Field(default=None, ge=0, le=127)
     damping: int | None = Field(default=None, ge=0, le=127)
@@ -352,6 +447,7 @@ class ReverbConfig(BaseModel):
 
 class DelayConfig(BaseModel):
     """Delay engine parameters."""
+
     time: int | None = Field(default=None, ge=0, le=127)
     sync: int | None = Field(default=None, ge=0, le=35)
     feedback: int | None = Field(default=None, ge=0, le=127)
@@ -362,8 +458,13 @@ class DelayConfig(BaseModel):
 
 class SidechainConfig(BaseModel):
     """Sidechain compressor settings for a synth or MIDI track."""
-    preset: int | None = Field(default=None, ge=0, le=7,
-        description="Sidechain preset (1-7). Required to activate sidechain on hardware. 0 or omit = OFF.")
+
+    preset: int | None = Field(
+        default=None,
+        ge=0,
+        le=7,
+        description="Sidechain preset (1-7). Required to activate sidechain on hardware. 0 or omit = OFF.",
+    )
     source: SidechainSource = "off"
     attack: int | None = Field(default=None, ge=0, le=127)
     hold: int | None = Field(default=None, ge=0, le=127)
@@ -373,6 +474,7 @@ class SidechainConfig(BaseModel):
 
 class FXConfig(BaseModel):
     """Global FX configuration."""
+
     reverb: ReverbConfig | None = None
     delay: DelayConfig | None = None
     reverb_preset: str | int | None = Field(
@@ -401,6 +503,7 @@ class FXConfig(BaseModel):
 
 class MixerTrackConfig(BaseModel):
     """Mixer settings for a synth track."""
+
     level: int = Field(default=100, ge=0, le=127)
     pan: int = Field(default=64, ge=0, le=127)
 
@@ -470,21 +573,17 @@ class SongSchema(BaseModel):
         return values
 
     @model_validator(mode="after")
-    def _validate_song_refs(self) -> "SongSchema":
+    def _validate_song_refs(self) -> SongSchema:
         """Validate that song references only defined patterns."""
         if self.song:
             for pat_name in self.song:
                 if pat_name not in self.patterns:
                     raise ValueError(
-                        f"Song references unknown pattern '{pat_name}'. "
-                        f"Defined patterns: {list(self.patterns.keys())}"
+                        f"Song references unknown pattern '{pat_name}'. Defined patterns: {list(self.patterns.keys())}"
                     )
         unique = set(self.song) if self.song else set(self.patterns.keys())
         if len(unique) > 8:
-            raise ValueError(
-                f"Too many unique patterns ({len(unique)}). "
-                f"Circuit Tracks supports max 8."
-            )
+            raise ValueError(f"Too many unique patterns ({len(unique)}). Circuit Tracks supports max 8.")
         return self
 
 
@@ -495,6 +594,7 @@ class SongSchema(BaseModel):
 
 class MacroTargetInput(BaseModel):
     """A single parameter target for a macro knob (configure_macro tool)."""
+
     model_config = {"extra": "forbid"}
 
     param: str = Field(
@@ -513,10 +613,13 @@ class MacroTargetInput(BaseModel):
 class SequencerStepConfig(BaseModel):
     """A single step for the live sequencer (set_pattern / set_track tools).
     Drum tracks should omit note and gate — only velocity matters."""
+
     model_config = {"extra": "forbid"}
 
     note: int | None = Field(
-        default=None, ge=0, le=127,
+        default=None,
+        ge=0,
+        le=127,
         description="MIDI note number. Ignored for drum tracks.",
     )
     notes: list[Annotated[int, Field(ge=0, le=127)]] | None = Field(
@@ -525,7 +628,9 @@ class SequencerStepConfig(BaseModel):
     )
     velocity: int | None = Field(default=None, ge=0, le=127)
     gate: float | None = Field(
-        default=None, ge=0.0, le=16.0,
+        default=None,
+        ge=0.0,
+        le=16.0,
         description="Gate length in steps (e.g. 0.5 = half step, 2.0 = two steps). Max 16. NOT used for drum tracks.",
     )
     tie: bool = Field(
@@ -534,16 +639,21 @@ class SequencerStepConfig(BaseModel):
     )
     enabled: bool = True
     probability: float | None = Field(
-        default=None, ge=0.0, le=1.0,
+        default=None,
+        ge=0.0,
+        le=1.0,
     )
     sample: int | None = Field(
-        default=None, ge=0, le=63,
+        default=None,
+        ge=0,
+        le=63,
         description="Drum sample override (drum tracks only).",
     )
 
 
 class SequencerTrackConfig(BaseModel):
     """Track data for the live sequencer (set_pattern tool)."""
+
     model_config = {"extra": "forbid"}
 
     steps: dict[str, SequencerStepConfig] = Field(

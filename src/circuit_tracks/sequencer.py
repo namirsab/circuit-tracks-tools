@@ -403,7 +403,7 @@ class SequencerEngine:
             step_index += 1
 
         # Drain any remaining note-offs
-        for off_time, off_ch, off_note in pending_offs:
+        for _off_time, off_ch, off_note in pending_offs:
             try:
                 self._midi.note_off(off_ch, off_note)
             except Exception:

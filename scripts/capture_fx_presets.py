@@ -72,7 +72,7 @@ def extract_fx_presets(ncs_dir: Path) -> None:
     print("REVERB_PRESETS = {")
     for idx in sorted(reverb_presets):
         p = reverb_presets[idx]
-        print(f"    {idx}: {{\"type\": {p['type']}, \"decay\": {p['decay']}, \"damping\": {p['damping']}}},")
+        print(f'    {idx}: {{"type": {p["type"]}, "decay": {p["decay"]}, "damping": {p["damping"]}}},')
     print("}")
 
     print("\nDELAY_PRESETS = {")

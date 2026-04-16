@@ -7,11 +7,8 @@ project file for transfer to the hardware.
 from __future__ import annotations
 
 import logging
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 
 from circuit_tracks.constants import (
     DELAY_PRESET_BY_NAME,
@@ -23,27 +20,19 @@ from circuit_tracks.constants import (
     PROJECT_NRPN,
     REVERB_PRESET_BY_NAME,
     REVERB_PRESETS,
-    SYNTH_CC,
 )
 from circuit_tracks.midi import MidiConnection
 from circuit_tracks.ncs_parser import (
     DEFAULT_DRUM_CHOICE,
-    DEFAULT_NOTE_VELOCITY,
-    DEFAULT_PROBABILITY,
     NOTES_PER_STEP,
     NUM_TRACKS,
     PATTERNS_PER_TRACK,
     STEPS_PER_PATTERN,
     DrumPattern,
-    DrumStep,
-    FXSettings,
     NCSFile,
     NCSNote,
-    NCSProjectSettings,
-    PatternSettings,
     SidechainSettings,
     SynthPattern,
-    SynthStep,
     get_drum_pattern,
     get_midi_pattern,
     get_synth_pattern,
@@ -62,12 +51,12 @@ from circuit_tracks.patch_builder import (
     preset_pluck,
 )
 from circuit_tracks.sequencer import (
-    VALID_TRACK_NAMES,
     Pattern,
     SequencerEngine,
     Step,
-    TrackType,
 )
+
+logger = logging.getLogger(__name__)
 
 # Template file for NCS export (bundled with the package)
 _TEMPLATE_NCS = Path(__file__).parent / "data" / "Empty.ncs"
@@ -76,9 +65,14 @@ _PRESETS = {"pad": preset_pad, "bass": preset_bass, "lead": preset_lead, "pluck"
 
 # Friendly name -> NCS send array index
 _SEND_INDEX = {
-    "synth1": 0, "synth2": 1,
-    "drum1": 2, "drum2": 3, "drum3": 4, "drum4": 5,
-    "midi1": 6, "midi2": 7,
+    "synth1": 0,
+    "synth2": 1,
+    "drum1": 2,
+    "drum2": 3,
+    "drum3": 4,
+    "drum4": 5,
+    "midi1": 6,
+    "midi2": 7,
 }
 
 # NCS track ordering: S1, S2, M1, M2, D1, D2, D3, D4
@@ -101,38 +95,64 @@ _SC_PRESET_PARAMS: dict[int, tuple[int, int, int, int]] = {
 
 # Scale root name -> integer
 _SCALE_ROOT = {
-    "C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3,
-    "E": 4, "F": 5, "F#": 6, "Gb": 6, "G": 7, "G#": 8, "Ab": 8,
-    "A": 9, "A#": 10, "Bb": 10, "B": 11,
+    "C": 0,
+    "C#": 1,
+    "Db": 1,
+    "D": 2,
+    "D#": 3,
+    "Eb": 3,
+    "E": 4,
+    "F": 5,
+    "F#": 6,
+    "Gb": 6,
+    "G": 7,
+    "G#": 8,
+    "Ab": 8,
+    "A": 9,
+    "A#": 10,
+    "Bb": 10,
+    "B": 11,
 }
 
 # Scale type name -> integer
 _SCALE_TYPE = {
-    "natural minor": 0, "minor": 0, "major": 1, "dorian": 2, "phrygian": 3,
-    "mixolydian": 4, "melodic minor": 5, "harmonic minor": 6,
-    "bebop dorian": 7, "blues": 8, "minor pentatonic": 9,
-    "hungarian minor": 10, "ukranian dorian": 11, "marva": 12,
-    "todi": 13, "whole tone": 14, "chromatic": 15,
+    "natural minor": 0,
+    "minor": 0,
+    "major": 1,
+    "dorian": 2,
+    "phrygian": 3,
+    "mixolydian": 4,
+    "melodic minor": 5,
+    "harmonic minor": 6,
+    "bebop dorian": 7,
+    "blues": 8,
+    "minor pentatonic": 9,
+    "hungarian minor": 10,
+    "ukranian dorian": 11,
+    "marva": 12,
+    "todi": 13,
+    "whole tone": 14,
+    "chromatic": 15,
 }
 
 # Scale type integer -> semitone intervals from root
 _SCALE_INTERVALS: dict[int, list[int]] = {
-    0:  [0, 2, 3, 5, 7, 8, 10],                              # Natural Minor
-    1:  [0, 2, 4, 5, 7, 9, 11],                              # Major
-    2:  [0, 2, 3, 5, 7, 9, 10],                              # Dorian
-    3:  [0, 1, 3, 5, 7, 8, 10],                              # Phrygian
-    4:  [0, 2, 4, 5, 7, 9, 10],                              # Mixolydian
-    5:  [0, 2, 3, 5, 7, 9, 11],                              # Melodic Minor
-    6:  [0, 2, 3, 5, 7, 8, 11],                              # Harmonic Minor
-    7:  [0, 2, 3, 4, 5, 7, 9, 10],                           # Bebop Dorian
-    8:  [0, 3, 5, 6, 7, 10],                                 # Blues
-    9:  [0, 3, 5, 7, 10],                                    # Minor Pentatonic
-    10: [0, 2, 3, 6, 7, 8, 11],                              # Hungarian Minor
-    11: [0, 2, 3, 6, 7, 9, 10],                              # Ukrainian Dorian
-    12: [0, 1, 4, 6, 7, 9, 11],                              # Marva
-    13: [0, 1, 3, 6, 7, 8, 11],                              # Todi
-    14: [0, 2, 4, 6, 8, 10],                                 # Whole Tone
-    15: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],             # Chromatic
+    0: [0, 2, 3, 5, 7, 8, 10],  # Natural Minor
+    1: [0, 2, 4, 5, 7, 9, 11],  # Major
+    2: [0, 2, 3, 5, 7, 9, 10],  # Dorian
+    3: [0, 1, 3, 5, 7, 8, 10],  # Phrygian
+    4: [0, 2, 4, 5, 7, 9, 10],  # Mixolydian
+    5: [0, 2, 3, 5, 7, 9, 11],  # Melodic Minor
+    6: [0, 2, 3, 5, 7, 8, 11],  # Harmonic Minor
+    7: [0, 2, 3, 4, 5, 7, 9, 10],  # Bebop Dorian
+    8: [0, 3, 5, 6, 7, 10],  # Blues
+    9: [0, 3, 5, 7, 10],  # Minor Pentatonic
+    10: [0, 2, 3, 6, 7, 8, 11],  # Hungarian Minor
+    11: [0, 2, 3, 6, 7, 9, 10],  # Ukrainian Dorian
+    12: [0, 1, 4, 6, 7, 9, 11],  # Marva
+    13: [0, 1, 3, 6, 7, 8, 11],  # Todi
+    14: [0, 2, 4, 6, 8, 10],  # Whole Tone
+    15: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],  # Chromatic
 }
 
 
@@ -173,8 +193,20 @@ def quantize_to_scale(note: int, root: int, scale_type: int) -> int:
 
 
 # Reverse lookup dicts for ncs_to_song
-_SCALE_ROOT_REVERSE = {0: "C", 1: "C#", 2: "D", 3: "D#", 4: "E", 5: "F",
-                       6: "F#", 7: "G", 8: "G#", 9: "A", 10: "A#", 11: "B"}
+_SCALE_ROOT_REVERSE = {
+    0: "C",
+    1: "C#",
+    2: "D",
+    3: "D#",
+    4: "E",
+    5: "F",
+    6: "F#",
+    7: "G",
+    8: "G#",
+    9: "A",
+    10: "A#",
+    11: "B",
+}
 _SCALE_TYPE_REVERSE = {v: k for k, v in _SCALE_TYPE.items() if k != "minor"}
 _SC_SOURCE_REVERSE = {v: k for k, v in _SC_SOURCE.items()}
 _SEND_INDEX_REVERSE = {v: k for k, v in _SEND_INDEX.items()}
@@ -216,7 +248,7 @@ class FXConfig:
     delay_sends: dict[str, int] = field(default_factory=dict)
     sidechain: dict[str, dict] = field(default_factory=dict)
     reverb_preset: str | int | None = None  # preset name or index (0-7)
-    delay_preset: str | int | None = None   # preset name or index (0-15)
+    delay_preset: str | int | None = None  # preset name or index (0-15)
 
 
 @dataclass
@@ -306,14 +338,11 @@ def _schema_to_song_data(v: object) -> SongData:
                 # Convert mod matrix entries back to dicts
                 if sound_model.mod_matrix:
                     sc.mod_matrix = [
-                        entry.model_dump(exclude_none=True, exclude={"destination"})
-                        for entry in sound_model.mod_matrix
+                        entry.model_dump(exclude_none=True, exclude={"destination"}) for entry in sound_model.mod_matrix
                     ]
                 # Convert macro configs back to dicts
                 if sound_model.macros:
-                    sc.macros = {
-                        k: cfg.model_dump() for k, cfg in sound_model.macros.items()
-                    }
+                    sc.macros = {k: cfg.model_dump() for k, cfg in sound_model.macros.items()}
             else:
                 # DrumSoundConfig
                 sc.sample = sound_model.sample
@@ -333,10 +362,7 @@ def _schema_to_song_data(v: object) -> SongData:
             delay=fx.delay.model_dump(exclude_none=True) if fx.delay else {},
             reverb_sends=dict(fx.reverb_sends) if fx.reverb_sends else {},
             delay_sends=dict(fx.delay_sends) if fx.delay_sends else {},
-            sidechain={
-                k: sc.model_dump(exclude_none=True)
-                for k, sc in fx.sidechain.items()
-            } if fx.sidechain else {},
+            sidechain={k: sc.model_dump(exclude_none=True) for k, sc in fx.sidechain.items()} if fx.sidechain else {},
             reverb_preset=fx.reverb_preset,
             delay_preset=fx.delay_preset,
         )
@@ -354,10 +380,12 @@ def _schema_to_song_data(v: object) -> SongData:
         tracks_raw: dict[str, dict] = {}
         for track_name, track_model in pat_model.tracks.items():
             tracks_raw[track_name] = track_model.model_dump(
-                exclude_none=True, exclude_defaults=True,
+                exclude_none=True,
+                exclude_defaults=True,
             )
         song.patterns[pat_name] = PatternData(
-            length=pat_model.length, tracks=tracks_raw,
+            length=pat_model.length,
+            tracks=tracks_raw,
         )
 
     # Song structure
@@ -399,7 +427,11 @@ def _quantize_song_notes(song: SongData) -> int:
                         changed += 1
                         logger.debug(
                             "Quantized note %d -> %d (pattern=%s, track=%s, step=%s)",
-                            original, quantized, pat_name, track_name, idx_str,
+                            original,
+                            quantized,
+                            pat_name,
+                            track_name,
+                            idx_str,
                         )
 
                 if "notes" in step_data:
@@ -411,7 +443,11 @@ def _quantize_song_notes(song: SongData) -> int:
                             changed += 1
                             logger.debug(
                                 "Quantized note %d -> %d (pattern=%s, track=%s, step=%s)",
-                                n, q, pat_name, track_name, idx_str,
+                                n,
+                                q,
+                                pat_name,
+                                track_name,
+                                idx_str,
                             )
                         new_notes.append(q)
                     step_data["notes"] = new_notes
@@ -519,7 +555,9 @@ def _send_fx_midi(fx: FXConfig, midi: MidiConnection) -> None:
 
     # Reverb params
     _nrpn_map = {
-        "type": "reverb_type", "decay": "reverb_decay", "damping": "reverb_damping",
+        "type": "reverb_type",
+        "decay": "reverb_decay",
+        "damping": "reverb_damping",
     }
     for param, nrpn_key in _nrpn_map.items():
         if param in reverb_params and nrpn_key in PROJECT_NRPN:
@@ -528,8 +566,12 @@ def _send_fx_midi(fx: FXConfig, midi: MidiConnection) -> None:
 
     # Delay params
     _delay_map = {
-        "time": "delay_time", "sync": "delay_time_sync", "feedback": "delay_feedback",
-        "width": "delay_width", "lr_ratio": "delay_lr_ratio", "slew": "delay_slew_rate",
+        "time": "delay_time",
+        "sync": "delay_time_sync",
+        "feedback": "delay_feedback",
+        "width": "delay_width",
+        "lr_ratio": "delay_lr_ratio",
+        "slew": "delay_slew_rate",
     }
     for param, nrpn_key in _delay_map.items():
         if param in delay_params and nrpn_key in PROJECT_NRPN:
@@ -541,9 +583,7 @@ def _send_fx_midi(fx: FXConfig, midi: MidiConnection) -> None:
         prefix = f"sidechain_{synth_name}_"
         source_name = sc_data.get("source", "off")
         source_val = _SC_SOURCE.get(source_name, 4)
-        for param, value in [("source", source_val)] + [
-            (k, v) for k, v in sc_data.items() if k != "source"
-        ]:
+        for param, value in [("source", source_val)] + [(k, v) for k, v in sc_data.items() if k != "source"]:
             nrpn_key = prefix + param
             if nrpn_key in PROJECT_NRPN:
                 msb, lsb = PROJECT_NRPN[nrpn_key]
@@ -643,7 +683,6 @@ def song_to_ncs(song: SongData, template_path: Path | None = None) -> bytes:
     for synth_name, attr in [("synth1", "synth1_patch"), ("synth2", "synth2_patch")]:
         sc = song.sounds.get(synth_name)
         if sc:
-            synth_num = 1 if synth_name == "synth1" else 2
             patch_bytes = _build_patch_bytes(sc)
             setattr(ncs, attr, patch_bytes)
 
@@ -786,11 +825,13 @@ def ncs_to_song(ncs: NCSFile) -> SongData:
     # Mixer
     if ncs.fx.mixer_levels[0] != 100 or ncs.fx.mixer_pans[0] != 64:
         song.mixer["synth1"] = MixerConfig(
-            level=ncs.fx.mixer_levels[0], pan=ncs.fx.mixer_pans[0],
+            level=ncs.fx.mixer_levels[0],
+            pan=ncs.fx.mixer_pans[0],
         )
     if ncs.fx.mixer_levels[1] != 100 or ncs.fx.mixer_pans[1] != 64:
         song.mixer["synth2"] = MixerConfig(
-            level=ncs.fx.mixer_levels[1], pan=ncs.fx.mixer_pans[1],
+            level=ncs.fx.mixer_levels[1],
+            pan=ncs.fx.mixer_pans[1],
         )
 
     # Song order from scene chain
@@ -829,7 +870,10 @@ def _is_slot_non_empty(ncs: NCSFile, slot_idx: int) -> bool:
 
 
 def _read_pattern_slot(
-    ncs: NCSFile, slot_idx: int, scale_root: int = 0, scale_type: int = 15,
+    ncs: NCSFile,
+    slot_idx: int,
+    scale_root: int = 0,
+    scale_type: int = 15,
 ) -> PatternData:
     """Read all tracks at a pattern slot and build a PatternData."""
     tracks: dict[str, dict] = {}
@@ -867,7 +911,9 @@ def _read_pattern_slot(
 
 
 def _read_synth_track(
-    pat: SynthPattern, scale_root: int = 0, scale_type: int = 15,
+    pat: SynthPattern,
+    scale_root: int = 0,
+    scale_type: int = 15,
 ) -> dict | None:
     """Read a synth/MIDI pattern into a track data dict."""
     steps: dict[str, dict] = {}
@@ -891,10 +937,7 @@ def _read_synth_track(
             if raw_gate & 0x80:
                 step_dict["tie"] = True
         elif len(active) > 1:
-            step_dict["notes"] = [
-                quantize_to_scale(n.note_number, 0, scale_type) - 12 + scale_root
-                for n in active
-            ]
+            step_dict["notes"] = [quantize_to_scale(n.note_number, 0, scale_type) - 12 + scale_root for n in active]
             step_dict["velocity"] = active[0].velocity
             raw_gate = active[0].gate
             step_dict["gate"] = round((raw_gate & 0x7F) / 6.0, 3)
@@ -973,7 +1016,9 @@ def _parse_embedded_patch(patch_bytes: bytes) -> SoundConfig | None:
         return None
 
     from circuit_tracks.constants import (
-        MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS, MACRO_DESTINATIONS,
+        MACRO_DESTINATIONS,
+        MOD_MATRIX_DESTINATIONS,
+        MOD_MATRIX_SOURCES,
     )
 
     # Extract name (bytes 0-15 ASCII)
@@ -1033,12 +1078,14 @@ def _parse_embedded_patch(patch_bytes: bytes) -> SoundConfig | None:
             # Skip empty targets (dest=0, start=0, end=127, depth=64 is sentinel)
             if dest_idx == 0 and start == 0 and end == 127 and depth == 64:
                 continue
-            targets.append({
-                "dest": MACRO_DESTINATIONS.get(dest_idx, dest_idx),
-                "start": start,
-                "end": end,
-                "depth": depth,
-            })
+            targets.append(
+                {
+                    "dest": MACRO_DESTINATIONS.get(dest_idx, dest_idx),
+                    "start": start,
+                    "end": end,
+                    "depth": depth,
+                }
+            )
         if targets:
             macro_cfg: dict = {"targets": targets}
             if position != 0:
@@ -1273,8 +1320,11 @@ def _build_patch_bytes(sc: SoundConfig) -> bytes:
 
 
 def _write_synth_steps(
-    ncs_pat: SynthPattern, steps_raw: dict, length: int,
-    scale_root: int = 0, scale_type: int = 15,
+    ncs_pat: SynthPattern,
+    steps_raw: dict,
+    length: int,
+    scale_root: int = 0,
+    scale_type: int = 15,
 ) -> None:
     """Write sequencer step data into an NCS SynthPattern."""
     for idx_str, step_data in steps_raw.items():
@@ -1314,7 +1364,7 @@ def _write_synth_steps(
         if isinstance(step_data, dict) and "params" in step_data:
             raise ValueError(
                 f"Synth step {idx}: 'params' is not supported on synth steps. "
-                f"Use 'macros' instead (e.g. \"macros\": {{\"1\": 80}}) to p-lock "
+                f'Use \'macros\' instead (e.g. "macros": {{"1": 80}}) to p-lock '
                 f"via macro knobs, or use track-level 'macros' for automation."
             )
 
@@ -1330,7 +1380,9 @@ def _write_synth_steps(
 
 
 def _write_track_macros(
-    ncs_pat: SynthPattern, track_data: dict, length: int,
+    ncs_pat: SynthPattern,
+    track_data: dict,
+    length: int,
 ) -> None:
     """Write track-level macro automation into an NCS SynthPattern.
 
@@ -1358,7 +1410,9 @@ def _write_track_macros(
 
 
 def _write_mixer_locks(
-    ncs_pat: SynthPattern, track_data: dict, length: int,
+    ncs_pat: SynthPattern,
+    track_data: dict,
+    length: int,
 ) -> None:
     """Write track-level mixer/FX automation into an NCS SynthPattern.
 
@@ -1386,7 +1440,9 @@ def _write_mixer_locks(
 
 
 def _write_drum_param_locks(
-    ncs_pat: DrumPattern, track_data: dict, length: int,
+    ncs_pat: DrumPattern,
+    track_data: dict,
+    length: int,
 ) -> None:
     """Write track-level parameter automation into an NCS DrumPattern.
 
@@ -1415,8 +1471,11 @@ def _write_drum_param_locks(
 
 
 def _write_drum_steps(
-    ncs_pat: DrumPattern, steps_raw: dict, length: int,
-    song: SongData, track_name: str,
+    ncs_pat: DrumPattern,
+    steps_raw: dict,
+    length: int,
+    song: SongData,
+    track_name: str,
 ) -> None:
     """Write sequencer step data into an NCS DrumPattern."""
     # Get global drum sample for this track
@@ -1477,10 +1536,7 @@ def _find_closest_reverb(params: dict[str, int]) -> int:
     """Find the reverb preset closest to the given parameter values."""
     best_idx, best_dist = 0, float("inf")
     for idx, preset in REVERB_PRESETS.items():
-        dist = sum(
-            ((params.get(k, preset[k]) - preset[k]) / _REVERB_RANGES[k]) ** 2
-            for k in _REVERB_RANGES
-        )
+        dist = sum(((params.get(k, preset[k]) - preset[k]) / _REVERB_RANGES[k]) ** 2 for k in _REVERB_RANGES)
         if dist < best_dist:
             best_idx, best_dist = idx, dist
     return best_idx
@@ -1490,10 +1546,7 @@ def _find_closest_delay(params: dict[str, int]) -> int:
     """Find the delay preset closest to the given parameter values."""
     best_idx, best_dist = 0, float("inf")
     for idx, preset in DELAY_PRESETS.items():
-        dist = sum(
-            ((params.get(k, preset[k]) - preset[k]) / _DELAY_RANGES[k]) ** 2
-            for k in _DELAY_RANGES
-        )
+        dist = sum(((params.get(k, preset[k]) - preset[k]) / _DELAY_RANGES[k]) ** 2 for k in _DELAY_RANGES)
         if dist < best_dist:
             best_idx, best_dist = idx, dist
     return best_idx

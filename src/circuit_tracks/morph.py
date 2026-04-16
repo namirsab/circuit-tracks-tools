@@ -2,7 +2,6 @@
 
 import threading
 import time
-from typing import Callable
 
 from circuit_tracks.midi import MidiConnection
 
@@ -131,8 +130,18 @@ class MorphEngine:
 
         thread = threading.Thread(
             target=self._run,
-            args=(morph_id, channel, start, target, duration_seconds,
-                  total_steps, stop_event, ping_pong, cc_maps, nrpn_maps),
+            args=(
+                morph_id,
+                channel,
+                start,
+                target,
+                duration_seconds,
+                total_steps,
+                stop_event,
+                ping_pong,
+                cc_maps,
+                nrpn_maps,
+            ),
             daemon=True,
         )
         thread.start()
@@ -199,8 +208,13 @@ class MorphEngine:
                     return
                 t = i / steps
                 _send_params_at_t(
-                    self._midi, channel, start_values, target, t,
-                    cc_maps, nrpn_maps,
+                    self._midi,
+                    channel,
+                    start_values,
+                    target,
+                    t,
+                    cc_maps,
+                    nrpn_maps,
                 )
                 time.sleep(interval)
 
@@ -215,8 +229,13 @@ class MorphEngine:
                     return
                 t = 1.0 - (i / steps)
                 _send_params_at_t(
-                    self._midi, channel, start_values, target, t,
-                    cc_maps, nrpn_maps,
+                    self._midi,
+                    channel,
+                    start_values,
+                    target,
+                    t,
+                    cc_maps,
+                    nrpn_maps,
                 )
                 time.sleep(interval)
 

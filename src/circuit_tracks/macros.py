@@ -14,7 +14,8 @@ from dataclasses import dataclass
 @dataclass
 class MacroTarget:
     """A single parameter target for a macro knob."""
-    param: str        # Parameter name (must exist in SYNTH_CC or SYNTH_NRPN)
+
+    param: str  # Parameter name (must exist in SYNTH_CC or SYNTH_NRPN)
     min_val: int = 0  # Value when knob is at 0
     max_val: int = 127  # Value when knob is at 127
 

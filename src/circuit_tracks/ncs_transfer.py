@@ -64,7 +64,7 @@ def encode_msb_interleave(data: bytes) -> list[int]:
     result: list[int] = []
     i = 0
     while i < len(data):
-        group = data[i:i + 7]
+        group = data[i : i + 7]
         msb_header = 0
         for j, byte in enumerate(group):
             if byte & 0x80:
@@ -114,7 +114,7 @@ def block_address(block_num: int) -> list[int]:
     Uses (page, offset) encoding with 16 offsets per page:
     block 0 → (0, 0), block 15 → (0, 15), block 16 → (1, 0), etc.
     """
-    page = block_num >> 4      # block_num // 16
+    page = block_num >> 4  # block_num // 16
     offset = block_num & 0x0F  # block_num % 16
     return [0, 0, 0, 0, 0, 0, page, offset]
 
@@ -237,22 +237,20 @@ def list_directory(
         if msg.type != "sysex":
             continue
         data = list(msg.data)
-        if (
-            len(data) > header_len + 3
-            and data[:header_len] == _SYSEX_HEADER
-            and data[header_len] == _SUBCMD_FILE_ENTRY
-        ):
+        if len(data) > header_len + 3 and data[:header_len] == _SYSEX_HEADER and data[header_len] == _SUBCMD_FILE_ENTRY:
             # FILE_ENTRY format: header + 0x0C + subtype + slot_hi + slot_lo + filename bytes
             subtype = data[header_len + 1]
             slot = (data[header_len + 2] << 7) | data[header_len + 3]
-            name_bytes = data[header_len + 4:]
+            name_bytes = data[header_len + 4 :]
             filename = "".join(chr(b) for b in name_bytes if 32 <= b <= 126)
-            entries.append({
-                "slot": slot,
-                "filename": filename,
-                "file_type": file_type,
-                "subtype": subtype,
-            })
+            entries.append(
+                {
+                    "slot": slot,
+                    "filename": filename,
+                    "file_type": file_type,
+                    "subtype": subtype,
+                }
+            )
 
     # 4. Close session
     midi.send_sysex(_make_msg(_SUBCMD_CLOSE_SESSION))
@@ -340,7 +338,7 @@ def receive_ncs_project(
         ):
             # Extract size nibbles: after header(6) + subcmd(1) + addr(8) + fid(3) + flags(4)
             size_offset = header_len + 1 + 8 + 3 + 4
-            size_nibbles = data[size_offset:size_offset + 5]
+            size_nibbles = data[size_offset : size_offset + 5]
             file_size = nibbles_to_int(size_nibbles)
             break
 
@@ -350,13 +348,10 @@ def receive_ncs_project(
 
     if file_size != NCS_FILE_SIZE:
         midi.send_sysex(_make_msg(_SUBCMD_CLOSE_SESSION))
-        raise RuntimeError(
-            f"Unexpected file size: {file_size} (expected {NCS_FILE_SIZE})"
-        )
+        raise RuntimeError(f"Unexpected file size: {file_size} (expected {NCS_FILE_SIZE})")
 
     # 5. Receive data blocks and WRITE_FINISH
     raw_data = bytearray()
-    num_blocks = math.ceil(file_size / _BLOCK_SIZE)
     crc_received = None
     deadline = time.monotonic() + 60.0  # generous timeout for full transfer
 
@@ -386,7 +381,7 @@ def receive_ncs_project(
         elif subcmd == _SUBCMD_WRITE_FINISH:
             # Finish: header(6) + subcmd(1) + addr(8) + fid(3) + 8 CRC nibbles
             crc_offset = header_len + 1 + 8 + 3
-            crc_nibbles = data[crc_offset:crc_offset + 8]
+            crc_nibbles = data[crc_offset : crc_offset + 8]
             crc_received = nibbles_to_int(crc_nibbles)
             break
 
@@ -404,10 +399,7 @@ def receive_ncs_project(
     # Verify CRC32
     crc_computed = zlib.crc32(raw_bytes) & 0xFFFFFFFF
     if crc_computed != crc_received:
-        raise RuntimeError(
-            f"CRC32 mismatch: computed 0x{crc_computed:08X}, "
-            f"received 0x{crc_received:08X}"
-        )
+        raise RuntimeError(f"CRC32 mismatch: computed 0x{crc_computed:08X}, received 0x{crc_received:08X}")
 
     return raw_bytes
 
@@ -480,7 +472,7 @@ def send_ncs_project(
     bytes_sent = 0
     for block_num in range(1, num_blocks + 1):
         offset = (block_num - 1) * _BLOCK_SIZE
-        chunk = ncs_data[offset:offset + _BLOCK_SIZE]
+        chunk = ncs_data[offset : offset + _BLOCK_SIZE]
         encoded = encode_msb_interleave(chunk)
 
         addr = block_address(block_num)
@@ -608,8 +600,8 @@ def send_patch_to_slot(
     # Header: manufacturer(3) + product_type(1) + product_number(1)
     from circuit_tracks.constants import (
         SYSEX_MANUFACTURER_ID,
-        SYSEX_PRODUCT_TYPE,
         SYSEX_PRODUCT_NUMBER,
+        SYSEX_PRODUCT_TYPE,
     )
 
     patch_header = SYSEX_MANUFACTURER_ID + [SYSEX_PRODUCT_TYPE, SYSEX_PRODUCT_NUMBER]

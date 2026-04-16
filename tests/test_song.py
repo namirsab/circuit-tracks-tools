@@ -6,17 +6,18 @@ import pytest
 
 from circuit_tracks.ncs_parser import (
     NCS_FILE_SIZE,
+    NCSFile,
     get_drum_pattern,
     get_synth_pattern,
     parse_ncs,
 )
 from circuit_tracks.song import (
     SongData,
+    _song_data_to_dict,
     ncs_to_song,
     parse_song,
     quantize_to_scale,
     song_to_ncs,
-    _song_data_to_dict,
 )
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "example-projects-ncs"
@@ -175,17 +176,21 @@ class TestParseSong:
 
     def test_invalid_sidechain_track(self):
         with pytest.raises(ValueError):
-            parse_song({
-                "patterns": {"a": {"tracks": {}}},
-                "fx": {"sidechain": {"drum1": {}}},
-            })
+            parse_song(
+                {
+                    "patterns": {"a": {"tracks": {}}},
+                    "fx": {"sidechain": {"drum1": {}}},
+                }
+            )
 
     def test_invalid_send_track(self):
         with pytest.raises(ValueError):
-            parse_song({
-                "patterns": {"a": {"tracks": {}}},
-                "fx": {"reverb_sends": {"badtrack": 50}},
-            })
+            parse_song(
+                {
+                    "patterns": {"a": {"tracks": {}}},
+                    "fx": {"reverb_sends": {"badtrack": 50}},
+                }
+            )
 
 
 # --- song_to_ncs tests ---
@@ -262,7 +267,7 @@ class TestSongToNcs:
         ncs = parse_ncs_from_bytes(ncs_bytes)
 
         assert ncs.fx.reverb_sends[0] == 40  # synth1
-        assert ncs.fx.delay_sends[0] == 30   # synth1
+        assert ncs.fx.delay_sends[0] == 30  # synth1
         assert ncs.fx.reverb_type == 2
         assert ncs.fx.reverb_decay == 80
         assert ncs.fx.delay_time == 64
@@ -282,7 +287,7 @@ class TestSongToNcs:
         ncs = parse_ncs_from_bytes(ncs_bytes)
 
         assert ncs.fx.mixer_levels[0] == 110  # synth1
-        assert ncs.fx.mixer_pans[0] == 50     # synth1
+        assert ncs.fx.mixer_pans[0] == 50  # synth1
 
     def test_pattern_length_set(self):
         song = parse_song(FULL_SONG)
@@ -294,7 +299,7 @@ class TestSongToNcs:
         assert intro_pat.settings.playback_end == 15  # 16-1
 
         drop_pat = get_synth_pattern(ncs, 0, 1)
-        assert drop_pat.settings.playback_end == 31   # 32-1
+        assert drop_pat.settings.playback_end == 31  # 32-1
 
     def test_scenes_for_song_order(self):
         song = parse_song(FULL_SONG)
@@ -540,9 +545,7 @@ class TestNcsToSong:
         # Original: ["intro", "intro", "drop", "intro", "drop"]
         # intro=slot0=pattern_0, drop=slot1=pattern_1
         assert len(song2.song) == 5
-        assert song2.song == [
-            "pattern_0", "pattern_0", "pattern_1", "pattern_0", "pattern_1"
-        ]
+        assert song2.song == ["pattern_0", "pattern_0", "pattern_1", "pattern_0", "pattern_1"]
 
     def test_pattern_length_preserved(self):
         song1 = parse_song(FULL_SONG)
@@ -634,97 +637,162 @@ class TestQuantizeToScale:
 
 class TestParseSongQuantization:
     def test_out_of_scale_note_quantized(self):
-        song = parse_song({
-            "scale": {"root": "C", "type": "major"},
-            "patterns": {"a": {"length": 16, "tracks": {
-                "synth1": {"steps": {"0": {"note": 61}}},  # C# -> D (rounds up on tie)
-            }}},
-        })
+        song = parse_song(
+            {
+                "scale": {"root": "C", "type": "major"},
+                "patterns": {
+                    "a": {
+                        "length": 16,
+                        "tracks": {
+                            "synth1": {"steps": {"0": {"note": 61}}},  # C# -> D (rounds up on tie)
+                        },
+                    }
+                },
+            }
+        )
         assert song.patterns["a"].tracks["synth1"]["steps"]["0"]["note"] == 62
 
     def test_chord_notes_quantized(self):
-        song = parse_song({
-            "scale": {"root": "C", "type": "major"},
-            "patterns": {"a": {"length": 16, "tracks": {
-                "synth1": {"steps": {"0": {"notes": [60, 61, 63]}}},
-            }}},
-        })
+        song = parse_song(
+            {
+                "scale": {"root": "C", "type": "major"},
+                "patterns": {
+                    "a": {
+                        "length": 16,
+                        "tracks": {
+                            "synth1": {"steps": {"0": {"notes": [60, 61, 63]}}},
+                        },
+                    }
+                },
+            }
+        )
         # 60=C (in scale), 61=C# (-> 62=D, rounds up), 63=Eb (-> 64=E, rounds up)
         assert song.patterns["a"].tracks["synth1"]["steps"]["0"]["notes"] == [60, 62, 64]
 
     def test_chromatic_no_quantization(self):
-        song = parse_song({
-            "scale": {"root": "C", "type": "chromatic"},
-            "patterns": {"a": {"length": 16, "tracks": {
-                "synth1": {"steps": {"0": {"note": 61}}},
-            }}},
-        })
+        song = parse_song(
+            {
+                "scale": {"root": "C", "type": "chromatic"},
+                "patterns": {
+                    "a": {
+                        "length": 16,
+                        "tracks": {
+                            "synth1": {"steps": {"0": {"note": 61}}},
+                        },
+                    }
+                },
+            }
+        )
         assert song.patterns["a"].tracks["synth1"]["steps"]["0"]["note"] == 61
 
     def test_drum_tracks_not_quantized(self):
-        song = parse_song({
-            "scale": {"root": "C", "type": "major"},
-            "patterns": {"a": {"length": 16, "tracks": {
-                "drum1": {"steps": {"0": {"velocity": 100}}},
-            }}},
-        })
+        song = parse_song(
+            {
+                "scale": {"root": "C", "type": "major"},
+                "patterns": {
+                    "a": {
+                        "length": 16,
+                        "tracks": {
+                            "drum1": {"steps": {"0": {"velocity": 100}}},
+                        },
+                    }
+                },
+            }
+        )
         assert song.patterns["a"].tracks["drum1"]["steps"]["0"] == {"velocity": 100}
 
     def test_in_scale_notes_unchanged(self):
         # D minor: D(62), F(65), A(69) are all in scale
-        song = parse_song({
-            "scale": {"root": "D", "type": "minor"},
-            "patterns": {"a": {"length": 16, "tracks": {
-                "synth1": {"steps": {
-                    "0": {"note": 62},
-                    "1": {"notes": [62, 65, 69]},
-                }},
-            }}},
-        })
+        song = parse_song(
+            {
+                "scale": {"root": "D", "type": "minor"},
+                "patterns": {
+                    "a": {
+                        "length": 16,
+                        "tracks": {
+                            "synth1": {
+                                "steps": {
+                                    "0": {"note": 62},
+                                    "1": {"notes": [62, 65, 69]},
+                                }
+                            },
+                        },
+                    }
+                },
+            }
+        )
         assert song.patterns["a"].tracks["synth1"]["steps"]["0"]["note"] == 62
         assert song.patterns["a"].tracks["synth1"]["steps"]["1"]["notes"] == [62, 65, 69]
 
     def test_midi_tracks_quantized(self):
-        song = parse_song({
-            "scale": {"root": "C", "type": "major"},
-            "patterns": {"a": {"length": 16, "tracks": {
-                "midi1": {"steps": {"0": {"note": 61}}},  # C# -> D (rounds up)
-            }}},
-        })
+        song = parse_song(
+            {
+                "scale": {"root": "C", "type": "major"},
+                "patterns": {
+                    "a": {
+                        "length": 16,
+                        "tracks": {
+                            "midi1": {"steps": {"0": {"note": 61}}},  # C# -> D (rounds up)
+                        },
+                    }
+                },
+            }
+        )
         assert song.patterns["a"].tracks["midi1"]["steps"]["0"]["note"] == 62
 
     def test_songdata_scale_preserved(self):
         """parse_song preserves scale metadata even after quantization."""
-        song = parse_song({
-            "scale": {"root": "G", "type": "minor"},
-            "patterns": {"a": {"length": 16, "tracks": {
-                "synth1": {"steps": {"0": {"note": 66}}},  # F# -> F (65) or G (67)
-            }}},
-        })
+        song = parse_song(
+            {
+                "scale": {"root": "G", "type": "minor"},
+                "patterns": {
+                    "a": {
+                        "length": 16,
+                        "tracks": {
+                            "synth1": {"steps": {"0": {"note": 66}}},  # F# -> F (65) or G (67)
+                        },
+                    }
+                },
+            }
+        )
         assert song.scale_root == "G"
         assert song.scale_type == "minor"
 
 
 class TestNcsScaleExport:
     def test_scale_preserved_in_ncs(self):
-        song = parse_song({
-            "scale": {"root": "D", "type": "minor"},
-            "patterns": {"a": {"length": 16, "tracks": {
-                "synth1": {"steps": {"0": {"note": 62}}},
-            }}},
-        })
+        song = parse_song(
+            {
+                "scale": {"root": "D", "type": "minor"},
+                "patterns": {
+                    "a": {
+                        "length": 16,
+                        "tracks": {
+                            "synth1": {"steps": {"0": {"note": 62}}},
+                        },
+                    }
+                },
+            }
+        )
         ncs_bytes = song_to_ncs(song, template_path=EMPTY_NCS)
         ncs = parse_ncs_from_bytes(ncs_bytes)
-        assert ncs.project_settings.scale_root == 2   # D
-        assert ncs.project_settings.scale_type == 0   # natural minor
+        assert ncs.project_settings.scale_root == 2  # D
+        assert ncs.project_settings.scale_type == 0  # natural minor
 
     def test_quantized_note_stored_in_ncs(self):
-        song = parse_song({
-            "scale": {"root": "C", "type": "major"},
-            "patterns": {"a": {"length": 16, "tracks": {
-                "synth1": {"steps": {"0": {"note": 61}}},  # C#
-            }}},
-        })
+        song = parse_song(
+            {
+                "scale": {"root": "C", "type": "major"},
+                "patterns": {
+                    "a": {
+                        "length": 16,
+                        "tracks": {
+                            "synth1": {"steps": {"0": {"note": 61}}},  # C#
+                        },
+                    }
+                },
+            }
+        )
         ncs_bytes = song_to_ncs(song, template_path=EMPTY_NCS)
         ncs = parse_ncs_from_bytes(ncs_bytes)
         pat = get_synth_pattern(ncs, 0, 0)
@@ -733,12 +801,19 @@ class TestNcsScaleExport:
 
     def test_roundtrip_preserves_in_scale_notes(self):
         """Read project -> re-export should not change in-scale notes."""
-        song = parse_song({
-            "scale": {"root": "D", "type": "minor"},
-            "patterns": {"a": {"length": 16, "tracks": {
-                "synth1": {"steps": {"0": {"note": 62}}},  # D, in scale
-            }}},
-        })
+        song = parse_song(
+            {
+                "scale": {"root": "D", "type": "minor"},
+                "patterns": {
+                    "a": {
+                        "length": 16,
+                        "tracks": {
+                            "synth1": {"steps": {"0": {"note": 62}}},  # D, in scale
+                        },
+                    }
+                },
+            }
+        )
         ncs_bytes = song_to_ncs(song, template_path=EMPTY_NCS)
         ncs = parse_ncs_from_bytes(ncs_bytes)
         song2 = ncs_to_song(ncs)
@@ -755,6 +830,7 @@ class TestNcsScaleExport:
 def parse_ncs_from_bytes(data: bytes) -> "NCSFile":
     """Parse NCS data from bytes (writes to temp file)."""
     import tempfile
+
     with tempfile.NamedTemporaryFile(suffix=".ncs", delete=False) as f:
         f.write(data)
         f.flush()

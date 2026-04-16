@@ -85,10 +85,10 @@ class MidiConnection:
 
     def nrpn(self, channel: int, msb: int, lsb: int, value: int) -> None:
         """Send an NRPN message (4 CC messages)."""
-        self.control_change(channel, 99, msb)   # NRPN MSB
-        self.control_change(channel, 98, lsb)   # NRPN LSB
-        self.control_change(channel, 6, value)   # Data Entry MSB
-        self.control_change(channel, 38, 0)      # Data Entry LSB
+        self.control_change(channel, 99, msb)  # NRPN MSB
+        self.control_change(channel, 98, lsb)  # NRPN LSB
+        self.control_change(channel, 6, value)  # Data Entry MSB
+        self.control_change(channel, 38, 0)  # Data Entry LSB
 
     def program_change(self, channel: int, program: int) -> None:
         self.send(mido.Message("program_change", channel=channel, program=program))
@@ -128,10 +128,7 @@ class MidiConnection:
             The response SysEx data (without F0/F7), or None on timeout.
         """
         if not self.has_input:
-            raise RuntimeError(
-                "No MIDI input port available. "
-                "Reconnect to a port that has both input and output."
-            )
+            raise RuntimeError("No MIDI input port available. Reconnect to a port that has both input and output.")
 
         # Drain any pending messages
         while self._input_port.poll() is not None:

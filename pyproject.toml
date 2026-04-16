@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "circuit-tracks-tools"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python library and MCP server for controlling Novation Circuit Tracks via MIDI"
 license = "MIT"
 readme = "README.md"
@@ -29,6 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = ["mcp[cli]>=1.9.0"]
+dev = ["pytest", "ruff>=0.15", "pre-commit>=4.0"]
 
 [project.urls]
 Homepage = "https://github.com/namirsab/circuit-tracks-tools"
@@ -38,6 +39,21 @@ Changelog = "https://github.com/namirsab/circuit-tracks-tools/blob/main/CHANGELO
 
 [project.scripts]
 circuit-tracks-mcp = "circuit_mcp.server:main"
+
+[tool.ruff]
+src = ["src", "tests"]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "SIM105",  # contextlib.suppress — try/except/pass is clearer in MIDI loops
+    "SIM108",  # ternary operator — if/else blocks are often more readable
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/circuit_mcp/server.py" = ["E501"]  # MCP tool docstrings are consumed by LLMs, keep them on one line
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/circuit_tracks", "src/circuit_mcp"]

@@ -147,10 +147,12 @@ git clone https://github.com/namirsab/circuit-tracks-tools.git
 cd circuit-tracks-tools
 python -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
-pip install -e ".[mcp]"
+pip install -e ".[mcp,dev]"
+
+# Set up pre-commit hooks
+pre-commit install
 
 # Run tests (no hardware required — MIDI is mocked)
-pip install pytest
 pytest
 
 # Build a distributable wheel

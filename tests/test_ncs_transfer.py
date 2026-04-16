@@ -1,15 +1,14 @@
 """Tests for NCS project transfer protocol."""
 
 import json
-import os
 import zlib
 from pathlib import Path
 
 import pytest
 
 from circuit_tracks.ncs_transfer import (
-    NCS_FILE_SIZE,
     _BLOCK_SIZE,
+    NCS_FILE_SIZE,
     block_address,
     decode_msb_interleave,
     encode_msb_interleave,
@@ -75,6 +74,7 @@ class TestMsbInterleave:
     def test_round_trip_random(self):
         """Random-ish data should round-trip."""
         import hashlib
+
         # Deterministic pseudo-random data
         data = hashlib.sha256(b"test").digest() * 10  # 320 bytes
         decoded = decode_msb_interleave(encode_msb_interleave(data))
@@ -211,10 +211,11 @@ class TestCapturedTransfer:
 
         # Re-encode each block and compare
         import math
+
         num_blocks = math.ceil(NCS_FILE_SIZE / _BLOCK_SIZE)
         for block_num in range(num_blocks):
             offset = block_num * _BLOCK_SIZE
-            chunk = ncs_data[offset:offset + _BLOCK_SIZE]
+            chunk = ncs_data[offset : offset + _BLOCK_SIZE]
             re_encoded = encode_msb_interleave(chunk)
             captured = captured_encoded_blocks[block_num]
             assert re_encoded == captured, f"Block {block_num} encoding mismatch"

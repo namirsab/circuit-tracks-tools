@@ -6,11 +6,11 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from circuit_tracks.constants import (
-    DRUMS_CHANNEL,
     DRUM_CC,
     DRUM_NOTES,
-    PROJECT_CHANNEL,
+    DRUMS_CHANNEL,
     PROJECT_CC,
+    PROJECT_CHANNEL,
     PROJECT_NRPN,
     SYNTH1_CHANNEL,
     SYNTH2_CHANNEL,
@@ -22,15 +22,15 @@ from circuit_tracks.constants import (
 from circuit_tracks.macros import DEFAULT_MACROS, MacroTarget, apply_macro
 from circuit_tracks.midi import MidiConnection
 from circuit_tracks.morph import MorphEngine
-from circuit_tracks.patch import _PARAM_OFFSETS
+from circuit_tracks.ncs_transfer import send_ncs_project, send_patch_to_slot
 from circuit_tracks.patch import (
+    _PARAM_OFFSETS,
     parse_patch_data,
     parse_patch_file,
     read_and_modify_patch,
     request_current_patch,
     send_current_patch,
 )
-from circuit_tracks.ncs_transfer import send_ncs_project, send_patch_to_slot
 from circuit_tracks.sequencer import (
     VALID_TRACK_NAMES,
     ClockGenerator,
@@ -50,7 +50,6 @@ from circuit_tracks.song_schema import (
     TrackName,
 )
 
-
 _midi = MidiConnection()
 _engine = SequencerEngine(_midi)
 _morph = MorphEngine(_midi)
@@ -61,8 +60,10 @@ def _get_song_schema() -> dict:
     """Lazily load and cache the song JSON Schema."""
     if not hasattr(_get_song_schema, "_cache"):
         from circuit_tracks.song_schema import get_song_json_schema
+
         _get_song_schema._cache = get_song_json_schema()
     return _get_song_schema._cache
+
 
 mcp = FastMCP(
     "Circuit Tracks",
@@ -148,6 +149,7 @@ def connect(port_name: str) -> dict:
     if midi.has_input:
         try:
             from circuit_tracks.ncs_transfer import list_directory
+
             entries = list_directory(midi, file_type=5)
             if entries:
                 samples = {e["slot"]: e["filename"] for e in entries}
@@ -558,8 +560,6 @@ def set_drum_params(drum: int, params: dict[str, int]) -> str:
     return result
 
 
-
-
 @mcp.tool()
 def list_drum_samples(page: int | None = None) -> dict:
     """List available drum samples with their index numbers and names.
@@ -707,7 +707,6 @@ def set_project_params(params: dict[str, int]) -> str:
     return result
 
 
-
 # --- Macros (Live Performance) ---
 
 
@@ -760,10 +759,7 @@ def get_macros() -> dict:
     for num, macro in _macros.items():
         result[str(num)] = {
             "name": macro["name"],
-            "targets": [
-                {"param": t.param, "min": t.min_val, "max": t.max_val}
-                for t in macro["targets"]
-            ],
+            "targets": [{"param": t.param, "min": t.min_val, "max": t.max_val} for t in macro["targets"]],
         }
     return result
 
@@ -797,11 +793,13 @@ def configure_macro(
             param, min_val, max_val = t.param, t.min, t.max
         if param not in SYNTH_CC and param not in SYNTH_NRPN:
             return f"Unknown param '{param}'. Must be a valid synth parameter name."
-        parsed_targets.append(MacroTarget(
-            param=param,
-            min_val=min_val,
-            max_val=max_val,
-        ))
+        parsed_targets.append(
+            MacroTarget(
+                param=param,
+                min_val=min_val,
+                max_val=max_val,
+            )
+        )
 
     _macros[macro] = {"name": name, "targets": parsed_targets}
     target_desc = ", ".join(f"{t.param} ({t.min_val}→{t.max_val})" for t in parsed_targets)
@@ -813,8 +811,8 @@ def configure_macro(
 
 def _read_device_bpm(midi: MidiConnection) -> float:
     """Read the current project BPM from the device via SysEx."""
-    from circuit_tracks.ncs_transfer import receive_ncs_project
     from circuit_tracks.ncs_parser import TIMING_OFFSET
+    from circuit_tracks.ncs_transfer import receive_ncs_project
 
     ncs_bytes = receive_ncs_project(midi, 0)
     return float(ncs_bytes[TIMING_OFFSET])
@@ -871,8 +869,6 @@ def stop_clock() -> str:
 
 
 # --- Info / Reference ---
-
-
 
 
 @mcp.tool()
@@ -934,8 +930,7 @@ def edit_synth_patch(synth: int, params: dict[str, int | str]) -> dict:
     midi = _midi
     if not midi.has_input:
         return {
-            "error": "No MIDI input port. Needed for read-modify-write. "
-            "Reconnect and ensure input port is accessible."
+            "error": "No MIDI input port. Needed for read-modify-write. Reconnect and ensure input port is accessible."
         }
 
     return read_and_modify_patch(midi, synth, params)
@@ -993,8 +988,7 @@ def save_synth_patch(synth: int, slot: int) -> dict:
     midi = _midi
     if not midi.has_input:
         return {
-            "error": "No MIDI input port available. "
-            "The input port is needed to read the current patch before saving."
+            "error": "No MIDI input port available. The input port is needed to read the current patch before saving."
         }
 
     # Read current patch from device
@@ -1003,12 +997,13 @@ def save_synth_patch(synth: int, slot: int) -> dict:
         return {"error": "No response from Circuit Tracks. Is it connected?"}
 
     patch_start = 8
-    patch_bytes = bytes(sysex_data[patch_start:patch_start + 340])
+    patch_bytes = bytes(sysex_data[patch_start : patch_start + 340])
     if len(patch_bytes) < 340:
         return {"error": f"Patch data too short: {len(patch_bytes)} bytes"}
 
     # Wait for device to finish processing the dump response
     import time
+
     time.sleep(0.1)
 
     # Save to flash slot via Components protocol
@@ -1055,7 +1050,11 @@ def create_synth_patch(
         return {"error": f"Invalid synth number {synth}. Must be 1 or 2."}
 
     from circuit_tracks.patch_builder import (
-        PatchBuilder, preset_pad, preset_bass, preset_lead, preset_pluck,
+        PatchBuilder,
+        preset_bass,
+        preset_lead,
+        preset_pad,
+        preset_pluck,
     )
 
     # Start from preset or init
@@ -1113,6 +1112,7 @@ def create_synth_patch(
     # Keep in-memory song in sync so exports include the new patch
     if _current_song is not None:
         from circuit_tracks.song import SoundConfig
+
         synth_key = f"synth{synth}"
         all_params = {}
         for pname, offset in _PARAM_OFFSETS.items():
@@ -1138,8 +1138,7 @@ def create_synth_patch(
 _BEST_PRACTICES = {
     "pattern_length": "All patterns must use the same length (all 16 or all 32). Never mix.",
     "p_lock_automation": (
-        "Use 32-step patterns with micro-step substeps (0.5, 1.5) for smooth "
-        "automation. Max gate = 16 (one full step)."
+        "Use 32-step patterns with micro-step substeps (0.5, 1.5) for smooth automation. Max gate = 16 (one full step)."
     ),
     "macros_add_to_base": (
         "Macros ADD to base values — they don't replace. Set base low for "
@@ -1158,13 +1157,9 @@ _BEST_PRACTICES = {
         "output = quantize(ncs_note, root=0, type) + root - 12. "
         "Rounds up on ties. External MIDI bypasses the scale engine entirely."
     ),
-    "drum_sample_cc_bug": (
-        "CC drum sample selection is broken (firmware bug). "
-        "Use NCS export instead."
-    ),
+    "drum_sample_cc_bug": ("CC drum sample selection is broken (firmware bug). Use NCS export instead."),
     "standard_macro_layout": (
-        "1=Oscillator, 2=OscMod, 3=AmpEnv, 4=FilterEnv, "
-        "5=FilterFreq, 6=Resonance, 7=Modulation, 8=FX"
+        "1=Oscillator, 2=OscMod, 3=AmpEnv, 4=FilterEnv, 5=FilterFreq, 6=Resonance, 7=Modulation, 8=FX"
     ),
     "naming": (
         "Mod matrix: space-separated ('filter frequency'). "
@@ -1172,8 +1167,7 @@ _BEST_PRACTICES = {
         "These are different namespaces."
     ),
     "p_lock_keys": (
-        "Synth p-locks use 'macros' key (NOT 'p-locks' or 'params'). "
-        "Drum p-locks use 'params' key at track level."
+        "Synth p-locks use 'macros' key (NOT 'p-locks' or 'params'). Drum p-locks use 'params' key at track level."
     ),
     "sidechain_preset": (
         "Sidechain requires a 'preset' (1-7) to activate on hardware. "
@@ -1214,8 +1208,13 @@ def get_parameter_reference(section: str = "") -> dict:
       - Looking up waveform/filter names: "lookup_tables"
     """
     from circuit_tracks.constants import (
-        OSC_WAVEFORMS, FILTER_TYPES, DISTORTION_TYPES, LFO_WAVEFORMS,
-        MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS, MACRO_DESTINATIONS,
+        DISTORTION_TYPES,
+        FILTER_TYPES,
+        LFO_WAVEFORMS,
+        MACRO_DESTINATIONS,
+        MOD_MATRIX_DESTINATIONS,
+        MOD_MATRIX_SOURCES,
+        OSC_WAVEFORMS,
     )
 
     if section == "synth":
@@ -1224,7 +1223,10 @@ def get_parameter_reference(section: str = "") -> dict:
             "synth_cc_params": sorted(SYNTH_CC.keys()),
             "synth_nrpn_params": sorted(SYNTH_NRPN.keys()),
             "channels": {
-                "synth1": 0, "synth2": 1, "drums": 9, "project": 15,
+                "synth1": 0,
+                "synth2": 1,
+                "drums": 9,
+                "project": 15,
             },
         }
 
@@ -1352,8 +1354,14 @@ def get_parameter_reference(section: str = "") -> dict:
             "section": "macros",
             "macro_destinations": MACRO_DESTINATIONS,
             "standard_layout": {
-                "1": "Oscillator", "2": "OscMod", "3": "AmpEnv", "4": "FilterEnv",
-                "5": "FilterFreq", "6": "Resonance", "7": "Modulation", "8": "FX",
+                "1": "Oscillator",
+                "2": "OscMod",
+                "3": "AmpEnv",
+                "4": "FilterEnv",
+                "5": "FilterFreq",
+                "6": "Resonance",
+                "7": "Modulation",
+                "8": "FX",
             },
             "behavior": (
                 "Macros ADD to base patch values — they don't replace. "
@@ -1403,8 +1411,14 @@ def _start_morph(
     duration_seconds = duration_bars * seconds_per_bar
 
     error = _morph.start(
-        morph_id, channel, start, target, duration_seconds, ping_pong,
-        cc_maps, nrpn_maps,
+        morph_id,
+        channel,
+        start,
+        target,
+        duration_seconds,
+        ping_pong,
+        cc_maps,
+        nrpn_maps,
     )
     if error:
         return error
@@ -1412,10 +1426,7 @@ def _start_morph(
     param_list = ", ".join(f"{k}: {start[k]}→{target[k]}" for k in target)
     mode = "ping-pong" if ping_pong else "one-shot"
     cycle_info = f" (full cycle: {duration_bars * 2} bars)" if ping_pong else ""
-    return (
-        f"Morph '{morph_id}' [{mode}] over {duration_bars} bars "
-        f"({duration_seconds:.1f}s){cycle_info}: {param_list}"
-    )
+    return f"Morph '{morph_id}' [{mode}] over {duration_bars} bars ({duration_seconds:.1f}s){cycle_info}: {param_list}"
 
 
 @mcp.tool()
@@ -1460,8 +1471,14 @@ def morph_synth_params(
 
     channel = SYNTH1_CHANNEL if synth == 1 else SYNTH2_CHANNEL
     return _start_morph(
-        morph_id, channel, start, target, duration_bars, ping_pong,
-        cc_maps=[SYNTH_CC], nrpn_maps=[SYNTH_NRPN],
+        morph_id,
+        channel,
+        start,
+        target,
+        duration_bars,
+        ping_pong,
+        cc_maps=[SYNTH_CC],
+        nrpn_maps=[SYNTH_NRPN],
     )
 
 
@@ -1499,8 +1516,14 @@ def morph_project_params(
     morph_id = f"proj_{name}"
 
     return _start_morph(
-        morph_id, PROJECT_CHANNEL, start, target, duration_bars, ping_pong,
-        cc_maps=[PROJECT_CC], nrpn_maps=[PROJECT_NRPN],
+        morph_id,
+        PROJECT_CHANNEL,
+        start,
+        target,
+        duration_bars,
+        ping_pong,
+        cc_maps=[PROJECT_CC],
+        nrpn_maps=[PROJECT_NRPN],
     )
 
 
@@ -1536,8 +1559,14 @@ def morph_drum_params(
     morph_id = f"d{drum}_{name}"
 
     return _start_morph(
-        morph_id, DRUMS_CHANNEL, start, target, duration_bars, ping_pong,
-        cc_maps=[DRUM_CC[drum]], nrpn_maps=[],
+        morph_id,
+        DRUMS_CHANNEL,
+        start,
+        target,
+        duration_bars,
+        ping_pong,
+        cc_maps=[DRUM_CC[drum]],
+        nrpn_maps=[],
     )
 
 
@@ -1619,7 +1648,11 @@ def load_song(song: SongSchema) -> dict:
     - Drum p-locks use track-level "params": {"pitch": {"0": 30}}.
     """
     global _current_song
-    from circuit_tracks.song import _schema_to_song_data, _quantize_song_notes, load_song_to_sequencer
+    from circuit_tracks.song import (
+        _quantize_song_notes,
+        _schema_to_song_data,
+        load_song_to_sequencer,
+    )
 
     # SongSchema is already validated by FastMCP, convert to internal dataclass
     song_data = _schema_to_song_data(song)
@@ -1714,9 +1747,9 @@ def read_project(slot: int = 0) -> dict:
             "Reconnect and ensure the Circuit Tracks input port is accessible."
         }
 
-    from circuit_tracks.ncs_transfer import receive_ncs_project
     from circuit_tracks.ncs_parser import parse_ncs_from_bytes
-    from circuit_tracks.song import ncs_to_song, _song_data_to_dict
+    from circuit_tracks.ncs_transfer import receive_ncs_project
+    from circuit_tracks.song import _song_data_to_dict, ncs_to_song
 
     try:
         ncs_bytes = receive_ncs_project(midi, slot)
