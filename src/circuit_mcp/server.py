@@ -66,13 +66,52 @@ def _get_song_schema() -> dict:
 
 mcp = FastMCP(
     "Circuit Tracks",
-    instructions=(
-        "Control a Novation Circuit Tracks synthesizer via MIDI. "
-        "IMPORTANT: Before calling create_synth_patch, edit_synth_patch, or load_song, "
-        "call get_parameter_reference to get the exact valid parameter names, "
-        "mod matrix sources/destinations, and macro destinations. "
-        "Do NOT guess or abbreviate parameter names — use the exact strings returned."
-    ),
+    instructions="""\
+Control a Novation Circuit Tracks synthesizer via MIDI.
+
+BEFORE using complex tools, call get_parameter_reference with the relevant
+section to get exact valid parameter names. Sections: synth, patch, drums,
+project, lookup_tables, mod_matrix, macros, song_format, best_practices.
+Call with no section for a summary + best practices.
+  - Creating a song: get_parameter_reference("song_format")
+  - Creating a patch: get_parameter_reference("patch"), then ("mod_matrix"), then ("macros")
+  - Setting live params: get_parameter_reference("synth") or ("drums") or ("project")
+
+CRITICAL RULES — violating these produces broken output:
+
+1. PATTERN LENGTH: All patterns in a project MUST use the same length.
+   Use all 16-step or all 32-step. Never mix.
+
+2. P-LOCK AUTOMATION: Use 32-step patterns with micro-step substeps
+   (fractional positions like 0.5, 1.5) for smooth automation.
+   Maximum gate value is 16 (one full step).
+
+3. MACROS ADD TO BASE: Macro knobs ADD to the patch base parameter value —
+   they don't replace it. Set base values LOW for params you want macros
+   to sweep upward (e.g., filter_frequency=0 if macro sweeps 0->127).
+
+4. STANDARD MACRO LAYOUT: 1=Oscillator, 2=OscMod, 3=AmpEnv, 4=FilterEnv,
+   5=FilterFreq, 6=Resonance, 7=Modulation, 8=FX.
+   Only continuous parameters can be macro targets.
+
+5. ALWAYS INCLUDE SOUNDS: When using load_song, always include the "sounds"
+   key with full synth1/synth2 patch configs. Omitting sounds means
+   export_song_to_project produces init patches.
+
+6. NAMING CONVENTIONS: Mod matrix source/dest use SPACE-separated names
+   ("filter frequency"). Synth params use snake_case ("filter_frequency").
+   These are different — don't mix them up.
+
+7. P-LOCK KEYS: Synth step automation uses the "macros" key
+   (NOT "p-locks", "params", or "macro_knob1").
+   Drum step automation uses the "params" key at track level.
+
+8. DRUM SAMPLE CC BUG: CC-based drum sample selection doesn't work
+   (firmware bug). Use NCS project export to set drum samples.
+
+9. WORKFLOW: connect -> get_parameter_reference -> build song/patch ->
+   load_song -> start_sequencer (preview) -> export_song_to_project (save).
+""",
     log_level="WARNING",
 )
 
@@ -737,11 +776,15 @@ def configure_macro(
 ) -> str:
     """Configure what a macro knob controls. Changes take effect immediately.
 
+    Macros ADD to the patch base value — they don't replace it. Set base
+    param values low for params you want to sweep upward. Only continuous
+    parameters can be macro targets (not discrete params like waveform select).
+
     Args:
         macro: Macro number (1-8).
         name: Display name for this macro (e.g., "Filter Sweep").
         targets: List of parameter targets. Each target's param must be an
-            exact synth parameter name from get_parameter_reference.
+            exact synth parameter name from get_parameter_reference("synth").
     """
     if not 1 <= macro <= 8:
         return f"Invalid macro {macro}. Must be 1-8."
@@ -986,10 +1029,15 @@ def create_synth_patch(
     Unlike edit_synth_patch (which reads then modifies the current patch), this
     builds a complete patch from an init template. Use for full sound design.
 
-    IMPORTANT: Use get_parameter_reference to get the exact parameter names.
+    IMPORTANT: Call get_parameter_reference("patch"), then ("mod_matrix"),
+    then ("macros") to get exact parameter names before using this tool.
 
     Mod matrix source/dest use SPACE-separated names ("filter frequency"),
     NOT snake_case. Depth is signed: -64 to +63 (0 = no modulation).
+
+    Macros ADD to base param values — they don't replace. Set base values
+    LOW for params you want macros to sweep upward (e.g., filter_frequency=0
+    if a macro should sweep filter from closed to open).
 
     Standard macro layout (be creative but use these names as orientation):
         1. Oscillator  2. Oscillator Mod  3. Amp Envelope  4. Filter Envelope
@@ -1087,124 +1135,255 @@ def create_synth_patch(
     }
 
 
-@mcp.tool()
-def get_parameter_reference() -> dict:
-    """Get a complete reference of all parameter names for synths, drums, and project.
+_BEST_PRACTICES = {
+    "pattern_length": "All patterns must use the same length (all 16 or all 32). Never mix.",
+    "p_lock_automation": (
+        "Use 32-step patterns with micro-step substeps (0.5, 1.5) for smooth "
+        "automation. Max gate = 16 (one full step)."
+    ),
+    "macros_add_to_base": (
+        "Macros ADD to base values — they don't replace. Set base low for "
+        "sweep params (e.g., filter_frequency=0 if macro sweeps 0->127). "
+        "depth=127 means full positive addition."
+    ),
+    "macro_destinations": (
+        "Only continuous params can be macro targets. Indices 0-70 skip 21 "
+        "discrete/voice/pitch params. Use the macro_destinations lookup table."
+    ),
+    "include_sounds": (
+        "Always include 'sounds' in load_song with full synth configs so "
+        "patches export correctly with export_song_to_project."
+    ),
+    "scale_engine": (
+        "output = quantize(ncs_note, root=0, type) + root - 12. "
+        "Rounds up on ties. External MIDI bypasses the scale engine entirely."
+    ),
+    "drum_sample_cc_bug": (
+        "CC drum sample selection is broken (firmware bug). "
+        "Use NCS export instead."
+    ),
+    "standard_macro_layout": (
+        "1=Oscillator, 2=OscMod, 3=AmpEnv, 4=FilterEnv, "
+        "5=FilterFreq, 6=Resonance, 7=Modulation, 8=FX"
+    ),
+    "naming": (
+        "Mod matrix: space-separated ('filter frequency'). "
+        "Synth params: snake_case ('filter_frequency'). "
+        "These are different namespaces."
+    ),
+    "p_lock_keys": (
+        "Synth p-locks use 'macros' key (NOT 'p-locks' or 'params'). "
+        "Drum p-locks use 'params' key at track level."
+    ),
+    "sidechain_preset": (
+        "Sidechain requires a 'preset' (1-7) to activate on hardware. "
+        "Just setting source/depth is not enough. The preset auto-fills "
+        "attack/hold/decay/depth values. Supports synth1, synth2, midi1, midi2."
+    ),
+}
 
-    Returns parameter names for set_synth_params, set_drum_params, set_project_params,
-    and create_synth_patch. Includes defaults, ranges, lookup tables for waveforms,
-    filter types, mod matrix sources/destinations, and macro destinations.
+_SECTION_DESCRIPTIONS = {
+    "synth": "CC and NRPN parameter names for set_synth_params, plus MIDI channels",
+    "patch": "All patch parameters with defaults/ranges for create_synth_patch/edit_synth_patch",
+    "drums": "Drum parameter names and drum numbers for set_drum_params",
+    "project": "CC and NRPN parameter names for set_project_params (reverb, delay, mixer, etc.)",
+    "lookup_tables": "Waveforms, filter types, distortion types, LFO waveforms",
+    "mod_matrix": "Valid mod matrix source and destination names (space-separated)",
+    "macros": "Valid macro destination names, standard layout, and presets",
+    "song_format": "Full JSON Schema for the load_song SongSchema",
+    "best_practices": "Operational rules and common pitfalls",
+}
+
+
+@mcp.tool()
+def get_parameter_reference(section: str = "") -> dict:
+    """Get parameter reference for synths, drums, project, patches, and more.
+
+    Call with a specific section to get focused data instead of everything.
+    Call with no section to get available sections + best practices.
+
+    Sections: synth, patch, drums, project, lookup_tables, mod_matrix,
+    macros, song_format, best_practices.
+
+    Which sections to use:
+      - Creating a song: "song_format"
+      - Creating/editing a patch: "patch", then "mod_matrix", then "macros"
+      - Setting live synth params: "synth"
+      - Setting drum params: "drums"
+      - Setting project params (FX, mixer): "project"
+      - Looking up waveform/filter names: "lookup_tables"
     """
     from circuit_tracks.constants import (
         OSC_WAVEFORMS, FILTER_TYPES, DISTORTION_TYPES, LFO_WAVEFORMS,
         MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS, MACRO_DESTINATIONS,
     )
 
-    return {
-        "synth_cc_params": sorted(SYNTH_CC.keys()),
-        "synth_nrpn_params": sorted(SYNTH_NRPN.keys()),
-        "drum_params": ["level", "pitch", "decay", "distortion", "eq", "pan"],
-        "drum_numbers": [1, 2, 3, 4],
-        "project_cc_params": sorted(PROJECT_CC.keys()),
-        "project_nrpn_params": sorted(PROJECT_NRPN.keys()),
-        "channels": {
-            "synth1": 0,
-            "synth2": 1,
-            "drums": 9,
-            "project": 15,
-        },
-        "patch_parameters": {
-            "voice": {
-                "polyphony_mode": {"default": 2, "range": "0-2", "notes": "0=Mono, 1=Mono AG, 2=Poly"},
-                "portamento_rate": {"default": 0, "range": "0-127"},
-                "pre_glide": {"default": 64, "range": "52-76", "notes": "center=64"},
-                "keyboard_octave": {"default": 64, "range": "58-69", "notes": "center=64"},
+    if section == "synth":
+        return {
+            "section": "synth",
+            "synth_cc_params": sorted(SYNTH_CC.keys()),
+            "synth_nrpn_params": sorted(SYNTH_NRPN.keys()),
+            "channels": {
+                "synth1": 0, "synth2": 1, "drums": 9, "project": 15,
             },
-            "osc1": {
-                "osc1_wave": {"default": 2, "range": "0-29", "notes": "See waveforms table"},
-                "osc1_wave_interpolate": {"default": 127, "range": "0-127"},
-                "osc1_pulse_width_index": {"default": 64, "range": "0-127"},
-                "osc1_virtual_sync_depth": {"default": 0, "range": "0-127"},
-                "osc1_density": {"default": 0, "range": "0-127"},
-                "osc1_density_detune": {"default": 0, "range": "0-127"},
-                "osc1_semitones": {"default": 64, "range": "0-127", "notes": "center=64"},
-                "osc1_cents": {"default": 64, "range": "0-127", "notes": "center=64"},
-                "osc1_pitchbend": {"default": 76, "range": "52-76"},
+        }
+
+    if section == "patch":
+        return {
+            "section": "patch",
+            "patch_parameters": {
+                "voice": {
+                    "polyphony_mode": {"default": 2, "range": "0-2", "notes": "0=Mono, 1=Mono AG, 2=Poly"},
+                    "portamento_rate": {"default": 0, "range": "0-127"},
+                    "pre_glide": {"default": 64, "range": "52-76", "notes": "center=64"},
+                    "keyboard_octave": {"default": 64, "range": "58-69", "notes": "center=64"},
+                },
+                "osc1": {
+                    "osc1_wave": {"default": 2, "range": "0-29", "notes": "See lookup_tables for waveform names"},
+                    "osc1_wave_interpolate": {"default": 127, "range": "0-127"},
+                    "osc1_pulse_width_index": {"default": 64, "range": "0-127"},
+                    "osc1_virtual_sync_depth": {"default": 0, "range": "0-127"},
+                    "osc1_density": {"default": 0, "range": "0-127"},
+                    "osc1_density_detune": {"default": 0, "range": "0-127"},
+                    "osc1_semitones": {"default": 64, "range": "0-127", "notes": "center=64"},
+                    "osc1_cents": {"default": 64, "range": "0-127", "notes": "center=64"},
+                    "osc1_pitchbend": {"default": 76, "range": "52-76"},
+                },
+                "osc2": "Same layout as osc1 (prefix osc2_)",
+                "mixer": {
+                    "osc1_level": {"default": 127, "range": "0-127"},
+                    "osc2_level": {"default": 0, "range": "0-127"},
+                    "ring_mod_level": {"default": 0, "range": "0-127"},
+                    "noise_level": {"default": 0, "range": "0-127"},
+                    "pre_fx_level": {"default": 64, "range": "52-82"},
+                    "post_fx_level": {"default": 64, "range": "52-82"},
+                },
+                "filter": {
+                    "routing": {"default": 0, "range": "0-2", "notes": "0=Normal, 1=Osc1 bypass, 2=Both bypass"},
+                    "drive": {"default": 0, "range": "0-127"},
+                    "drive_type": {"default": 0, "range": "0-6", "notes": "See lookup_tables for distortion types"},
+                    "filter_type": {"default": 1, "range": "0-5", "notes": "See lookup_tables for filter types"},
+                    "filter_frequency": {"default": 127, "range": "0-127"},
+                    "filter_tracking": {"default": 0, "range": "0-127"},
+                    "filter_resonance": {"default": 0, "range": "0-127"},
+                    "filter_q_normalize": {"default": 64, "range": "0-127"},
+                    "env2_to_filter_freq": {"default": 64, "range": "0-127", "notes": "center=64"},
+                },
+                "env_amp": {
+                    "env1_velocity": {"default": 64, "range": "0-127", "notes": "center=64"},
+                    "env1_attack": {"default": 2, "range": "0-127"},
+                    "env1_decay": {"default": 90, "range": "0-127"},
+                    "env1_sustain": {"default": 127, "range": "0-127"},
+                    "env1_release": {"default": 40, "range": "0-127"},
+                },
+                "env_filter": {
+                    "env2_velocity": {"default": 64, "range": "0-127"},
+                    "env2_attack": {"default": 2, "range": "0-127"},
+                    "env2_decay": {"default": 75, "range": "0-127"},
+                    "env2_sustain": {"default": 35, "range": "0-127"},
+                    "env2_release": {"default": 45, "range": "0-127"},
+                },
+                "env3": {
+                    "env3_delay": {"default": 0, "range": "0-127"},
+                    "env3_attack": {"default": 10, "range": "0-127"},
+                    "env3_decay": {"default": 70, "range": "0-127"},
+                    "env3_sustain": {"default": 64, "range": "0-127"},
+                    "env3_release": {"default": 40, "range": "0-127"},
+                },
+                "lfo1": "waveform(0-37), phase_offset(0-119), slew_rate, delay, delay_sync(0-35), rate(def=68), rate_sync(0-35), flags(bitfield)",
+                "lfo2": "Same layout as lfo1 (prefix lfo2_)",
+                "effects": {
+                    "distortion_level": {"default": 0, "range": "0-127"},
+                    "distortion_type": {"default": 0, "range": "0-6"},
+                    "distortion_compensation": {"default": 100, "range": "0-127"},
+                    "chorus_level": {"default": 0, "range": "0-127"},
+                    "chorus_type": {"default": 1, "range": "0-1", "notes": "0=Phaser, 1=Chorus"},
+                    "chorus_rate": {"default": 20, "range": "0-127"},
+                    "chorus_feedback": {"default": 74, "range": "0-127"},
+                    "chorus_mod_depth": {"default": 64, "range": "0-127"},
+                    "chorus_delay": {"default": 64, "range": "0-127"},
+                },
+                "eq": {
+                    "eq_bass_frequency": {"default": 64, "range": "0-127"},
+                    "eq_bass_level": {"default": 64, "range": "0-127", "notes": "center=64"},
+                    "eq_mid_frequency": {"default": 64, "range": "0-127"},
+                    "eq_mid_level": {"default": 64, "range": "0-127", "notes": "center=64"},
+                    "eq_treble_frequency": {"default": 125, "range": "0-127"},
+                    "eq_treble_level": {"default": 64, "range": "0-127", "notes": "center=64"},
+                },
             },
-            "osc2": "Same layout as osc1 (prefix osc2_)",
-            "mixer": {
-                "osc1_level": {"default": 127, "range": "0-127"},
-                "osc2_level": {"default": 0, "range": "0-127"},
-                "ring_mod_level": {"default": 0, "range": "0-127"},
-                "noise_level": {"default": 0, "range": "0-127"},
-                "pre_fx_level": {"default": 64, "range": "52-82"},
-                "post_fx_level": {"default": 64, "range": "52-82"},
-            },
-            "filter": {
-                "routing": {"default": 0, "range": "0-2", "notes": "0=Normal, 1=Osc1 bypass, 2=Both bypass"},
-                "drive": {"default": 0, "range": "0-127"},
-                "drive_type": {"default": 0, "range": "0-6", "notes": "See distortion types"},
-                "filter_type": {"default": 1, "range": "0-5", "notes": "See filter types"},
-                "filter_frequency": {"default": 127, "range": "0-127"},
-                "filter_tracking": {"default": 0, "range": "0-127"},
-                "filter_resonance": {"default": 0, "range": "0-127"},
-                "filter_q_normalize": {"default": 64, "range": "0-127"},
-                "env2_to_filter_freq": {"default": 64, "range": "0-127", "notes": "center=64"},
-            },
-            "env_amp": {
-                "env1_velocity": {"default": 64, "range": "0-127", "notes": "center=64"},
-                "env1_attack": {"default": 2, "range": "0-127"},
-                "env1_decay": {"default": 90, "range": "0-127"},
-                "env1_sustain": {"default": 127, "range": "0-127"},
-                "env1_release": {"default": 40, "range": "0-127"},
-            },
-            "env_filter": {
-                "env2_velocity": {"default": 64, "range": "0-127"},
-                "env2_attack": {"default": 2, "range": "0-127"},
-                "env2_decay": {"default": 75, "range": "0-127"},
-                "env2_sustain": {"default": 35, "range": "0-127"},
-                "env2_release": {"default": 45, "range": "0-127"},
-            },
-            "env3": {
-                "env3_delay": {"default": 0, "range": "0-127"},
-                "env3_attack": {"default": 10, "range": "0-127"},
-                "env3_decay": {"default": 70, "range": "0-127"},
-                "env3_sustain": {"default": 64, "range": "0-127"},
-                "env3_release": {"default": 40, "range": "0-127"},
-            },
-            "lfo1": "waveform(0-37), phase_offset(0-119), slew_rate, delay, delay_sync(0-35), rate(def=68), rate_sync(0-35), flags(bitfield)",
-            "lfo2": "Same layout as lfo1 (prefix lfo2_)",
-            "effects": {
-                "distortion_level": {"default": 0, "range": "0-127"},
-                "distortion_type": {"default": 0, "range": "0-6"},
-                "distortion_compensation": {"default": 100, "range": "0-127"},
-                "chorus_level": {"default": 0, "range": "0-127"},
-                "chorus_type": {"default": 1, "range": "0-1", "notes": "0=Phaser, 1=Chorus"},
-                "chorus_rate": {"default": 20, "range": "0-127"},
-                "chorus_feedback": {"default": 74, "range": "0-127"},
-                "chorus_mod_depth": {"default": 64, "range": "0-127"},
-                "chorus_delay": {"default": 64, "range": "0-127"},
-            },
-            "eq": {
-                "eq_bass_frequency": {"default": 64, "range": "0-127"},
-                "eq_bass_level": {"default": 64, "range": "0-127", "notes": "center=64"},
-                "eq_mid_frequency": {"default": 64, "range": "0-127"},
-                "eq_mid_level": {"default": 64, "range": "0-127", "notes": "center=64"},
-                "eq_treble_frequency": {"default": 125, "range": "0-127"},
-                "eq_treble_level": {"default": 64, "range": "0-127", "notes": "center=64"},
-            },
-        },
-        "lookup_tables": {
+            "presets": ["pad", "bass", "lead", "pluck"],
+        }
+
+    if section == "drums":
+        return {
+            "section": "drums",
+            "drum_params": ["level", "pitch", "decay", "distortion", "eq", "pan"],
+            "drum_numbers": [1, 2, 3, 4],
+            "note": "CC-based drum sample selection is broken (firmware bug). Use NCS export.",
+        }
+
+    if section == "project":
+        return {
+            "section": "project",
+            "project_cc_params": sorted(PROJECT_CC.keys()),
+            "project_nrpn_params": sorted(PROJECT_NRPN.keys()),
+        }
+
+    if section == "lookup_tables":
+        return {
+            "section": "lookup_tables",
             "osc_waveforms": OSC_WAVEFORMS,
             "filter_types": FILTER_TYPES,
             "distortion_types": DISTORTION_TYPES,
             "lfo_waveforms": LFO_WAVEFORMS,
-            "mod_matrix_sources": MOD_MATRIX_SOURCES,
-            "mod_matrix_destinations": MOD_MATRIX_DESTINATIONS,
+        }
+
+    if section == "mod_matrix":
+        return {
+            "section": "mod_matrix",
+            "sources": MOD_MATRIX_SOURCES,
+            "destinations": MOD_MATRIX_DESTINATIONS,
+            "note": "Use SPACE-separated names ('filter frequency'), NOT snake_case. Depth is signed: -64 to +63.",
+        }
+
+    if section == "macros":
+        return {
+            "section": "macros",
             "macro_destinations": MACRO_DESTINATIONS,
-        },
-        "presets": ["pad", "bass", "lead", "pluck"],
-        "song_format": _get_song_schema(),
+            "standard_layout": {
+                "1": "Oscillator", "2": "OscMod", "3": "AmpEnv", "4": "FilterEnv",
+                "5": "FilterFreq", "6": "Resonance", "7": "Modulation", "8": "FX",
+            },
+            "behavior": (
+                "Macros ADD to base patch values — they don't replace. "
+                "Set base low for params you want to sweep upward. "
+                "Only continuous parameters can be macro targets."
+            ),
+        }
+
+    if section == "song_format":
+        return {
+            "section": "song_format",
+            "schema": _get_song_schema(),
+        }
+
+    if section == "best_practices":
+        return {
+            "section": "best_practices",
+            **_BEST_PRACTICES,
+        }
+
+    # Default: return section directory + best practices
+    return {
+        "available_sections": _SECTION_DESCRIPTIONS,
+        "usage": (
+            "Call get_parameter_reference(section) with one of the section "
+            "names above to get focused data. For example: "
+            'get_parameter_reference("synth") for CC/NRPN param names, '
+            'get_parameter_reference("song_format") for the load_song schema.'
+        ),
+        "best_practices": _BEST_PRACTICES,
     }
 
 
@@ -1424,10 +1603,14 @@ def load_song(song: SongSchema) -> dict:
     Use start_sequencer to play back, then export_song_to_project to save.
 
     The song parameter is strictly validated — unknown keys are rejected.
-    Use get_parameter_reference for valid synth param names, mod matrix
-    sources/destinations, and macro destinations.
+    Use get_parameter_reference("song_format") for the full schema.
 
-    IMPORTANT NOTES:
+    CRITICAL RULES:
+    - All patterns MUST use the same length (all 16 or all 32, never mixed).
+    - Always include "sounds" with full synth1/synth2 patch configs.
+      Omitting sounds means export_song_to_project produces init patches.
+    - Use 32-step patterns with micro-step substeps (0.5, 1.5) for smooth
+      p-lock automation. Max gate value is 16 (one full step).
     - Mod matrix source/dest use SPACE-separated names ("filter frequency"),
       NOT snake_case ("filter_frequency"). These differ from synth param names.
     - Synth p-locks use "macros" key (NOT "p-locks", NOT "params",
@@ -1466,7 +1649,9 @@ def export_song_to_project(slot: int = -1, name: str = "") -> dict:
     By default, exports to the currently selected project slot (set via
     select_project). Pass an explicit slot to override.
 
-    Synth patches from the song are included in the .ncs project file.
+    Synth patches from the "sounds" config in load_song are embedded in the
+    .ncs file. If load_song was called without sounds, the exported project
+    will have init (default) patches — always include sounds in load_song.
 
     Args:
         slot: Target project slot (0-63). Defaults to the currently selected project.

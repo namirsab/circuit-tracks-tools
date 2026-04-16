@@ -361,7 +361,9 @@ class DelayConfig(BaseModel):
 
 
 class SidechainConfig(BaseModel):
-    """Sidechain compressor settings for a synth track."""
+    """Sidechain compressor settings for a synth or MIDI track."""
+    preset: int | None = Field(default=None, ge=0, le=7,
+        description="Sidechain preset (1-7). Required to activate sidechain on hardware. 0 or omit = OFF.")
     source: SidechainSource = "off"
     attack: int | None = Field(default=None, ge=0, le=127)
     hold: int | None = Field(default=None, ge=0, le=127)
@@ -389,7 +391,7 @@ class FXConfig(BaseModel):
         default=None,
         description="Per-track delay send level.",
     )
-    sidechain: dict[Literal["synth1", "synth2"], SidechainConfig] | None = None
+    sidechain: dict[Literal["synth1", "synth2", "midi1", "midi2"], SidechainConfig] | None = None
 
 
 # ---------------------------------------------------------------------------

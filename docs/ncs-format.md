@@ -425,30 +425,66 @@ Zero. Purpose unknown.
 
 ### 6.12 Sidechain Settings
 
-#### Synth 1 Sidechain (0x27008 - 0x2700C, 5 bytes)
+Sidechain has two parts: **parameters** (in the tail) and **preset indices**
+(stored separately — see below).
+
+#### Sidechain Parameters (0x27008 - 0x2701B, 20 bytes)
+
+Four contiguous 5-byte blocks (source, attack, hold, decay, depth):
+
+| Offset | Track | Description |
+|--------|-------|-------------|
+| 0x27008-0x2700C | Synth 1 | **Confirmed** |
+| 0x2700D-0x27011 | Synth 2 | **Confirmed** |
+| 0x27012-0x27016 | MIDI 1 | **Confirmed** |
+| 0x27017-0x2701B | MIDI 2 | **Confirmed** |
+
+Each 5-byte block:
 
 | Byte | Field | Range | Default | Description |
 |------|-------|-------|---------|-------------|
-| 0 | source | 0-4 | 0 | 0=Drum1, 1=Drum2, 2=Drum3, 3=Drum4, 4=OFF. **Confirmed** |
-| 1 | attack | 0-127 | 0 | Attack time. **Confirmed** |
-| 2 | hold | 0-127 | 50 | Hold time. **Confirmed** |
-| 3 | decay | 0-127 | 70 | Decay time. **Confirmed** |
-| 4 | depth | 0-127 | 0 | Compression depth. **Confirmed** |
+| 0 | source | 0-4 | 0 | 0=Drum1, 1=Drum2, 2=Drum3, 3=Drum4, 4=OFF |
+| 1 | attack | 0-127 | 0 | Attack time |
+| 2 | hold | 0-127 | 50 | Hold time |
+| 3 | decay | 0-127 | 70 | Decay time |
+| 4 | depth | 0-127 | 0 | Compression depth |
 
-#### Synth 2 Sidechain (0x2700D - 0x27013, 7 bytes)
+#### Sidechain Preset Indices
 
-Same 5-byte layout as Synth 1, followed by 2 extra bytes:
+The hardware requires a preset index (0=OFF, 1-7) to activate sidechain.
+Without it, the parameters above are ignored. The presets are stored in
+two separate locations:
 
-| Byte | Field | Default | Description |
-|------|-------|---------|-------------|
-| 0-4 | (same as S1) | (same) | Source, attack, hold, decay, depth |
-| 5-6 | (unknown) | 0 | Always zeros in observed files. **Unknown** |
+| Track | Location | Byte |
+|-------|----------|------|
+| Synth 1 | Drum block 0 raw header (0x0CD64) | byte 3 |
+| Synth 2 | Drum block 0 raw header (0x0CD64) | byte 11 |
+| MIDI 1 | Tail preamble (0x26CFC) | byte 3 |
+| MIDI 2 | Tail preamble (0x26CFC) | byte 11 |
 
-### 6.13 Gap (0x27014 - 0x2701B, 8 bytes)
+Preset bytes are spaced every 4 bytes (3, 7 is unused, 11).
 
-Zeros. Purpose unknown.
+**Confirmed** via binary diff of hardware-saved projects with sidechain
+enabled vs disabled. The split location (synth presets near drum data,
+MIDI presets in tail preamble) may be a legacy artifact from the original
+Circuit's project format.
 
-### 6.14 Mixer Levels (0x2701C - 0x2701F, 4 bytes)
+#### Sidechain Preset Parameter Values
+
+Each preset maps to fixed attack/hold/decay/depth values. **Confirmed**
+by reading all 7 presets from hardware.
+
+| Preset | Attack | Hold | Decay | Depth |
+|--------|--------|------|-------|-------|
+| 1 | 5 | 50 | 80 | 80 |
+| 2 | 5 | 70 | 70 | 100 |
+| 3 | 5 | 85 | 70 | 115 |
+| 4 | 5 | 90 | 75 | 123 |
+| 5 | 5 | 90 | 85 | 127 |
+| 6 | 5 | 95 | 95 | 127 |
+| 7 | 5 | 102 | 95 | 127 |
+
+### 6.13 Mixer Levels (0x2701C - 0x2701F, 4 bytes)
 
 Non-drum track levels (0-127):
 
@@ -461,7 +497,7 @@ Non-drum track levels (0-127):
 
 **Confirmed**. Drum track levels are stored in the per-drum config (section 6.4, byte 1).
 
-### 6.15 Mixer Pans (0x27020 - 0x27023, 4 bytes)
+### 6.14 Mixer Pans (0x27020 - 0x27023, 4 bytes)
 
 Non-drum track pans (0-127, 64=center):
 
@@ -474,7 +510,7 @@ Non-drum track pans (0-127, 64=center):
 
 **Confirmed**. Drum track pans are stored in the per-drum config (section 6.4, byte 6). Note: Synth pans also appear in the preamble (section 6.1, offset 0x26D10).
 
-### 6.16 Trailing Region (0x27024 - 0x2740B, 1,000 bytes)
+### 6.15 Trailing Region (0x27024 - 0x2740B, 1,000 bytes)
 
 All zeros in every observed file. Reserved or unused. Pads the file to the fixed 160,780-byte size.
 
@@ -826,7 +862,7 @@ The following fields have been observed in the binary data but their purpose has
 | Drum config byte 3 | 1 byte | 127 (0x7F) | Per drum track. Possibly EQ max or filter cutoff default. |
 | Drum config byte 10 | 1 byte | 0 | Per drum track. Always 0. |
 | Scene header bytes 0-6 | 7 bytes | 0 | First 7 bytes of each 40-byte scene block. Always zeros in observed files. |
-| Sidechain S2 extra bytes | 2 bytes | 0 | Two extra bytes after S2 sidechain params. |
-| Tail preamble bytes 0-15 | 16 bytes | mostly 0 | WASM references `synthTrackInfo`, `drumMuteStates`, `defaultDrumChoices`, `midiTrackInfo` in this region. |
+| ~~Sidechain S2 extra bytes~~ | ~~2 bytes~~ | ~~0~~ | **Documented** — these are MIDI 1 sidechain source and attack bytes (part of the 4×5 sidechain layout). |
+| Tail preamble bytes 0-15 | 16 bytes | mostly 0 | WASM references `synthTrackInfo`, `drumMuteStates`, `defaultDrumChoices`, `midiTrackInfo` in this region. Bytes 3 and 11 are MIDI 1/2 sidechain preset indices. |
 | ~~Automation data layout~~ | ~~variable~~ | ~~0xFF~~ | **Documented** — see Automation Data (P-Locks) section above. Synth: 12 slots (8 macros + reverb/delay/level/pan). Drum: 8 slots (pitch/decay/distortion/eq + reverb/delay/level/pan). |
 | Trailing 1,000 bytes | 1,000 bytes | 0 | 0x27024-0x2740B. Always zeros. |

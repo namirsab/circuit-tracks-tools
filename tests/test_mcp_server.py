@@ -558,13 +558,54 @@ class TestMorph:
 # ---------------------------------------------------------------------------
 
 class TestParameterReference:
-    def test_get_parameter_reference(self, server):
+    def test_get_parameter_reference_default(self, server):
         srv, _ = server
         result = srv.get_parameter_reference()
+        assert "available_sections" in result
+        assert "best_practices" in result
+        assert "synth" in result["available_sections"]
+        assert "song_format" in result["available_sections"]
+
+    def test_get_parameter_reference_synth(self, server):
+        srv, _ = server
+        result = srv.get_parameter_reference("synth")
+        assert result["section"] == "synth"
+        assert "synth_cc_params" in result
         assert "channels" in result
-        assert "synth_params" in result or "drum_params" in result
-        assert "lookup_tables" in result
+
+    def test_get_parameter_reference_patch(self, server):
+        srv, _ = server
+        result = srv.get_parameter_reference("patch")
+        assert result["section"] == "patch"
+        assert "patch_parameters" in result
         assert "presets" in result
+
+    def test_get_parameter_reference_drums(self, server):
+        srv, _ = server
+        result = srv.get_parameter_reference("drums")
+        assert result["section"] == "drums"
+        assert "drum_params" in result
+
+    def test_get_parameter_reference_mod_matrix(self, server):
+        srv, _ = server
+        result = srv.get_parameter_reference("mod_matrix")
+        assert result["section"] == "mod_matrix"
+        assert "sources" in result
+        assert "destinations" in result
+
+    def test_get_parameter_reference_macros(self, server):
+        srv, _ = server
+        result = srv.get_parameter_reference("macros")
+        assert result["section"] == "macros"
+        assert "macro_destinations" in result
+        assert "standard_layout" in result
+
+    def test_get_parameter_reference_best_practices(self, server):
+        srv, _ = server
+        result = srv.get_parameter_reference("best_practices")
+        assert result["section"] == "best_practices"
+        assert "pattern_length" in result
+        assert "macros_add_to_base" in result
 
 
 # ---------------------------------------------------------------------------

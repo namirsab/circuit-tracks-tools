@@ -80,7 +80,16 @@ _DELAY_SENDS_OFFSET = 764    # 8 bytes: S1,S2,D1,D2,D3,D4,M1,M2
 _DELAY_PARAMS_OFFSET = 772   # 6 bytes: time, sync, feedback, width, lr_ratio, slew
 _FX_BYPASS_OFFSET = 779      # 1 byte: 0=on, 1=bypassed
 _SIDECHAIN_S1_OFFSET = 780   # 5 bytes: source, attack, hold, decay, depth
-_SIDECHAIN_S2_OFFSET = 785   # 7 bytes: source, attack, hold, decay, depth, extra1, extra2
+_SIDECHAIN_S2_OFFSET = 785   # 5 bytes: source, attack, hold, decay, depth
+_SIDECHAIN_M1_OFFSET = 790   # 5 bytes: source, attack, hold, decay, depth
+_SIDECHAIN_M2_OFFSET = 795   # 5 bytes: source, attack, hold, decay, depth
+
+# Sidechain preset index byte positions (0=OFF, 1-7)
+# Pattern: every 4 bytes (byte 3, 7, 11, ...)
+_SC_PRESET_S1_DRUM_HDR_BYTE = 3    # in drum_patterns[0].raw_header
+_SC_PRESET_S2_DRUM_HDR_BYTE = 11   # in drum_patterns[0].raw_header
+_SC_PRESET_M1_PREAMBLE_BYTE = 3    # in tail preamble
+_SC_PRESET_M2_PREAMBLE_BYTE = 11   # in tail preamble
 _MIXER_LEVELS_OFFSET = 800   # 4 bytes: S1, S2, M1, M2
 _MIXER_PANS_OFFSET = 804     # 4 bytes: S1, S2, M1, M2
 
@@ -384,10 +393,11 @@ class Scene:
 
 @dataclass
 class SidechainSettings:
-    """Sidechain compressor settings for a synth track."""
+    """Sidechain compressor settings for a synth or MIDI track."""
 
-    source: int = 0   # 0=D1, 1=D2, 2=D3, 3=D4, 4=OFF
-    attack: int = 0   # 0-127
+    preset: int = 0    # 0=OFF, 1-7 = sidechain preset index
+    source: int = 0    # 0=D1, 1=D2, 2=D3, 3=D4, 4=OFF
+    attack: int = 0    # 0-127
     hold: int = 50     # 0-127, default 50
     decay: int = 70    # 0-127, default 70
     depth: int = 0     # 0-127
@@ -415,10 +425,11 @@ class FXSettings:
     # FX bypass
     fx_bypass: bool = False    # True = FX disabled
 
-    # Sidechain
+    # Sidechain (4 tracks: S1, S2, M1, M2)
     sidechain_s1: SidechainSettings = field(default_factory=SidechainSettings)
     sidechain_s2: SidechainSettings = field(default_factory=SidechainSettings)
-    sidechain_s2_extra: bytes = field(default_factory=lambda: bytes(2))  # 2 extra bytes needed for S2
+    sidechain_m1: SidechainSettings = field(default_factory=SidechainSettings)
+    sidechain_m2: SidechainSettings = field(default_factory=SidechainSettings)
 
     # Mixer (synth/MIDI tracks — drum levels/pans are in per-drum config)
     mixer_levels: list[int] = field(default_factory=lambda: [100, 100, 100, 100])  # S1,S2,M1,M2
@@ -654,10 +665,33 @@ def parse_ncs(path: str | Path) -> NCSFile:
             decay=t[_SIDECHAIN_S2_OFFSET + 3],
             depth=t[_SIDECHAIN_S2_OFFSET + 4],
         ),
-        sidechain_s2_extra=t[_SIDECHAIN_S2_OFFSET + 5:_SIDECHAIN_S2_OFFSET + 7],
+        sidechain_m1=SidechainSettings(
+            source=t[_SIDECHAIN_M1_OFFSET],
+            attack=t[_SIDECHAIN_M1_OFFSET + 1],
+            hold=t[_SIDECHAIN_M1_OFFSET + 2],
+            decay=t[_SIDECHAIN_M1_OFFSET + 3],
+            depth=t[_SIDECHAIN_M1_OFFSET + 4],
+        ),
+        sidechain_m2=SidechainSettings(
+            source=t[_SIDECHAIN_M2_OFFSET],
+            attack=t[_SIDECHAIN_M2_OFFSET + 1],
+            hold=t[_SIDECHAIN_M2_OFFSET + 2],
+            decay=t[_SIDECHAIN_M2_OFFSET + 3],
+            depth=t[_SIDECHAIN_M2_OFFSET + 4],
+        ),
         mixer_levels=list(t[_MIXER_LEVELS_OFFSET:_MIXER_LEVELS_OFFSET + 4]),
         mixer_pans=list(t[_MIXER_PANS_OFFSET:_MIXER_PANS_OFFSET + 4]),
     )
+
+    # Read sidechain preset indices
+    # S1/S2 presets are in drum block 0's raw_header; M1/M2 in the tail preamble
+    if ncs.drum_patterns:
+        hdr = ncs.drum_patterns[0].raw_header
+        if len(hdr) >= 12:
+            ncs.fx.sidechain_s1.preset = hdr[_SC_PRESET_S1_DRUM_HDR_BYTE]
+            ncs.fx.sidechain_s2.preset = hdr[_SC_PRESET_S2_DRUM_HDR_BYTE]
+    ncs.fx.sidechain_m1.preset = t[_SC_PRESET_M1_PREAMBLE_BYTE]
+    ncs.fx.sidechain_m2.preset = t[_SC_PRESET_M2_PREAMBLE_BYTE]
 
     # Parse macro automation from pre_data of subsequent blocks
     _parse_automation_locks(ncs)
@@ -1082,23 +1116,30 @@ def serialize_ncs(ncs: NCSFile) -> bytes:
     tail[_DELAY_PARAMS_OFFSET + 4] = fx.delay_lr_ratio
     tail[_DELAY_PARAMS_OFFSET + 5] = fx.delay_slew
     tail[_FX_BYPASS_OFFSET] = 1 if fx.fx_bypass else 0
-    sc1 = fx.sidechain_s1
-    tail[_SIDECHAIN_S1_OFFSET] = sc1.source
-    tail[_SIDECHAIN_S1_OFFSET + 1] = sc1.attack
-    tail[_SIDECHAIN_S1_OFFSET + 2] = sc1.hold
-    tail[_SIDECHAIN_S1_OFFSET + 3] = sc1.decay
-    tail[_SIDECHAIN_S1_OFFSET + 4] = sc1.depth
-    sc2 = fx.sidechain_s2
-    tail[_SIDECHAIN_S2_OFFSET] = sc2.source
-    tail[_SIDECHAIN_S2_OFFSET + 1] = sc2.attack
-    tail[_SIDECHAIN_S2_OFFSET + 2] = sc2.hold
-    tail[_SIDECHAIN_S2_OFFSET + 3] = sc2.decay
-    tail[_SIDECHAIN_S2_OFFSET + 4] = sc2.depth
-    tail[_SIDECHAIN_S2_OFFSET + 5:_SIDECHAIN_S2_OFFSET + 7] = fx.sidechain_s2_extra
+    # Sidechain parameters (4 tracks × 5 bytes)
+    for sc, offset in [
+        (fx.sidechain_s1, _SIDECHAIN_S1_OFFSET),
+        (fx.sidechain_s2, _SIDECHAIN_S2_OFFSET),
+        (fx.sidechain_m1, _SIDECHAIN_M1_OFFSET),
+        (fx.sidechain_m2, _SIDECHAIN_M2_OFFSET),
+    ]:
+        tail[offset] = sc.source
+        tail[offset + 1] = sc.attack
+        tail[offset + 2] = sc.hold
+        tail[offset + 3] = sc.decay
+        tail[offset + 4] = sc.depth
+    # Sidechain preset indices — M1/M2 in tail preamble
+    tail[_SC_PRESET_M1_PREAMBLE_BYTE] = fx.sidechain_m1.preset
+    tail[_SC_PRESET_M2_PREAMBLE_BYTE] = fx.sidechain_m2.preset
     tail[_MIXER_LEVELS_OFFSET:_MIXER_LEVELS_OFFSET + 4] = fx.mixer_levels
     tail[_MIXER_PANS_OFFSET:_MIXER_PANS_OFFSET + 4] = fx.mixer_pans
 
     buf[TAIL_OFFSET:] = tail
+
+    # Sidechain preset indices — S1/S2 in drum block 0 raw_header
+    drum0_step_start = _step_data_start(_DRUM_BLOCK_START)
+    buf[drum0_step_start + _SC_PRESET_S1_DRUM_HDR_BYTE] = fx.sidechain_s1.preset
+    buf[drum0_step_start + _SC_PRESET_S2_DRUM_HDR_BYTE] = fx.sidechain_s2.preset
 
     return bytes(buf)
 

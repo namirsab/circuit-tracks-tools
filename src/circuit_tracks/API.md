@@ -494,6 +494,8 @@ class FXSettings:
     fx_bypass: bool
     sidechain_s1: SidechainSettings
     sidechain_s2: SidechainSettings
+    sidechain_m1: SidechainSettings
+    sidechain_m2: SidechainSettings
     mixer_levels: list[int]      # S1, S2, M1, M2
     mixer_pans: list[int]        # S1, S2, M1, M2
 
@@ -596,7 +598,7 @@ class FXConfig:
     delay: dict[str, int]
     reverb_sends: dict[str, int]   # per track
     delay_sends: dict[str, int]
-    sidechain: dict[str, dict]     # per synth
+    sidechain: dict[str, dict]     # per synth/MIDI track (synth1, synth2, midi1, midi2)
     reverb_preset: str | int | None
     delay_preset: str | int | None
 

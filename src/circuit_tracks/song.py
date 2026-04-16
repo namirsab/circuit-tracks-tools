@@ -87,6 +87,18 @@ _NCS_TRACK_ORDER = ["synth1", "synth2", "midi1", "midi2", "drum1", "drum2", "dru
 # Sidechain source name -> NCS integer
 _SC_SOURCE = {"drum1": 0, "drum2": 1, "drum3": 2, "drum4": 3, "off": 4}
 
+# Sidechain preset -> parameter values (attack, hold, decay, depth)
+# Presets ramp from subtle (1) to heavy ducking (7). Attack is always 5.
+_SC_PRESET_PARAMS: dict[int, tuple[int, int, int, int]] = {
+    1: (5, 50, 80, 80),
+    2: (5, 70, 70, 100),
+    3: (5, 85, 70, 115),
+    4: (5, 90, 75, 123),
+    5: (5, 90, 85, 127),
+    6: (5, 95, 95, 127),
+    7: (5, 102, 95, 127),
+}
+
 # Scale root name -> integer
 _SCALE_ROOT = {
     "C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3,
@@ -1075,17 +1087,24 @@ def _read_fx_from_ncs(ncs: NCSFile) -> FXConfig:
             fx.delay_sends[track_name] = val
 
     # Sidechain
-    for synth_name, sc_settings in [("synth1", ncs.fx.sidechain_s1),
-                                     ("synth2", ncs.fx.sidechain_s2)]:
+    for track_name, sc_settings in [
+        ("synth1", ncs.fx.sidechain_s1),
+        ("synth2", ncs.fx.sidechain_s2),
+        ("midi1", ncs.fx.sidechain_m1),
+        ("midi2", ncs.fx.sidechain_m2),
+    ]:
         source_name = _SC_SOURCE_REVERSE.get(sc_settings.source, "off")
-        if source_name != "off" or sc_settings.depth > 0:
-            fx.sidechain[synth_name] = {
+        if source_name != "off" or sc_settings.depth > 0 or sc_settings.preset > 0:
+            sc_dict: dict[str, object] = {
                 "source": source_name,
                 "attack": sc_settings.attack,
                 "hold": sc_settings.hold,
                 "decay": sc_settings.decay,
                 "depth": sc_settings.depth,
             }
+            if sc_settings.preset > 0:
+                sc_dict["preset"] = sc_settings.preset
+            fx.sidechain[track_name] = sc_dict
 
     # Preset indices
     fx.reverb_preset = ncs.project_settings.reverb_preset
@@ -1534,17 +1553,27 @@ def _apply_fx_to_ncs(ncs: NCSFile, fx: FXConfig) -> None:
         ncs.fx.delay_slew = delay_params["slew"]
 
     # Sidechain
-    for synth_name, sc_data in fx.sidechain.items():
+    _sc_track_map = {
+        "synth1": "sidechain_s1",
+        "synth2": "sidechain_s2",
+        "midi1": "sidechain_m1",
+        "midi2": "sidechain_m2",
+    }
+    for track_name, sc_data in fx.sidechain.items():
+        attr = _sc_track_map.get(track_name)
+        if attr is None:
+            continue
         source_name = sc_data.get("source", "off")
         source_val = _SC_SOURCE.get(source_name, 4)
+        preset = sc_data.get("preset", 0)
+        # Auto-populate parameters from preset when not explicitly provided
+        preset_defaults = _SC_PRESET_PARAMS.get(preset, (0, 50, 70, 0))
         sc = SidechainSettings(
+            preset=preset,
             source=source_val,
-            attack=sc_data.get("attack", 0),
-            hold=sc_data.get("hold", 50),
-            decay=sc_data.get("decay", 70),
-            depth=sc_data.get("depth", 0),
+            attack=sc_data.get("attack", preset_defaults[0]),
+            hold=sc_data.get("hold", preset_defaults[1]),
+            decay=sc_data.get("decay", preset_defaults[2]),
+            depth=sc_data.get("depth", preset_defaults[3]),
         )
-        if synth_name == "synth1":
-            ncs.fx.sidechain_s1 = sc
-        elif synth_name == "synth2":
-            ncs.fx.sidechain_s2 = sc
+        setattr(ncs.fx, attr, sc)
