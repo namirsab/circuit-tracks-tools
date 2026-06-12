@@ -325,6 +325,70 @@
     {
       "name": "Echo Pluck",
       "url": "patches/patch_15.syx"
+    },
+    {
+      "name": "Wobble Bass",
+      "url": "patches/patch_16.syx"
+    },
+    {
+      "name": "Neuro Growl",
+      "url": "patches/patch_17.syx"
+    },
+    {
+      "name": "Ring Bass",
+      "url": "patches/patch_18.syx"
+    },
+    {
+      "name": "PWM Strings",
+      "url": "patches/patch_19.syx"
+    },
+    {
+      "name": "Vocal Morph",
+      "url": "patches/patch_20.syx"
+    },
+    {
+      "name": "Breath Drone",
+      "url": "patches/patch_21.syx"
+    },
+    {
+      "name": "Dark Drone",
+      "url": "patches/patch_22.syx"
+    },
+    {
+      "name": "Sync Scream",
+      "url": "patches/patch_23.syx"
+    },
+    {
+      "name": "8bit Hero",
+      "url": "patches/patch_24.syx"
+    },
+    {
+      "name": "Scream Whistle",
+      "url": "patches/patch_25.syx"
+    },
+    {
+      "name": "Organ Keys",
+      "url": "patches/patch_26.syx"
+    },
+    {
+      "name": "Brass Stab",
+      "url": "patches/patch_27.syx"
+    },
+    {
+      "name": "Glass Bells",
+      "url": "patches/patch_28.syx"
+    },
+    {
+      "name": "Tape Keys",
+      "url": "patches/patch_29.syx"
+    },
+    {
+      "name": "Laser Zap",
+      "url": "patches/patch_30.syx"
+    },
+    {
+      "name": "Riser FX",
+      "url": "patches/patch_31.syx"
     }
   ]
 }

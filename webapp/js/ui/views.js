@@ -3,6 +3,7 @@
 import {
   TRACK_COLORS, SCALE_TYPES, SCALE_ROOTS, SYNC_RATE_NAMES,
   STEP_BLUE, STEP_NOTE, SAND, PEACH, CREAM, SIDECHAIN_PRESETS,
+  PROJECT_COLORS,
 } from '../constants.js';
 import { keyboardLayout, midiToNcs } from '../scales.js';
 
@@ -86,6 +87,7 @@ export class Views {
       case 'microStep': return this.microStepPads();
       case 'patternSettings': return this.patternSettingsPads();
       case 'patterns': return this.patternsPads();
+      case 'projects': return this.projectsPads();
       case 'mixer': return this.mixerPads();
       case 'fx': return this.fxPads();
       case 'sidechain': return this.sidechainPads();
@@ -374,6 +376,32 @@ export class Views {
     return out;
   }
 
+  // Projects View: one pad per pack project in its project colour (guide
+  // p.18). Dim = stored project, bright = currently loaded, flashing white =
+  // queued to take over at the end of the current pattern.
+  projectsPads() {
+    const out = Array.from({ length: 32 }, () => ({ bg: OFF }));
+    const bank = this.app.projectBank;
+    const page = this.ui.projectPage ?? 0;
+    const flash = performance.now() % 360 < 180;
+    for (let i = 0; i < 32; i++) {
+      const idx = page * 32 + i;
+      const entry = bank[idx];
+      if (!entry) continue;
+      const [r, g, b] = PROJECT_COLORS[entry.color % PROJECT_COLORS.length] ?? [128, 128, 128];
+      let bg = `rgba(${r},${g},${b},0.35)`;
+      if (idx === this.ui.currentProjectIdx) bg = `rgba(${r},${g},${b},1)`;
+      if (this.app.pendingProject?.idx === idx) bg = flash ? WHITE : `rgba(${r},${g},${b},0.9)`;
+      out[i] = { bg, label: String(idx + 1) };
+    }
+    return out;
+  }
+
+  projectsPressed(i) {
+    const idx = (this.ui.projectPage ?? 0) * 32 + i;
+    if (this.app.projectBank[idx]) this.app.selectProjectFromBank(idx);
+  }
+
   // Mixer View (p.88): row 1 = mutes, rows 3-4 = the 16 Scene pads.
   // Scene pad colours (guide p.81-84): dim white = empty, bright white =
   // stored, dim gold with Shift (bright gold while storing), green members
@@ -583,6 +611,7 @@ export class Views {
       case 'microStep': return this.microStepPressed(i);
       case 'patternSettings': return this.patternSettingsPressed(i);
       case 'patterns': return this.patternsPressed(i);
+      case 'projects': return this.projectsPressed(i);
       case 'mixer': return this.mixerPressed(i);
       case 'fx': return this.fxPressed(i);
       case 'sidechain': return this.sidechainPressed(i);
@@ -1258,6 +1287,12 @@ export class Views {
     this.drumFlashes = this.drumFlashes.filter((f) => f.until > nowMs);
     if ((this.activeNotes.length !== beforeN || this.drumFlashes.length !== beforeD)
       && this.ui.view === 'note') {
+      this.render();
+    }
+    // Flash a queued project switch at ~12 fps.
+    if (this.ui.view === 'projects' && this.app.pendingProject
+      && nowMs - (this._lastProjectFlash ?? 0) > 80) {
+      this._lastProjectFlash = nowMs;
       this.render();
     }
     // Animate the scene pads (pulsing/flashing green) at ~12 fps.

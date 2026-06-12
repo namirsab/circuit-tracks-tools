@@ -88,6 +88,8 @@ export class UIState {
     this.samplePage = [0, 0, 0, 0]; // per drum track (note view, pages of 16)
     this.presetPage = 0; // preset view page (pages of 32)
     this.patternPage = 0; // patterns view: 0 = patterns 1-4, 1 = 5-8
+    this.projectPage = 0; // projects view: pages of 32 pack projects
+    this.currentProjectIdx = null; // pack project slot currently loaded
     this.patchIndex = [null, null]; // selected bank patch per synth track
     this.midiTemplate = [0, 0]; // selected template per MIDI track
     this.currentPattern = [0, 0, 0, 0, 0, 0, 0, 0];

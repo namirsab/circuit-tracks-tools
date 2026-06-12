@@ -405,6 +405,117 @@ def build_patches():
     p.add_mod("LFO 1+", "filter frequency", depth=40)
     patches.append(p)
 
+    # --- Second wave: mod-matrix and wavetable explorations ---
+
+    p = preset_bass("Wobble Bass").filter(frequency=25, resonance=70, filter_type=1, env2_to_freq=40)
+    p.lfo1(waveform=0, rate=50)
+    p.add_mod("LFO 1+", "filter frequency", depth=110)
+    patches.append(p)
+
+    p = preset_bass("Neuro Growl").osc1(wave=18).osc2(wave=19, semitones=52)
+    p.filter(frequency=35, resonance=60, filter_type=1, env2_to_freq=60)
+    p.lfo2(waveform=1, rate=45)
+    p.add_mod("LFO 2+", "osc 1 pulse width / index", depth=90)
+    p.add_mod("LFO 2+/-", "filter frequency", depth=55)
+    p.distortion(level=35, type=1)
+    patches.append(p)
+
+    p = preset_bass("Ring Bass").mixer(osc1_level=90, osc2_level=0, ring_mod=110)
+    p.osc2(wave=0, semitones=71)  # ring partner a fifth up
+    p.filter(frequency=55, resonance=20, filter_type=1, env2_to_freq=70)
+    patches.append(p)
+
+    p = preset_pad("PWM Strings").osc1(wave=12).osc2(wave=12, cents=72)
+    p.env_amp(attack=45, decay=90, sustain=110, release=70)
+    p.lfo1(waveform=1, rate=35)
+    p.add_mod("LFO 1+/-", "osc 1 pulse width / index", depth=60)
+    p.add_mod("LFO 1+", "osc 2 pulse width / index", depth=45)
+    p.chorus(level=50, rate=28, feedback=55, mod_depth=75)
+    patches.append(p)
+
+    p = preset_pad("Vocal Morph").osc1(wave=22).osc2(wave=24, semitones=64, cents=70)
+    p.lfo2(waveform=0, rate=20)
+    p.add_mod("LFO 2+", "osc 1 pulse width / index", depth=85)
+    p.add_mod("LFO 2+/-", "osc 2 pulse width / index", depth=70)
+    patches.append(p)
+
+    p = preset_pad("Breath Drone").voice(octave=62).mixer(osc1_level=95, osc2_level=85, noise=35)
+    p.filter(frequency=50, resonance=35, filter_type=2, env2_to_freq=30)
+    p.env_amp(attack=90, decay=100, sustain=127, release=110)
+    p.lfo1(waveform=0, rate=18)
+    p.add_mod("LFO 1+/-", "filter frequency", depth=45)
+    patches.append(p)
+
+    p = preset_pad("Dark Drone").voice(octave=60)
+    p.filter(frequency=30, resonance=75, filter_type=1, env2_to_freq=20)
+    p.lfo1(waveform=0, rate=12)
+    p.add_mod("LFO 1+", "filter frequency", depth=35)
+    p.add_mod("LFO 1+/-", "osc 2 pitch", depth=8)
+    patches.append(p)
+
+    p = preset_lead("Sync Scream").osc1(wave=16).osc2(wave=2, semitones=64)
+    p.env3(attack=0, decay=80, sustain=0, release=40)
+    p.add_mod("env 3", "osc 1 v-sync", depth=100)
+    p.distortion(level=50, type=2)
+    patches.append(p)
+
+    p = preset_lead("8bit Hero").osc1(wave=18).osc2(wave=13, semitones=76)
+    p.voice(polyphony=0, portamento=0)
+    p.filter(frequency=95, resonance=0)
+    p.distortion(level=45, type=5)  # bit reducer
+    p.chorus(level=0)
+    patches.append(p)
+
+    p = preset_lead("Scream Whistle").osc1(wave=0).osc2(wave=0, semitones=88)
+    p.voice(polyphony=0, portamento=55)
+    p.filter(frequency=80, resonance=60, filter_type=3, env2_to_freq=40)
+    p.lfo1(waveform=0, rate=80, delay=55)
+    patches.append(p)
+
+    p = preset_pluck("Organ Keys").osc1(wave=0).osc2(wave=13, semitones=76)
+    p.mixer(osc1_level=110, osc2_level=55)
+    p.env_amp(attack=0, decay=0, sustain=127, release=10)
+    p.env_filter(attack=0, decay=0, sustain=127, release=10)
+    p.filter(frequency=85, resonance=0, env2_to_freq=0)
+    p.chorus(level=30, rate=45, feedback=40, mod_depth=50)
+    patches.append(p)
+
+    p = preset_pluck("Brass Stab").osc1(wave=2).osc2(wave=2, cents=66)
+    p.voice(polyphony=2)
+    p.env_amp(attack=5, decay=75, sustain=70, release=25)
+    p.env_filter(attack=8, decay=55, sustain=35, release=25)
+    p.filter(frequency=45, resonance=15, filter_type=1, env2_to_freq=95)
+    p.add_mod("velocity", "filter frequency", depth=50)
+    patches.append(p)
+
+    p = preset_pluck("Glass Bells").osc1(wave=1).osc2(wave=0, semitones=83)  # +19 = minor 12th
+    p.mixer(osc1_level=85, osc2_level=70, ring_mod=45)
+    p.env_amp(attack=0, decay=100, sustain=0, release=95)
+    p.env_filter(attack=0, decay=85, sustain=0, release=80)
+    p.filter(frequency=75, resonance=10, env2_to_freq=45)
+    patches.append(p)
+
+    p = preset_pluck("Tape Keys").osc1(wave=1).osc2(wave=1, cents=67)
+    p.env_amp(attack=3, decay=85, sustain=40, release=55)
+    p.filter(frequency=60, resonance=8, env2_to_freq=35)
+    p.lfo2(waveform=0, rate=30)
+    p.add_mod("LFO 2+/-", "osc 1 & 2 pitch", depth=6)  # tape wow
+    p.chorus(level=35, rate=20, feedback=45, mod_depth=60)
+    patches.append(p)
+
+    p = preset_lead("Laser Zap").osc1(wave=13).voice(polyphony=0)
+    p.env3(attack=0, decay=45, sustain=0, release=10)
+    p.add_mod("env 3", "osc 1 & 2 pitch", depth=127)
+    p.env_amp(attack=0, decay=50, sustain=0, release=15)
+    p.filter(frequency=100, resonance=20)
+    patches.append(p)
+
+    p = preset_pad("Riser FX").mixer(osc1_level=0, osc2_level=0, noise=120)
+    p.filter(frequency=10, resonance=85, filter_type=3, env2_to_freq=127)
+    p.env_amp(attack=95, decay=100, sustain=127, release=60)
+    p.env_filter(attack=105, decay=90, sustain=127, release=50)
+    patches.append(p)
+
     return patches
 
 

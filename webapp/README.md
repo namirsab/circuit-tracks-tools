@@ -18,7 +18,7 @@ and sample fetches without a server.)
 
 ## What's bundled
 
-- `pack/` — the **Circuit Web Starter** pack: 64 drum samples and 16 synth
+- `pack/` — the **Circuit Web Starter** pack: 64 drum samples and 32 synth
   patches in Novation Components pack format (`index.json` + `samples/` +
   `patches/`). All of it is synthesized from code
   (`scripts/generate_webapp_pack.py` in the parent repo) — no third-party
@@ -28,8 +28,17 @@ and sample fetches without a server.)
 
 ## Using your own sounds
 
-- **Load sample pack…** (sidebar) — pick a Components pack folder (e.g. a
-  factory pack downloaded with Novation Components: `index.json`, `samples/`,
-  `patches/`). Files are read locally; nothing is uploaded.
+- **Load pack…** (sidebar, or Shift+Projects) — pick a `.circuittrackspack`
+  (or `.zip`) pack archive: a zipped Components export with `index.json`,
+  `samples/`, `patches/`, and `projects/`. Dropping one anywhere works too.
+- **Load pack folder…** (sidebar) — same, but from an unzipped pack folder.
+- Files are read locally in the browser; nothing is uploaded.
 - Drop a `.ncs` project anywhere to load it; drop a `.syx` patch on Synth 1 /
   Synth 2.
+
+## Projects view
+
+The **Projects** button opens the pack's project grid (up to 32 per page,
+each pad in its project colour). Press a pad to load that project — while
+playing, the switch is queued to the end of the current pattern, like the
+hardware. Shift+Projects opens the pack picker (Packs).

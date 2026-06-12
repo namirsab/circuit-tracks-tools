@@ -155,8 +155,10 @@ export function buildSidebar(root) {
     </table>
     <button id="btn-load-file" class="load-btn">Load .ncs / .syx file…</button>
     <input type="file" id="file-input" accept=".ncs,.syx" multiple style="display:none">
-    <button id="btn-load-pack" class="load-btn">Load sample pack…</button>
+    <button id="btn-load-pack" class="load-btn">Load pack…</button>
+    <input type="file" id="pack-file-input" accept=".circuittrackspack,.zip" style="display:none">
+    <button id="btn-load-pack-folder" class="load-btn">Load pack folder…</button>
     <input type="file" id="pack-input" webkitdirectory style="display:none">
-    <div class="drop-hint">Drop a <b>.ncs</b> project anywhere<br>Drop a <b>.syx</b> patch on Synth 1 / Synth 2<br>Pack = a Components folder with <b>index.json</b></div>
+    <div class="drop-hint">Drop a <b>.ncs</b> project, <b>.circuittrackspack</b>, or <b>.syx</b> anywhere<br>Pack folder = a Components export with <b>index.json</b></div>
   `;
 }

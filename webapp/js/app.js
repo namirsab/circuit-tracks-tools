@@ -9,6 +9,7 @@ import { defaultProject, UIState } from './state.js';
 import { buildPanel, buildSidebar } from './ui/panel.js';
 import { Views } from './ui/views.js';
 import { KeyboardInput, buildKeyOverlay } from './keyboard.js';
+import { readZip } from './zip.js';
 import { ncsToMidi } from './scales.js';
 import {
   TRACKS, SEND_ORDER, SCALE_TYPES, SCALE_ROOTS,
@@ -45,6 +46,9 @@ class CircuitApp {
     this.seq = new Sequencer(this.engine, this.synthTracks, this.drums, this);
     this.lastNote = {};
     this.patchBank = [];
+    this.projectBank = [];
+    this.packName = null;
+    this.pendingProject = null;
     this.masterVolumeValue = 102;
     this.masterFilterValue = 64;
     this.shiftLatched = false;
@@ -66,12 +70,11 @@ class CircuitApp {
     this.bindDragDrop();
     this.bindResume();
 
-    this.samplesReady = this.drums.loadSampleBank('pack/')
+    this.samplesReady = this.loadPackFromUrl('pack/')
       .catch((err) => {
-        console.warn('Sample loading failed:', err.message);
+        console.warn('Pack loading failed:', err.message);
       })
       .finally(() => this.refreshSidebar());
-    this.loadPatchBank();
 
     this.selectTrack(0);
     this.setView('note');
@@ -82,6 +85,9 @@ class CircuitApp {
       const events = this.seq.drainVisualEvents();
       if (events.length) this.views.applyVisualEvents(events);
       this.views.tickVisuals();
+      if (this.pendingProject && this.engine.now() >= this.pendingProject.time) {
+        this.loadProjectFromBank(this.pendingProject.idx);
+      }
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -244,8 +250,12 @@ class CircuitApp {
     byId('btn-play').addEventListener('click', async () => {
       await this.engine.resume();
       await this.samplesReady;
-      if (this.seq.playing) this.seq.stop();
-      else this.seq.start(this.ui.shift); // Shift+Play resumes from last stop
+      if (this.seq.playing) {
+        this.seq.stop();
+        this.pendingProject = null; // stopping cancels a queued project switch
+      } else {
+        this.seq.start(this.ui.shift); // Shift+Play resumes from last stop
+      }
     });
     byId('btn-rec').addEventListener('click', () => {
       if (this.ui.shift) {
@@ -371,14 +381,24 @@ class CircuitApp {
     byId('btn-save').addEventListener('click', () => this.exportProject());
 
     const openPicker = () => byId('file-input').click();
-    byId('btn-projects').addEventListener('click', openPicker);
+    // Projects opens the project grid; Shift+Projects = Packs (load a pack).
+    byId('btn-projects').addEventListener('click', () => {
+      if (this.ui.shift) byId('pack-file-input').click();
+      else this.setView('projects');
+    });
     byId('btn-load-file').addEventListener('click', openPicker);
     byId('file-input').addEventListener('change', async (e) => {
       await this.loadFiles([...e.target.files]);
       e.target.value = '';
     });
 
-    byId('btn-load-pack').addEventListener('click', () => byId('pack-input').click());
+    byId('btn-load-pack').addEventListener('click', () => byId('pack-file-input').click());
+    byId('pack-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) await this.loadPackFromZip(await file.arrayBuffer(), file.name);
+      e.target.value = '';
+    });
+    byId('btn-load-pack-folder').addEventListener('click', () => byId('pack-input').click());
     byId('pack-input').addEventListener('change', async (e) => {
       await this.loadPackFromFiles(e.target.files);
       e.target.value = '';
@@ -424,6 +444,12 @@ class CircuitApp {
         this.ui.patternPage = dir < 0 ? 1 : 0;
         this.lcdMsg(this.ui.patternPage ? 'Patterns 5-8' : 'Patterns 1-4');
         break;
+      case 'projects': {
+        const maxPage = Math.max(0, Math.ceil(this.projectBank.length / 32) - 1);
+        this.ui.projectPage = Math.max(0, Math.min(maxPage, this.ui.projectPage + pageStep));
+        this.lcdMsg(`Projects ${this.ui.projectPage * 32 + 1}-${this.ui.projectPage * 32 + 32}`);
+        break;
+      }
       case 'mixer':
         // ▼ switches Macros to pan, ▲ back to levels (guide p.89).
         this.ui.mixerPanMode = dir < 0;
@@ -459,6 +485,10 @@ class CircuitApp {
         return { up: this.ui.presetPage, down: maxPage - this.ui.presetPage, max: Math.max(1, maxPage) };
       }
       case 'patterns': return { up: this.ui.patternPage, down: 1 - this.ui.patternPage, max: 1 };
+      case 'projects': {
+        const maxPage = Math.max(0, Math.ceil(this.projectBank.length / 32) - 1);
+        return { up: this.ui.projectPage, down: maxPage - this.ui.projectPage, max: Math.max(1, maxPage) };
+      }
       case 'mixer': {
         const p = this.ui.mixerPanMode ? 1 : 0;
         return { up: p, down: 1 - p, max: 1 };
@@ -967,6 +997,7 @@ class CircuitApp {
     // Keep the raw bytes: NCS export writes the modeled fields over them so
     // unmodeled regions round-trip exactly.
     this.projectRawBytes = new Uint8Array(buf).slice();
+    this.ui.currentProjectIdx = null; // standalone load; bank loads set it after
     this.applyProject(proj);
     this.lcdMsg(`Loaded ${filename || proj.name || 'project'}`);
     return proj;
@@ -1044,6 +1075,8 @@ class CircuitApp {
         const buf = await file.arrayBuffer();
         if (/\.ncs$/i.test(file.name)) {
           this.loadProjectFromArrayBuffer(buf, file.name);
+        } else if (/\.(circuittrackspack|zip)$/i.test(file.name)) {
+          await this.loadPackFromZip(buf, file.name);
         } else if (/\.syx$/i.test(file.name)) {
           let target = syxTarget ?? this.ui.currentTrack;
           if (target > 1) target = 0;
@@ -1087,25 +1120,23 @@ class CircuitApp {
     }, true);
   }
 
-  // ---------- Patch bank (Preset view) ----------
-  async loadPatchBank() {
-    // Default bank: the patches of the bundled pack, in pack order.
-    try {
-      const base = 'pack/';
-      const res = await fetch(base + 'index.json');
-      if (!res.ok) { this.patchBank = []; return; }
-      const index = await res.json();
-      this.patchBank = (index.patches ?? [])
-        .map((p) => ({ name: p.name, url: base + p.url }));
-    } catch {
-      this.patchBank = [];
-    }
+  // ---------- Pack loading ----------
+  // A pack is a Components export: index.json + samples/ + patches/ +
+  // projects/. Three transports feed the same applyPackIndex(): the bundled
+  // pack (fetch), a local folder pick, and a .circuittrackspack/.zip file.
+  // Local files are read in the browser; nothing is uploaded.
+
+  async loadPackFromUrl(base) {
+    const res = await fetch(base + 'index.json');
+    if (!res.ok) throw new Error(`No pack index at ${base}`);
+    const index = await res.json();
+    await this.applyPackIndex(index, async (url) => {
+      const r = await fetch(base + url);
+      if (!r.ok) throw new Error(`Missing ${url}`);
+      return r.arrayBuffer();
+    }, { quiet: true });
   }
 
-  // ---------- Local Components pack loader ----------
-  // Load a pack from a user-picked folder (index.json + samples/ + patches/),
-  // e.g. a factory pack downloaded with Novation Components — nothing is
-  // uploaded; files are read locally.
   async loadPackFromFiles(fileList) {
     const files = [...fileList];
     const indexFile = files.find((f) => f.name === 'index.json');
@@ -1117,23 +1148,91 @@ class CircuitApp {
       const index = JSON.parse(await indexFile.text());
       const dir = indexFile.webkitRelativePath.slice(0, -'index.json'.length);
       const byPath = new Map(files.map((f) => [f.webkitRelativePath, f]));
-      const fileFor = (url) => byPath.get(dir + decodeURI(url));
-      await this.drums.loadSampleBankFrom(index, async (url) => {
-        const f = fileFor(url);
+      await this.applyPackIndex(index, async (url) => {
+        const f = byPath.get(dir + decodeURI(url));
         if (!f) throw new Error(`Missing ${url}`);
         return f.arrayBuffer();
       });
-      const patches = (index.patches ?? []).filter((p) => fileFor(p.url));
-      if (patches.length) {
-        this.patchBank = patches.map((p) => ({ name: p.name, url: URL.createObjectURL(fileFor(p.url)) }));
-        this.ui.patchIndex = [null, null];
-      }
-      this.lcdMsg(`Pack: ${index.name || 'unnamed'}`);
     } catch (err) {
       this.lcdMsg(`Pack load failed: ${err.message}`);
       console.warn('Pack load failed:', err);
     }
+  }
+
+  async loadPackFromZip(buf, filename = '') {
+    try {
+      const entries = readZip(buf);
+      const indexEntry = entries.get('index.json');
+      if (!indexEntry) throw new Error('no index.json in archive');
+      const index = JSON.parse(new TextDecoder().decode(await indexEntry()));
+      await this.applyPackIndex(index, async (url) => {
+        const e = entries.get(decodeURI(url));
+        if (!e) throw new Error(`Missing ${url}`);
+        return e();
+      });
+    } catch (err) {
+      this.lcdMsg(`Pack load failed: ${err.message}`);
+      console.warn(`Pack load failed (${filename}):`, err);
+    }
+  }
+
+  async applyPackIndex(index, getBuf, { quiet = false } = {}) {
+    await this.drums.loadSampleBankFrom(index, getBuf);
+
+    const fetchAll = (list) => Promise.all((list ?? []).map(async (item) => {
+      try { return { ...item, buf: await getBuf(item.url) }; } catch { return null; }
+    }));
+    const [patches, projects] = await Promise.all([
+      fetchAll(index.patches), fetchAll(index.projects),
+    ]);
+
+    for (const url of this._packPatchUrls ?? []) URL.revokeObjectURL(url);
+    this.patchBank = patches.filter(Boolean)
+      .map((p) => ({ name: p.name, url: URL.createObjectURL(new Blob([p.buf])) }));
+    this._packPatchUrls = this.patchBank.map((p) => p.url);
+    this.ui.patchIndex = [null, null];
+
+    this.projectBank = projects.filter(Boolean).map((p) => ({
+      name: p.name,
+      buf: p.buf,
+      // Colour index lives at byte 12 of the .ncs header.
+      color: p.buf.byteLength >= 16 ? new DataView(p.buf).getUint32(12, true) : 0,
+    }));
+    this.packName = index.name || 'unnamed';
+    this.pendingProject = null;
+    this.ui.currentProjectIdx = null;
+    this.ui.projectPage = 0;
+
+    if (!quiet) this.lcdMsg(`Pack: ${this.packName}`);
     this.refreshSidebar();
+    this.views.render();
+  }
+
+  // ---------- Project bank (Projects view) ----------
+  // Pressing a project pad mirrors the hardware: when stopped the project
+  // loads immediately; while playing the switch is queued for the end of the
+  // current pattern (same Drum 1 boundary scene queueing uses).
+  selectProjectFromBank(idx) {
+    const entry = this.projectBank[idx];
+    if (!entry) return;
+    if (this.seq.playing) {
+      this.pendingProject = { idx, time: this.seq.nextDrum1Boundary() };
+      this.lcdMsg(`Next: ${entry.name}`);
+      this.views.render();
+    } else {
+      this.loadProjectFromBank(idx);
+    }
+  }
+
+  loadProjectFromBank(idx) {
+    const entry = this.projectBank[idx];
+    if (!entry) return;
+    this.pendingProject = null;
+    // Hand a copy to the loader: exports write modeled fields over the raw
+    // bytes, and the bank entry must stay pristine for the next switch.
+    // applyProject resumes playback itself if the sequencer was running.
+    this.loadProjectFromArrayBuffer(entry.buf.slice(0), entry.name);
+    this.ui.currentProjectIdx = idx;
     this.views.render();
   }
 
