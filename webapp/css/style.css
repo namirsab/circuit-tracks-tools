@@ -1,0 +1,464 @@
+* { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+
+:root {
+  --panel-bg: #232327;
+  --panel-edge: #121215;
+  --btn-bg: #36363e;
+  --btn-text: #d4d4dc;
+  --lcd-bg: #101418;
+  --lcd-text: #8ee6ff;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #17171b;
+  color: #ddd;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  height: 100%;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  gap: 16px;
+  padding: 8px;
+  height: 100vh;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* ---------- Device panel ---------- */
+.device {
+  --accent: #2ee6d6;
+  background: linear-gradient(180deg, #2c2c31, var(--panel-bg));
+  border: 2px solid var(--panel-edge);
+  border-radius: 16px;
+  padding: 10px 18px 14px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+  flex: 0 0 auto;
+  width: 900px;
+}
+
+/* ---------- Brand row ---------- */
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+.brand {
+  font-size: 15px;
+  letter-spacing: .14em;
+  color: #e8e8ee;
+}
+.brand b { font-weight: 800; }
+.keys-btn {
+  background: none;
+  border: 1px solid #3a3a44;
+  color: #9a9aa6;
+  border-radius: 5px;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.keys-btn:hover { color: #fff; }
+.keys-btn.active { color: #8ee6ff; border-color: #3c6a86; }
+body.sidebar-hidden #sidebar { display: none; }
+
+.lcd {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  background: var(--lcd-bg);
+  border: 1px solid #000;
+  border-radius: 5px;
+  color: var(--lcd-text);
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 12px;
+  padding: 4px 12px;
+  min-height: 24px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.lcd-name { font-weight: 600; }
+.lcd-bpm { cursor: ns-resize; padding: 0 4px; border-radius: 3px; }
+.lcd-bpm:hover { background: rgba(142,230,255,.12); }
+.lcd-view { text-transform: capitalize; color: #5ab8cc; }
+.lcd-msg { margin-left: auto; color: #ffd479; }
+
+/* ---------- Knob row (volume / staggered macros / filter) ---------- */
+.knob-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 2px 0 6px;
+}
+.knob-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 76px;
+}
+.macro-knobs {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  justify-items: center;
+}
+.macro-knobs .knob-wrap.macro-lo { margin-top: 26px; }
+.macro-knobs .knob-wrap.macro-hi { margin-top: 0; }
+.knob-wrap.filter-knob { margin-top: 18px; }
+.knob-wrap.volume-knob { margin-top: 2px; }
+
+/* Knurled black encoder caps, as on the hardware: a ribbed rim
+   (repeating-conic ridges) around a slightly domed flat top face. */
+.knob {
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  background: #131318;
+  border: 1px solid #060608;
+  position: relative;
+  cursor: ns-resize;
+  touch-action: none;
+  box-shadow: 0 4px 7px rgba(0,0,0,.55), inset 0 1px 1px rgba(255,255,255,.06);
+}
+/* Knurled rim ring — rotates with the value so motion is visible. */
+.knob-grip {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, #34343e 0deg 5deg, #101014 5deg 10deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(72% - 1px), #000 72%);
+  mask: radial-gradient(farthest-side, transparent calc(72% - 1px), #000 72%);
+}
+/* Printed panel arc around each encoder: an open circle whose ends stop at
+   the LED window at the bottom, as on the hardware. */
+.knob::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: conic-gradient(from 208deg,
+    rgba(236, 236, 244, .7) 0deg 304deg, transparent 304deg 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.6px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.6px), #000 calc(100% - 1.5px));
+  pointer-events: none;
+}
+.knob::before {
+  content: '';
+  position: absolute;
+  inset: 13%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 28%, #3a3a44, #17171c 75%);
+  box-shadow: inset 0 -2px 3px rgba(0,0,0,.55), inset 0 1px 1px rgba(255,255,255,.08);
+}
+.knob-wrap.master .knob {
+  width: 54px; height: 54px;
+}
+/* Master Volume: no LED, so its panel circle is closed. */
+.knob-wrap.volume-knob .knob::after {
+  background: rgba(236, 236, 244, .7);
+}
+.knob-wrap.volume-knob .knob-label { margin-top: 11px; }
+.knob-indicator { position: absolute; inset: 0; transform: rotate(0deg); }
+.knob-indicator::after {
+  content: '';
+  position: absolute;
+  top: 5px; left: 50%;
+  width: 3px; height: 12px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: #e8e8f0;
+  box-shadow: 0 0 2px rgba(0,0,0,.6);
+}
+/* Macro encoders are endless on the hardware — no indicator line. */
+.macro-knobs .knob-indicator { display: none; }
+/* LED window: a small pill sitting in the gap of the panel arc. Unlit it
+   reads as pale plastic; lit it takes the track colour. */
+.knob-led {
+  width: 13px; height: 5px;
+  border-radius: 3px;
+  margin-top: 3px;
+  background: #8e8a9a;
+  transition: background .08s, box-shadow .08s;
+}
+.knob-label {
+  font-size: 8.5px;
+  letter-spacing: .03em;
+  color: #9a9aa6;
+  margin-top: 3px;
+  text-align: center;
+  line-height: 1.15;
+}
+
+/* ---------- Buttons ---------- */
+.fn-btn {
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  border: 1px solid #101014;
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.15;
+  padding: 4px 6px;
+  cursor: pointer;
+  white-space: pre-line;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  box-shadow: 0 2px 3px rgba(0,0,0,.4);
+}
+.fn-btn:hover { background: #42424c; }
+.fn-btn.active {
+  background: var(--accent);
+  color: #101014;
+  font-weight: 700;
+}
+.fn-btn.active .shift-legend { color: #101014; }
+.shift-legend {
+  font-size: 7px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #8a8a96;
+}
+
+/* ---------- Utility row ---------- */
+/* The utility row, track row and pad area share one 10-column grid so every
+   button column lines up, as on the hardware. */
+.util-row {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.util-row .fn-btn { min-height: 34px; }
+.arrow-btn { font-size: 12px; }
+.shift-btn.active { background: #ffd479; color: #101014; }
+/* Sticky Shift latched = bright green (guide p.17) */
+.shift-btn.latched { background: #3cff8c; color: #07320f; }
+#btn-clear.active { background: #ff5a5a; color: #2a0505; }
+/* Click track enabled = Clear lights green (guide p.87) */
+#btn-clear.click-on { box-shadow: inset 0 0 0 2px #3cff8c; }
+#btn-duplicate.active { background: #3cff8c; color: #07320f; }
+/* Expanded Note view = Note button gold (guide p.28) */
+#btn-note.expanded { background: #ffc83c; color: #101014; }
+#btn-velocity.fixed-vel { box-shadow: inset 0 0 0 2px #3cff8c; }
+/* Step Page button: dim blue 16 steps, bright blue page 1, orange page 2 */
+#btn-page { color: #6a9cc8; }
+#btn-page.len32-p1 { background: #2a6cc8; color: #eaf4ff; }
+#btn-page.len32-p2 { background: #e08a2a; color: #2a1505; }
+
+/* ---------- Preset / tracks / Patterns row ---------- */
+.track-row {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.track-row .fn-btn { min-height: 38px; }
+/* The 8 track buttons join the row's grid directly. */
+.track-btns { display: contents; }
+.track-btn {
+  --track-color: #888;
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  border: 1px solid #101014;
+  border-bottom: 3px solid var(--track-color);
+  border-radius: 6px;
+  font-size: 10.5px;
+  padding: 7px 0;
+  cursor: pointer;
+}
+.track-btn.active {
+  background: var(--track-color);
+  color: #101014;
+  font-weight: 700;
+}
+
+/* ---------- Main area ---------- */
+.main-area {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 6px;
+}
+.main-area .side-buttons:first-child { grid-column: 1; }
+.main-area .pad-grid { grid-column: 2 / span 8; }
+.main-area .side-buttons:last-child { grid-column: 10; }
+.side-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.side-buttons .fn-btn { flex: 1; }
+
+.transport-btn { font-size: 16px; }
+.play-btn { color: #3cff8c; }
+.play-btn.active { background: #3cff8c; color: #07320f; }
+.rec-btn { color: #ff5a5a; }
+.rec-btn.active { background: #ff3c3c; color: #2a0505; }
+/* Rec Quantise off = dim red ring (guide p.64) */
+.rec-btn.unquantised { box-shadow: inset 0 0 0 2px #8a3030; }
+
+/* ---------- Pads ---------- */
+.pad-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 6px; /* matches the row grids so pads sit under the track buttons */
+}
+.pad {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: #1a1a1f;
+  border: 1px solid rgba(0,0,0,.7);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.05);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 60ms linear;
+  touch-action: none;
+  position: relative;
+}
+.pad:active { transform: translateY(1px); }
+.pad-label {
+  font-size: 8px;
+  color: rgba(255,255,255,.82);
+  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  pointer-events: none;
+  text-align: center;
+  line-height: 1.1;
+  padding: 0 2px;
+  overflow: hidden;
+}
+
+/* ---------- Sidebar ---------- */
+#sidebar {
+  flex: 0 1 430px;
+  min-width: 280px;
+  max-width: 430px;
+  background: #202026;
+  border: 1px solid #2c2c34;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 12px;
+  overflow-y: auto;
+  max-height: calc(100vh - 16px);
+}
+#sidebar h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: #7a7a88;
+  margin: 12px 0 6px;
+  border-bottom: 1px solid #2c2c34;
+  padding-bottom: 3px;
+}
+#sidebar h2:first-child { margin-top: 0; }
+.status-grid {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 3px 8px;
+}
+.status-grid span:nth-child(odd) { color: #8a8a96; }
+.fx-state {
+  float: right;
+  background: #1d4d2b;
+  color: #3cff8c;
+  padding: 1px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+.fx-state.bypassed { background: #4d1d1d; color: #ff5a5a; }
+.mixer-table { width: 100%; border-collapse: collapse; }
+.mixer-table th, .mixer-table td {
+  text-align: left;
+  padding: 2px 6px;
+  border-bottom: 1px solid #28282f;
+  font-weight: normal;
+}
+.mixer-table th { color: #7a7a88; font-size: 10px; }
+.load-btn {
+  width: 100%;
+  margin-top: 12px;
+  background: #2c3a52;
+  color: #cfe2ff;
+  border: 1px solid #3c5a86;
+  border-radius: 7px;
+  padding: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.load-btn:hover { background: #35496a; }
+.drop-hint {
+  margin-top: 10px;
+  padding: 9px;
+  border: 1px dashed #3a3a44;
+  border-radius: 8px;
+  color: #8a8a96;
+  text-align: center;
+  line-height: 1.6;
+  font-size: 11px;
+}
+
+/* ---------- Overlays ---------- */
+#key-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8,8,12,.88);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+#key-overlay.visible { display: flex; }
+.ko-panel {
+  background: #22222a;
+  border: 1px solid #3a3a46;
+  border-radius: 12px;
+  padding: 22px 30px;
+  max-width: 660px;
+}
+.ko-panel h3 { margin-top: 0; }
+.ko-row { display: flex; gap: 6px; margin: 4px 0; }
+.ko-key {
+  width: 36px; height: 36px;
+  background: #34343e;
+  border: 1px solid #15151a;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: monospace;
+  font-size: 13px;
+}
+.ko-fns { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 11.5px; }
+.ko-fn b { color: #8ee6ff; }
+
+#drop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20,40,60,.5);
+  border: 4px dashed #3c8cff;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  pointer-events: none;
+}
+#drop-overlay.visible { display: flex; }
+.drop-msg {
+  font-size: 22px;
+  color: #cfe8ff;
+  background: rgba(10,20,30,.8);
+  padding: 18px 34px;
+  border-radius: 12px;
+}
+
+@media (max-width: 1250px) {
+  .device { width: 780px; }
+  .knob-wrap { width: 64px; }
+}
