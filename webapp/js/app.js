@@ -82,20 +82,40 @@ class CircuitApp {
     this.refreshSidebar();
     this.updateLcd();
 
-    // Music-reactive background: one glow spot per track along the bottom
-    // edge, lit in the track's colour whenever that track actually sounds
-    // (drum hits / synth notes) and decaying over ~250ms. Only opacity is
-    // touched per frame, so the whole effect stays on the compositor.
+    // Music-reactive glow behind the device: one spot per track on the
+    // panel's edges (synths/MIDI bleed out the left side, drums out the
+    // right, top to bottom in track-button order), lit in the track's
+    // colour whenever that track actually sounds (drum hits / synth notes)
+    // and decaying over ~250ms. Only opacity is touched per frame, so the
+    // effect stays compositor-only.
     const beatBg = document.getElementById('beat-bg');
     const beatSpots = [];
     for (let i = 0; i < 8; i++) {
       const s = document.createElement('span');
       s.className = 'beat-spot';
       s.style.setProperty('--c', TRACK_COLORS[i]);
-      s.style.left = `${(i + 0.5) * 12.5}%`;
+      s.style.left = i < 4 ? '0%' : '100%';
+      s.style.top = `${12.5 + (i % 4) * 25}%`;
       beatBg.appendChild(s);
       beatSpots.push(s);
     }
+    const device = document.getElementById('device');
+    const sidebar = document.getElementById('sidebar');
+    const fitGlowToDevice = () => {
+      const d = device.getBoundingClientRect();
+      const s = sidebar.getBoundingClientRect();
+      // Union of device + sidebar (sidebar collapses to 0 when hidden), so
+      // synths glow out the left of the console and drums out the right.
+      const left = Math.min(d.left, s.width ? s.left : d.left);
+      const right = Math.max(d.right, s.width ? s.right : d.right);
+      Object.assign(beatBg.style, {
+        left: `${left}px`, top: `${d.top}px`, width: `${right - left}px`, height: `${d.height}px`,
+      });
+    };
+    fitGlowToDevice();
+    new ResizeObserver(fitGlowToDevice).observe(device);
+    new ResizeObserver(fitGlowToDevice).observe(sidebar);
+    window.addEventListener('resize', fitGlowToDevice);
     const beatLevels = new Float32Array(8);
     let beatLastMs = performance.now();
 
@@ -115,7 +135,7 @@ class CircuitApp {
       for (let i = 0; i < 8; i++) {
         beatLevels[i] *= fade;
         if (beatLevels[i] < 0.012) beatLevels[i] = 0;
-        beatSpots[i].style.opacity = (beatLevels[i] * 0.3).toFixed(3);
+        beatSpots[i].style.opacity = (beatLevels[i] * 0.45).toFixed(3);
       }
       requestAnimationFrame(tick);
     };

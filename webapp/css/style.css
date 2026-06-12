@@ -12,12 +12,15 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: #17171b;
   color: #ddd;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   height: 100%;
   overflow: hidden;
 }
+
+/* Background lives on html only: body must stay transparent so the
+   z-index:-1 glow layer (#beat-bg) isn't painted over. */
+html { background: #17171b; }
 
 #app {
   display: flex;
@@ -485,21 +488,20 @@ body.sidebar-hidden #sidebar { display: none; }
 }
 .ko-close:hover { color: #fff; }
 
-/* Music-reactive glow: one spot per track along the bottom edge, lit in
-   the track's colour when it sounds (opacity animated from JS; compositor-
-   only). Click-through, below the key/drop overlays (z 50/60). */
+/* Music-reactive glow behind the device: the container is fitted to the
+   device panel from JS, spots sit on its top/bottom edges and bleed out
+   around the panel (z-index -1 paints behind body content but above the
+   html canvas background — body itself must stay background-free). */
 #beat-bg {
   position: fixed;
-  inset: 0;
-  z-index: 40;
+  z-index: -1;
   pointer-events: none;
 }
 .beat-spot {
   position: absolute;
-  bottom: -14vh;
-  width: 26vw;
-  height: 34vh;
-  transform: translateX(-50%);
+  width: 42%;
+  height: 46%;
+  transform: translate(-50%, -50%);
   background: radial-gradient(closest-side, var(--c), transparent 72%);
   opacity: 0;
   will-change: opacity;
