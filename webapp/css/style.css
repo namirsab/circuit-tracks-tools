@@ -1,12 +1,16 @@
 * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
 
+/* Chrome identity: violet-slate, deliberately distinct from the hardware's
+   neutral grey/cyan trade dress. Track and pad colours stay hardware-accurate
+   because they're functional (cross-referencing with a real device). */
 :root {
-  --panel-bg: #232327;
-  --panel-edge: #121215;
+  --brand-accent: #9c8bff;
+  --panel-bg: #24242e;
+  --panel-edge: #10101a;
   --btn-bg: #36363e;
   --btn-text: #d4d4dc;
-  --lcd-bg: #101418;
-  --lcd-text: #8ee6ff;
+  --lcd-bg: #110f1a;
+  --lcd-text: #b9a8ff;
 }
 
 html, body {
@@ -20,7 +24,7 @@ html, body {
 
 /* Background lives on html only: body must stay transparent so the
    z-index:-1 glow layer (#beat-bg) isn't painted over. */
-html { background: #17171b; }
+html { background: #15161d; }
 
 #app {
   display: flex;
@@ -34,7 +38,7 @@ html { background: #17171b; }
 /* ---------- Device panel ---------- */
 .device {
   --accent: #2ee6d6;
-  background: linear-gradient(180deg, #2c2c31, var(--panel-bg));
+  background: linear-gradient(180deg, #2e2e3a, var(--panel-bg));
   border: 2px solid var(--panel-edge);
   border-radius: 16px;
   padding: 10px 18px 14px;
@@ -50,12 +54,37 @@ html { background: #17171b; }
   gap: 14px;
   margin-bottom: 4px;
 }
+/* Original wordmark: mini step-bars logo + lowercase monospace lockup —
+   intentionally unlike the hardware's spaced-caps wordmark treatment. */
 .brand {
-  font-size: 15px;
-  letter-spacing: .14em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.logo-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 17px;
+}
+.logo-bars i {
+  width: 4px;
+  border-radius: 2px;
+}
+.logo-bars i:nth-child(1) { height: 7px;  background: #6e5de6; }
+.logo-bars i:nth-child(2) { height: 17px; background: #8b7bff; }
+.logo-bars i:nth-child(3) { height: 11px; background: #a795ff; }
+.logo-bars i:nth-child(4) { height: 14px; background: #c5b6ff; }
+.logo-text {
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 14.5px;
+  letter-spacing: -0.02em;
   color: #e8e8ee;
 }
-.brand b { font-weight: 800; }
+.logo-text b {
+  font-weight: 700;
+  color: var(--brand-accent);
+}
 .keys-btn {
   background: none;
   border: 1px solid #3a3a44;
@@ -66,7 +95,7 @@ html { background: #17171b; }
   cursor: pointer;
 }
 .keys-btn:hover { color: #fff; }
-.keys-btn.active { color: #8ee6ff; border-color: #3c6a86; }
+.keys-btn.active { color: var(--brand-accent); border-color: #5a4da6; }
 body.sidebar-hidden #sidebar { display: none; }
 
 .lcd {
@@ -87,8 +116,8 @@ body.sidebar-hidden #sidebar { display: none; }
 }
 .lcd-name { font-weight: 600; }
 .lcd-bpm { cursor: ns-resize; padding: 0 4px; border-radius: 3px; }
-.lcd-bpm:hover { background: rgba(142,230,255,.12); }
-.lcd-view { text-transform: capitalize; color: #5ab8cc; }
+.lcd-bpm:hover { background: rgba(156,139,255,.14); }
+.lcd-view { text-transform: capitalize; color: #8579c9; }
 .lcd-msg { margin-left: auto; color: #ffd479; }
 
 /* ---------- Knob row (volume / staggered macros / filter) ---------- */
@@ -343,8 +372,8 @@ body.sidebar-hidden #sidebar { display: none; }
   flex: 0 1 430px;
   min-width: 280px;
   max-width: 430px;
-  background: #202026;
-  border: 1px solid #2c2c34;
+  background: #1f1f29;
+  border: 1px solid #2c2c3c;
   border-radius: 10px;
   padding: 12px 16px;
   font-size: 12px;
@@ -439,7 +468,7 @@ body.sidebar-hidden #sidebar { display: none; }
   font-size: 13px;
 }
 .ko-fns { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 11.5px; }
-.ko-fn b { color: #8ee6ff; }
+.ko-fn b { color: var(--brand-accent); }
 
 #drop-overlay {
   position: fixed;
@@ -522,5 +551,5 @@ body.sidebar-hidden #sidebar { display: none; }
   text-align: center;
   z-index: 5;
 }
-#app-footer a { color: #8ee6ff; text-decoration: none; }
+#app-footer a { color: var(--brand-accent); text-decoration: none; }
 #app-footer a:hover { text-decoration: underline; }

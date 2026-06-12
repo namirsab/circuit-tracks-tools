@@ -25,7 +25,9 @@ export function buildPanel(root) {
   // --- Brand row with embedded LCD readout (web affordance) ---
   const brand = el('div', 'brand-row', device);
   const brandName = el('div', 'brand', brand);
-  brandName.innerHTML = '<b>WEB</b> TRACKS';
+  brandName.innerHTML =
+    '<span class="logo-bars"><i></i><i></i><i></i><i></i></span>' +
+    '<span class="logo-text">web<b>tracks</b></span>';
   brandName.title = 'Unofficial fan project — not affiliated with Novation or Focusrite';
   const lcd = el('div', 'lcd', brand);
   el('span', 'lcd-name', lcd).id = 'lcd-name';
