@@ -38,7 +38,7 @@ All .ncs files are exactly 160,780 bytes. Files of any other size are invalid.
 |--------|--------|-------------|-------------|
 | Header | 0x00000 - 0x00033 | 52 | Signature, file size, project color, name |
 | Timing | 0x00034 - 0x00038 | 5 | BPM, swing, swing sync rate |
-| Scenes & Chains | 0x00039 - 0x002E3 | 683 | 16 scenes, scene chain, pattern chains |
+| Scenes & Chains | 0x00038 - 0x002E3 | 684 | 16 scenes, scene chain, pattern chains |
 | Pattern Data | 0x002E4 - 0x26CFB | 158,744 | 64 pattern blocks (synth, drum, MIDI) |
 | Tail | 0x26CFC - 0x2740B | 1,808 | Project settings, synth patches, drum configs, FX, mixer |
 
@@ -76,7 +76,7 @@ All .ncs files are exactly 160,780 bytes. Files of any other size are invalid.
 
 ---
 
-## 3. Timing Section (0x34 - 0x38, 5 bytes)
+## 3. Timing Section (0x34 - 0x37, 4 bytes)
 
 | Offset | Size | WASM Field | Range | Default | Description |
 |--------|------|-----------|-------|---------|-------------|
@@ -84,15 +84,22 @@ All .ncs files are exactly 160,780 bytes. Files of any other size are invalid.
 | 0x35 | 1 | `timing.swing` | 20-80 | 50 | Swing percentage. **Confirmed** |
 | 0x36 | 1 | `timing.swingSyncRate` | 0-35 | 3 | Swing sync rate. **Confirmed** |
 | 0x37 | 1 | `timing.spare1` | -- | 0 | Reserved, must be 0. **Inferred** |
-| 0x38 | 1 | `timing.spare2` | -- | 0 | Reserved, must be 0. **Inferred** |
 
 ---
 
-## 4. Scenes & Chains (0x39 - 0x2E3, 683 bytes)
+## 4. Scenes & Chains (0x38 - 0x2E3, 684 bytes)
 
-All values default to 0 in a new project.
+All values default to 0 in a new project. The region ends exactly where
+block 0's step data begins (0x664 − 896 = 0x2E4).
 
-### Layout (offsets relative to 0x39)
+> **Alignment note**: earlier drafts placed this region at 0x39, which made
+> every chain entry appear as `[end, 0, 0, start-of-next-entry]` and
+> required a bogus "D4 chain spills past the region" rule. The telltale was
+> that byte 3 of each entry always equalled byte 0 of the following entry.
+> The correct base is 0x38 and entries are `[start, end, 0, 0]` — verified
+> against all 16 factory projects (start ≤ end everywhere, no spillover).
+
+### Layout (offsets relative to 0x38)
 
 | Relative Offset | Size | Description |
 |----------------|------|-------------|
@@ -101,37 +108,37 @@ All values default to 0 in a new project.
 | +648 | 4 | Scene chain entry |
 | +652 | 32 | 8 pattern chain entries (4 bytes each) |
 
-**Note**: The D4 (Drum 4) pattern chain entry at +680 (absolute 0x2E1) is 4 bytes (0x2E1-0x2E4) and extends 1 byte past the nominal region boundary at 0x2E3, overlapping with the pattern data prefix area.
-
 ### Scene Format (40 bytes)
 
 Each of the 16 scenes contains:
 
 | Byte Offset | Size | Description |
 |-------------|------|-------------|
-| 0 | 8 | Scene header — byte 7 holds the start index of the scene's track chains (or 0 if unset) |
+| 0 | 8 | Scene header — byte 0 is a "scene used" flag (1 in factory projects with stored scenes, 0 otherwise); bytes 1-7 are 0 in observed files |
 | 8 | 32 | 8 track chain entries, 4 bytes each |
 
 Track order within a scene: Synth 1, Synth 2, MIDI 1, MIDI 2, Drum 1, Drum 2, Drum 3, Drum 4.
 
 ### Chain Entry Format (4 bytes)
 
-Used for scene track assignments and pattern chains:
+The same layout is used for scene track assignments, the scene chain, and
+pattern chains:
 
 | Byte | Description |
 |------|-------------|
-| 0 | End index (0-7, inclusive) |
-| 1 | 0 (unused) |
+| 0 | Start index (0-based) |
+| 1 | End index (0-based, inclusive) |
 | 2 | 0 (unused) |
-| 3 | Start index (0-7) |
+| 3 | 0 (unused) |
 
-A single-pattern entry has start = end (e.g. `03 00 00 03` plays only pattern 4).
-A chain entry spans from start to end inclusive (e.g. `05 00 00 02` chains patterns 3–6).
+A single-pattern entry has start = end (e.g. `03 03 00 00` plays only pattern 4).
+A chain entry spans from start to end inclusive (e.g. `02 05 00 00` chains patterns 3–6).
 When all bytes are 0 the track uses the default (pattern 1).
 
-The **scene chain** entry at offset +648 uses a slightly different layout:
-byte 0 = end scene index, byte 1 = start scene index (typically 0),
-bytes 2-3 carry other metadata.
+The **scene chain** entry at offset +648 holds scene indices (0-15) instead
+of pattern indices. Confirmed by factory project_1 "Solar Dome":
+`00 0F 00 00` = scenes 1-16, exactly what the hardware lights green when
+the project is loaded.
 
 ---
 
@@ -254,7 +261,7 @@ Each drum pattern block contains:
 | Velocity row | 32 bytes | Per-step velocity values |
 | Probability row | 32 bytes | Per-step probability values |
 | Drum choice row | 32 bytes | Per-step sample selection |
-| Rhythm row | 32 bytes | Per-step trigger on/off |
+| Rhythm row | 32 bytes | Per-step 6-bit micro-hit mask (0 = rest) |
 | Settings | 40 bytes | Same format as synth pattern settings |
 | Post-data | variable | Automation region |
 
@@ -269,7 +276,7 @@ Each row contains one byte per step (32 bytes total):
 | Velocity | `velocity[32]` | 0x60 (96, default) | 0x00 | Hit velocity (0-127). **Confirmed** |
 | Probability | `probabilities[32]` | 0x07 (100%) | 0x07 | Trigger probability (0-7). See Appendix A. **Confirmed** |
 | Drum choice | `drumChoice[32]` | 0xFF (default sample) | 0xFF | Per-step sample selection ("sample flip"). Non-0xFF selects an alternate sample for that step. **Confirmed** |
-| Rhythm | `drumRhythm[32]` | 0x01 | 0x00 | Trigger flag: 1 = hit, 0 = rest. **Confirmed** |
+| Rhythm | `drumRhythm[32]` | 0x01-0x3F | 0x00 | 6-bit micro-hit mask, bit m = micro tick m (6 ticks per step): 0x01 = plain on-beat hit, 0x3F = six-hit roll, 0x09 = ticks 1 and 4, 0x00 = rest. Observed in factory project_15 (values 63, 9). **Confirmed** |
 
 ### Automation Data (P-Locks)
 
@@ -717,7 +724,25 @@ This handshake may be optional for write-only operations. The implementation in 
 
 ## Appendix B: Sync Rate Values
 
-The sync rate field (0-7) controls the step playback speed. The exact mapping to musical divisions has not been fully documented in this specification. Default value is 3.
+The sync rate field (0-7) controls the step playback speed. The stored
+value is **reversed** relative to the hardware's left-to-right pad order in
+Pattern Settings:
+
+| Stored value | Division | Step length (beats) |
+|--------------|----------|---------------------|
+| 7 | 1/4 (leftmost pad) | 1 |
+| 6 | 1/4T | 2/3 |
+| 5 | 1/8 | 1/2 |
+| 4 | 1/8T | 1/3 |
+| 3 | 1/16 (default) | 1/4 |
+| 2 | 1/16T | 1/6 |
+| 1 | 1/32 | 1/8 |
+| 0 | 1/32T (rightmost pad) | 1/12 |
+
+Evidence: factory project_2 "Perfume Disco" stores 7 for Drum 1 pattern 1,
+which the hardware shows as 1/4 (leftmost pad); the factory default is 3
+(= 1/16); and the project's 32-step synth patterns at stored 5 (1/8) span
+the same 4 bars as its 16-step drum patterns at 1/4.
 
 ## Appendix C: FX Lookup Tables
 
@@ -861,7 +886,7 @@ The following fields have been observed in the binary data but their purpose has
 | 0x30 | 4 bytes | 0 | Always zeros in all observed files. |
 | Drum config byte 3 | 1 byte | 127 (0x7F) | Per drum track. Possibly EQ max or filter cutoff default. |
 | Drum config byte 10 | 1 byte | 0 | Per drum track. Always 0. |
-| Scene header bytes 0-6 | 7 bytes | 0 | First 7 bytes of each 40-byte scene block. Always zeros in observed files. |
+| Scene header bytes 1-7 | 7 bytes | 0 | Bytes after the "scene used" flag in each 40-byte scene block. Always zeros in observed files. |
 | ~~Sidechain S2 extra bytes~~ | ~~2 bytes~~ | ~~0~~ | **Documented** — these are MIDI 1 sidechain source and attack bytes (part of the 4×5 sidechain layout). |
 | Tail preamble bytes 0-15 | 16 bytes | mostly 0 | WASM references `synthTrackInfo`, `drumMuteStates`, `defaultDrumChoices`, `midiTrackInfo` in this region. Bytes 3 and 11 are MIDI 1/2 sidechain preset indices. |
 | ~~Automation data layout~~ | ~~variable~~ | ~~0xFF~~ | **Documented** — see Automation Data (P-Locks) section above. Synth: 12 slots (8 macros + reverb/delay/level/pan). Drum: 8 slots (pitch/decay/distortion/eq + reverb/delay/level/pan). |

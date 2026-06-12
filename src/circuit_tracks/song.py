@@ -1165,7 +1165,7 @@ def _read_song_order(ncs: NCSFile, pattern_names: dict[int, str]) -> list[str]:
     if not pattern_names:
         return []
 
-    start = ncs.scene_chain.scene_chain_start
+    start = ncs.scene_chain.start
     end = ncs.scene_chain.end
 
     song_order: list[str] = []

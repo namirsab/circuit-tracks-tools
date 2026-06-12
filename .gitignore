@@ -13,3 +13,9 @@ docs/journal/
 plans/
 *.mcp.json
 .env
+.tmp/
+project-backups/
+Circuit Tracks F/
+Circuit Factory 2/
+CircuitFactorySamples.zip
+renders/

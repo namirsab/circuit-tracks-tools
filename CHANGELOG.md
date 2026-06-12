@@ -53,5 +53,45 @@ First public release.
 - Fixed undefined `NCSFile` name in `test_song.py`
 - Moved module-level logger in `song.py` after imports to satisfy E402
 
+## [0.2.0] — 2026-06-12
+
+NCS parser accuracy release — every fix verified against hardware behaviour,
+and round-trips of all tested factory/user projects are now byte-exact.
+
+### Fixed
+
+- **Scenes/chains region alignment**: the region starts at offset `0x38`
+  (not `0x39`), and every chain entry — scene track chains, the scene chain,
+  and pattern chains — is laid out `[start, end, 0, 0]`. The previous
+  one-byte misalignment produced wrong scene ranges (e.g. scenes 6–16 shown
+  instead of 1–16) and garbage chain data that could blow up playback.
+- Scene "used" flag: byte 0 of each 8-byte scene header marks a stored scene;
+  `set_scene` now writes it instead of the old header hack.
+- P-lock writer no longer smears integer-step locks across all micro
+  positions — one byte per position, keeping round-trips byte-exact.
+- Automation lock positions recorded at longer pattern lengths (beyond the
+  current step count) are preserved on parse/serialize instead of dropped.
+
+### Added
+
+- **Drum micro-hits**: `DrumStep.micro_hits` exposes the rhythm row's 6-bit
+  micro-hit mask (`0x01` plain hit … `0x3F` six-hit roll).
+- **Fractional p-lock positions**: automation lanes are parsed at full
+  192-position resolution; sub-step locks use fractional step keys
+  (e.g. `3.5`) for smooth micro-step automation.
+
+### Changed
+
+- `ChainEntry` fields renamed to match the true byte layout (`start`, `end`);
+  the bogus `scene_chain_start` property is gone.
+
+### Documentation
+
+- `docs/ncs-format.md`: scenes & chains section rewritten for the `0x38`
+  base, chain entry format corrected, rhythm-row micro-hit mask documented,
+  and the pattern sync-rate table added (stored byte is reversed relative to
+  the hardware pad order: `7` = 1/4, `0` = 1/32T).
+
+[0.2.0]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/namirsab/circuit-tracks-tools/releases/tag/v0.1.0

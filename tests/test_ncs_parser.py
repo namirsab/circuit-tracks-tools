@@ -385,9 +385,9 @@ def test_set_scene_helper() -> None:
     assert ncs.scenes[0].track_chains[0].end == 3
     assert ncs.scenes[0].track_chains[4].start == 0
     assert ncs.scenes[0].track_chains[4].end == 1
-    # Verify byte layout: [end, 0, 0, start]
-    assert ncs.scenes[0].track_chains[0].to_bytes() == bytes([3, 0, 0, 1])
-    assert ncs.scenes[0].track_chains[4].to_bytes() == bytes([1, 0, 0, 0])
+    # Verify byte layout: [start, end, 0, 0]
+    assert ncs.scenes[0].track_chains[0].to_bytes() == bytes([1, 3, 0, 0])
+    assert ncs.scenes[0].track_chains[4].to_bytes() == bytes([0, 1, 0, 0])
 
 
 # --- FX tests ---

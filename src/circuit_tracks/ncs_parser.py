@@ -32,7 +32,9 @@ DEFAULT_DRUM_CHOICE = 0xFF  # no sample flip
 
 # Offsets
 TIMING_OFFSET = 0x34
-SCENES_CHAINS_OFFSET = 0x39
+# The scenes/chains region runs 0x38..0x2E4 (684 bytes), ending exactly where
+# block 0's step data begins (0x664 - 896 = 0x2E4 = 740).
+SCENES_CHAINS_OFFSET = 0x38
 PATTERN_DATA_PREFIX_OFFSET = 0x2E0
 
 # Scenes/chains region layout (relative to SCENES_CHAINS_OFFSET):
@@ -42,7 +44,7 @@ PATTERN_DATA_PREFIX_OFFSET = 0x2E0
 # patternChains[8] × 4 bytes at +652
 _SCENE_SIZE = 40
 _SCENE_TRACK_OFFSET = 8  # track entries start at byte 8 within each scene
-_SCENE_CHAIN_ENTRY_SIZE = 4  # {end, start, padding, padding}
+_SCENE_CHAIN_ENTRY_SIZE = 4  # {start, end, padding, padding}
 _SCENES_TOTAL = NUM_SCENES * _SCENE_SIZE  # 640
 _SCENE_STATE_OFFSET = _SCENES_TOTAL  # +640
 _SCENE_STATE_SIZE = 8
@@ -318,12 +320,17 @@ class SynthPattern:
 
 @dataclass
 class DrumStep:
-    """A single step in a drum pattern."""
+    """A single step in a drum pattern.
+
+    ``micro_hits`` is a 6-bit mask of which micro ticks trigger (bit 0 =
+    on the beat): 1 = plain hit, 63 = six-hit roll, 9 = ticks 1 and 4.
+    """
 
     active: bool = False
     velocity: int = 0
     probability: int = DEFAULT_PROBABILITY
     drum_choice: int = DEFAULT_DRUM_CHOICE
+    micro_hits: int = 1
 
 
 @dataclass
@@ -378,36 +385,28 @@ class NCSTimingSection:
 class ChainEntry:
     """A 4-byte chain entry used for scene tracks, pattern chains, and scene chain.
 
-    Byte layout for scene track entries and pattern chains:
-      byte[0] = chain end index (0-based, inclusive)
-      byte[1] = 0
+    Byte layout (identical for all three uses):
+      byte[0] = chain start index (0-based)
+      byte[1] = chain end index (0-based, inclusive)
       byte[2] = 0
-      byte[3] = chain start index (0-based)
+      byte[3] = 0
 
-    For scene chain entries, byte[1] is the start (always 0) and byte[3]
-    has a different meaning.  Use ``scene_chain_start`` for scene chains.
+    Verified against every factory project: start <= end holds everywhere,
+    and project_1's scene chain reads [0, 15] = all 16 scenes, matching the
+    hardware display.
     """
 
-    end: int = 0  # byte[0]: end index
-    start: int = 0  # byte[3]: start index (for scene tracks / pattern chains)
-    _byte1: int = 0  # byte[1]: scene chain start (always 0)
+    start: int = 0  # byte[0]: start index
+    end: int = 0  # byte[1]: end index
     _byte2: int = 0  # byte[2]: always 0
-
-    @property
-    def scene_chain_start(self) -> int:
-        """Start index for scene chain entries (byte[1])."""
-        return self._byte1
-
-    @scene_chain_start.setter
-    def scene_chain_start(self, value: int) -> None:
-        self._byte1 = value
+    _byte3: int = 0  # byte[3]: always 0
 
     def to_bytes(self) -> bytes:
-        return bytes([self.end, self._byte1, self._byte2, self.start])
+        return bytes([self.start, self.end, self._byte2, self._byte3])
 
     @classmethod
     def from_bytes(cls, data: bytes) -> ChainEntry:
-        return cls(end=data[0], start=data[3], _byte1=data[1], _byte2=data[2])
+        return cls(start=data[0], end=data[1], _byte2=data[2], _byte3=data[3])
 
 
 @dataclass
@@ -604,14 +603,13 @@ def parse_ncs(path: str | Path) -> NCSFile:
     # Scene chain
     ncs.scene_chain = ChainEntry.from_bytes(data[sc_base + _SCENE_CHAIN_OFFSET : sc_base + _SCENE_CHAIN_OFFSET + 4])
 
-    # Pattern chains (7 tracks fit in the region, D4 spills into pattern data)
+    # Pattern chains (all 8 tracks fit in the region, which ends exactly at
+    # block 0's step data: 0x38 + 652 + 32 = 0x2E4)
     ncs.pattern_chains = []
-    for i in range(NUM_TRACKS - 1):  # S1-D3
+    for i in range(NUM_TRACKS):
         off = sc_base + _PATTERN_CHAINS_OFFSET + i * 4
         ncs.pattern_chains.append(ChainEntry.from_bytes(data[off : off + 4]))
-    # D4: starts at sc_base + _PATTERN_CHAINS_OFFSET + 7*4 = 0x39 + 652 + 28 = 0x39 + 680 = 0x2E1
     d4_off = sc_base + _PATTERN_CHAINS_OFFSET + 7 * 4
-    ncs.pattern_chains.append(ChainEntry.from_bytes(data[d4_off : d4_off + 4]))
 
     # Parse 64 pattern blocks
     ncs.synth_patterns = []
@@ -622,7 +620,7 @@ def parse_ncs(path: str | Path) -> NCSFile:
         meta_offset = _METADATA_OFFSETS[block_idx]
 
         if block_idx == 0:
-            # First block: pre_data starts after D4 chain spillover
+            # First block: pre_data starts right after the pattern chains
             prev_end = d4_off + 4
         else:
             prev_end = _METADATA_OFFSETS[block_idx - 1] + PATTERN_SETTINGS_SIZE
@@ -649,6 +647,7 @@ def parse_ncs(path: str | Path) -> NCSFile:
                     velocity=velocity_row[i],
                     probability=probability_row[i],
                     drum_choice=drum_choice_row[i],
+                    micro_hits=(rhythm_row[i] & 0x3F) or 1,
                 )
                 for i in range(STEPS_PER_PATTERN)
             ]
@@ -825,6 +824,27 @@ def _parse_automation_locks(ncs: NCSFile) -> None:
             _parse_synth_locks(pattern, next_pre_data)
 
 
+def _parse_lock_lane(pre_data: bytes, base_offset: int, num_steps: int, positions_per_step: int) -> dict[float, int]:
+    """Read one automation lane at full micro resolution.
+
+    Returns {position: value} where on-step positions are ints and sub-step
+    positions are floats rounded to 3 decimals (e.g. 3.5 = step 4 halfway).
+    """
+    total_positions = AUTOMATION_LANES_PER_MACRO * STEPS_PER_PATTERN  # 192
+    locks: dict[float, int] = {}
+    for flat_idx in range(min(total_positions, len(pre_data) - base_offset)):
+        val = pre_data[base_offset + flat_idx]
+        if val == 0xFF:
+            continue
+        # Positions past num_steps * positions_per_step are kept too: the
+        # hardware leaves automation recorded at a longer pattern length in
+        # place (inert until the pattern grows again).
+        step, sub = divmod(flat_idx, positions_per_step)
+        pos = step if sub == 0 else round(step + sub / positions_per_step, 3)
+        locks[pos] = val
+    return locks
+
+
 def _parse_synth_locks(pattern: SynthPattern, pre_data: bytes) -> None:
     """Parse synth/MIDI macro and mixer locks from automation region."""
     num_steps = pattern.settings.playback_end + 1
@@ -833,15 +853,7 @@ def _parse_synth_locks(pattern: SynthPattern, pre_data: bytes) -> None:
 
     # Macros (slots 0-7, lanes 0-47)
     for macro in range(1, 9):
-        base_offset = (macro - 1) * total_positions
-        locks = {}
-        for step in range(num_steps):
-            flat_idx = step * positions_per_step
-            lane = flat_idx // STEPS_PER_PATTERN
-            pos = flat_idx % STEPS_PER_PATTERN
-            val = pre_data[base_offset + lane * STEPS_PER_PATTERN + pos]
-            if val != 0xFF:
-                locks[step] = val
+        locks = _parse_lock_lane(pre_data, (macro - 1) * total_positions, num_steps, positions_per_step)
         if locks:
             pattern.macro_locks[macro] = locks
 
@@ -850,16 +862,7 @@ def _parse_synth_locks(pattern: SynthPattern, pre_data: bytes) -> None:
         base_offset = slot * total_positions
         if base_offset >= len(pre_data):
             break
-        locks = {}
-        for step in range(num_steps):
-            flat_idx = step * positions_per_step
-            lane = flat_idx // STEPS_PER_PATTERN
-            pos = flat_idx % STEPS_PER_PATTERN
-            offset = base_offset + lane * STEPS_PER_PATTERN + pos
-            if offset < len(pre_data):
-                val = pre_data[offset]
-                if val != 0xFF:
-                    locks[step] = val
+        locks = _parse_lock_lane(pre_data, base_offset, num_steps, positions_per_step)
         if locks:
             pattern.mixer_locks[param_name] = locks
 
@@ -874,16 +877,7 @@ def _parse_drum_locks(pattern: DrumPattern, pre_data: bytes) -> None:
         base_offset = slot * total_positions
         if base_offset >= len(pre_data):
             break
-        locks = {}
-        for step in range(num_steps):
-            flat_idx = step * positions_per_step
-            lane = flat_idx // STEPS_PER_PATTERN
-            pos = flat_idx % STEPS_PER_PATTERN
-            offset = base_offset + lane * STEPS_PER_PATTERN + pos
-            if offset < len(pre_data):
-                val = pre_data[offset]
-                if val != 0xFF:
-                    locks[step] = val
+        locks = _parse_lock_lane(pre_data, base_offset, num_steps, positions_per_step)
         if locks:
             pattern.param_locks[param_name] = locks
 
@@ -937,30 +931,17 @@ def _write_locks_to_region(
         for position, value in positions.items():
             clamped = max(0, min(127, value))
             pos_f = float(position)
-            step_int = int(pos_f)
-            frac = pos_f - step_int
-
-            if step_int < 0 or step_int >= num_steps:
+            if pos_f < 0:
                 continue
 
-            if frac == 0.0 and pos_f == int(pos_f):
-                start_pos = step_int * positions_per_step
-                for p in range(positions_per_step):
-                    flat_idx = start_pos + p
-                    if flat_idx < total_positions:
-                        lane = flat_idx // STEPS_PER_PATTERN
-                        pos = flat_idx % STEPS_PER_PATTERN
-                        idx = base_offset + lane * STEPS_PER_PATTERN + pos
-                        if idx < region_size:
-                            buf[idx] = clamped
-            else:
-                flat_idx = int(round(pos_f * positions_per_step))
-                if 0 <= flat_idx < total_positions:
-                    lane = flat_idx // STEPS_PER_PATTERN
-                    pos = flat_idx % STEPS_PER_PATTERN
-                    idx = base_offset + lane * STEPS_PER_PATTERN + pos
-                    if idx < region_size:
-                        buf[idx] = clamped
+            # One byte per position: the hardware sample-and-holds the last
+            # value, so a single slot is equivalent to filling the step (and
+            # keeps hardware-file round-trips byte-exact).
+            flat_idx = int(round(pos_f * positions_per_step))
+            if 0 <= flat_idx < total_positions:
+                idx = base_offset + flat_idx
+                if idx < region_size:
+                    buf[idx] = clamped
 
     return bytes(buf)
 
@@ -1098,7 +1079,7 @@ def serialize_ncs(ncs: NCSFile) -> bytes:
     # Scene chain
     buf[sc_base + _SCENE_CHAIN_OFFSET : sc_base + _SCENE_CHAIN_OFFSET + 4] = ncs.scene_chain.to_bytes()
 
-    # Pattern chains (including D4 which spills past region)
+    # Pattern chains
     for i, chain in enumerate(ncs.pattern_chains):
         off = sc_base + _PATTERN_CHAINS_OFFSET + i * 4
         buf[off : off + 4] = chain.to_bytes()
@@ -1130,7 +1111,7 @@ def serialize_ncs(ncs: NCSFile) -> bytes:
                 buf[row_base + i] = step.velocity
                 buf[row_base + 32 + i] = step.probability
                 buf[row_base + 64 + i] = step.drum_choice
-                buf[row_base + 96 + i] = 1 if step.active else 0
+                buf[row_base + 96 + i] = ((step.micro_hits & 0x3F) or 1) if step.active else 0
             buf[meta_offset:settings_end] = pat.settings.to_bytes()
             if pat.post_data:
                 buf[settings_end : settings_end + len(pat.post_data)] = pat.post_data
@@ -1237,29 +1218,25 @@ def set_scene(ncs: NCSFile, scene_index: int, track_chains: dict[int, tuple[int,
     """Set a scene's per-track pattern chain assignments.
 
     Hardware byte layout per track entry:
-      byte[0] = chain end index (0-based, inclusive)
-      byte[1] = 0
-      byte[2] = 0
-      byte[3] = chain start index (0-based)
+      byte[0] = chain start index (0-based)
+      byte[1] = chain end index (0-based, inclusive)
+      bytes[2..3] = 0
 
     Args:
         scene_index: 0-15
         track_chains: dict of {track_index: (start, end)} for each track
     """
     scene = ncs.scenes[scene_index]
-    max_start = 0
     for track, (start, end) in track_chains.items():
         scene.track_chains[track].start = start
         scene.track_chains[track].end = end
-        if start > max_start:
-            max_start = start
-    # Scene header byte[7] stores the start index of the first track (or max)
+    # Scene header byte[0] flags the scene as used (factory files use 1)
     hdr = bytearray(scene.header)
-    hdr[7] = max_start
+    hdr[0] = 1
     scene.header = bytes(hdr)
 
 
 def set_scene_chain(ncs: NCSFile, start: int = 0, end: int = 0) -> None:
-    """Set the scene chain range (uses byte[1] for start, byte[0] for end)."""
-    ncs.scene_chain.scene_chain_start = start
+    """Set the scene chain range."""
+    ncs.scene_chain.start = start
     ncs.scene_chain.end = end
