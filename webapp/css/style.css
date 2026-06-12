@@ -462,3 +462,10 @@ body.sidebar-hidden #sidebar { display: none; }
   .device { width: 780px; }
   .knob-wrap { width: 64px; }
 }
+
+/* Save button armed (hardware-style blink while awaiting confirm) */
+@keyframes save-blink {
+  0%, 49% { background: #f0f0f8; color: #15151a; }
+  50%, 100% { background: transparent; color: #f0f0f8; }
+}
+#btn-save.armed { animation: save-blink 0.7s steps(1) infinite; }

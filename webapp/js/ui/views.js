@@ -88,6 +88,7 @@ export class Views {
       case 'patternSettings': return this.patternSettingsPads();
       case 'patterns': return this.patternsPads();
       case 'projects': return this.projectsPads();
+      case 'saveColor': return this.saveColorPads();
       case 'mixer': return this.mixerPads();
       case 'fx': return this.fxPads();
       case 'sidechain': return this.sidechainPads();
@@ -376,9 +377,10 @@ export class Views {
     return out;
   }
 
-  // Projects View: one pad per pack project in its project colour (guide
-  // p.18). Dim = stored project, bright = currently loaded, flashing white =
-  // queued to take over at the end of the current pattern.
+  // Projects View: 64 slots over 2 pages, each stored project in its
+  // project colour (guide p.18). Dim grey = empty slot (press to start an
+  // init project there), dim colour = stored, bright = currently loaded,
+  // flashing white = queued to take over at the end of the current pattern.
   projectsPads() {
     const out = Array.from({ length: 32 }, () => ({ bg: OFF }));
     const bank = this.app.projectBank;
@@ -386,10 +388,12 @@ export class Views {
     const flash = performance.now() % 360 < 180;
     for (let i = 0; i < 32; i++) {
       const idx = page * 32 + i;
+      if (idx >= bank.length) break;
       const entry = bank[idx];
-      if (!entry) continue;
-      const [r, g, b] = PROJECT_COLORS[entry.color % PROJECT_COLORS.length] ?? [128, 128, 128];
-      let bg = `rgba(${r},${g},${b},0.35)`;
+      const [r, g, b] = entry
+        ? PROJECT_COLORS[entry.color % PROJECT_COLORS.length] ?? [128, 128, 128]
+        : [110, 110, 120];
+      let bg = entry ? `rgba(${r},${g},${b},0.35)` : rgba(GREY, 0.6);
       if (idx === this.ui.currentProjectIdx) bg = `rgba(${r},${g},${b},1)`;
       if (this.app.pendingProject?.idx === idx) bg = flash ? WHITE : `rgba(${r},${g},${b},0.9)`;
       out[i] = { bg, label: String(idx + 1) };
@@ -399,7 +403,27 @@ export class Views {
 
   projectsPressed(i) {
     const idx = (this.ui.projectPage ?? 0) * 32 + i;
-    if (this.app.projectBank[idx]) this.app.selectProjectFromBank(idx);
+    if (idx >= this.app.projectBank.length) return;
+    // Shift+pad = immediate switch (no end-of-pattern queue).
+    if (this.ui.shift) this.app.loadProjectFromBank(idx);
+    else this.app.selectProjectFromBank(idx);
+  }
+
+  // Save colour picker: the 14 project colours on the top rows; the live
+  // project's colour is lit bright.
+  saveColorPads() {
+    const out = Array.from({ length: 32 }, () => ({ bg: OFF }));
+    PROJECT_COLORS.forEach(([r, g, b], i) => {
+      const current = (this.project.color ?? 0) % PROJECT_COLORS.length === i;
+      out[i] = { bg: `rgba(${r},${g},${b},${current ? 1 : 0.4})`, label: current ? '●' : '' };
+    });
+    return out;
+  }
+
+  saveColorPressed(i) {
+    if (i >= PROJECT_COLORS.length) return;
+    this.project.color = i;
+    this.render();
   }
 
   // Mixer View (p.88): row 1 = mutes, rows 3-4 = the 16 Scene pads.
@@ -612,6 +636,7 @@ export class Views {
       case 'patternSettings': return this.patternSettingsPressed(i);
       case 'patterns': return this.patternsPressed(i);
       case 'projects': return this.projectsPressed(i);
+      case 'saveColor': return this.saveColorPressed(i);
       case 'mixer': return this.mixerPressed(i);
       case 'fx': return this.fxPressed(i);
       case 'sidechain': return this.sidechainPressed(i);

@@ -18,11 +18,11 @@ and sample fetches without a server.)
 
 ## What's bundled
 
-- `pack/` — the **Circuit Web Starter** pack: 64 drum samples and 32 synth
-  patches in Novation Components pack format (`index.json` + `samples/` +
-  `patches/`). All of it is synthesized from code
-  (`scripts/generate_webapp_pack.py` in the parent repo) — no third-party
-  audio, freely redistributable.
+- `pack/` — the **Circuit Web Starter** pack: 64 drum samples, a full bank
+  of 128 synth patches, and 16 demo projects in Novation Components pack
+  format (`index.json` + `samples/` + `patches/` + `projects/`). All of it
+  is generated from code (`scripts/generate_webapp_pack.py` in the parent
+  repo) — no third-party audio, freely redistributable.
 - `data/Empty.ncs` — the blank project template used when exporting a fresh
   in-app project to a hardware-ready `.ncs` file.
 
@@ -38,7 +38,23 @@ and sample fetches without a server.)
 
 ## Projects view
 
-The **Projects** button opens the pack's project grid (up to 32 per page,
-each pad in its project colour). Press a pad to load that project — while
-playing, the switch is queued to the end of the current pattern, like the
-hardware. Shift+Projects opens the pack picker (Packs).
+The **Projects** button opens the 64-slot project grid (32 per page, each
+stored project in its project colour; empty slots are grey). Press a pad to
+load that slot — while playing, the switch is queued to the end of the
+current pattern like the hardware; **Shift+pad switches immediately**.
+Pressing an empty slot starts an init project in that slot. Drop a `.ncs`
+file onto a pad to fill that slot without switching. Shift+Projects opens
+the pack picker (Packs).
+
+## Saving & exporting
+
+- **Save** works like the hardware: press once to arm (the button blinks
+  and the grid shows the 14 project colours — press one to recolour), press
+  again to save into the current slot. **Shift+Save** downloads the project
+  as a `.ncs` file.
+- Sidebar export buttons: **Export project** (.ncs), **Export patches**
+  (both synth patches as .syx), and **Export pack** — bundles the current
+  samples, patch bank, and all stored project slots into a
+  `.circuittrackspack` you can reload later (or open in Components).
+- Saved slots live in memory for the session; the page warns before
+  closing if you have unexported saves.

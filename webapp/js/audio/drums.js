@@ -9,6 +9,7 @@ export class DrumEngine {
     this.engine = engine;
     this.ctx = engine.ctx;
     this.buffers = new Array(64).fill(null);
+    this.rawBuffers = new Array(64).fill(null); // original WAV bytes, for pack export
     this.names = new Array(64).fill('');
     this.loaded = false;
 
@@ -65,7 +66,9 @@ export class DrumEngine {
       throw new Error('Pack index has no samples');
     }
     const jobs = index.samples.slice(0, 64).map(async (s, i) => {
-      this.buffers[i] = await this.ctx.decodeAudioData(await getBuf(s.url));
+      const raw = await getBuf(s.url);
+      this.rawBuffers[i] = raw.slice(0); // decodeAudioData detaches its input
+      this.buffers[i] = await this.ctx.decodeAudioData(raw);
       this.names[i] = s.name;
     });
     await Promise.all(jobs);

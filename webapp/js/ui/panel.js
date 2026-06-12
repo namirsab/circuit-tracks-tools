@@ -159,6 +159,9 @@ export function buildSidebar(root) {
     <input type="file" id="pack-file-input" accept=".circuittrackspack,.zip" style="display:none">
     <button id="btn-load-pack-folder" class="load-btn">Load pack folder…</button>
     <input type="file" id="pack-input" webkitdirectory style="display:none">
+    <button id="btn-export-project" class="load-btn">Export project (.ncs)</button>
+    <button id="btn-export-patches" class="load-btn">Export patches (.syx)</button>
+    <button id="btn-export-pack" class="load-btn">Export pack (.circuittrackspack)</button>
     <div class="drop-hint">Drop a <b>.ncs</b> project, <b>.circuittrackspack</b>, or <b>.syx</b> anywhere<br>Pack folder = a Components export with <b>index.json</b></div>
   `;
 }

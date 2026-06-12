@@ -2,7 +2,72 @@
   "name": "Circuit Web Starter",
   "product": "circuit-tracks",
   "version": "1.0",
-  "projects": [],
+  "projects": [
+    {
+      "name": "Neon Harbor",
+      "url": "projects/project_0.ncs"
+    },
+    {
+      "name": "Velvet Loop",
+      "url": "projects/project_1.ncs"
+    },
+    {
+      "name": "Midnight Mall",
+      "url": "projects/project_2.ncs"
+    },
+    {
+      "name": "Glass Garden",
+      "url": "projects/project_3.ncs"
+    },
+    {
+      "name": "Concrete Pulse",
+      "url": "projects/project_4.ncs"
+    },
+    {
+      "name": "Voltage Run",
+      "url": "projects/project_5.ncs"
+    },
+    {
+      "name": "Iron Orbit",
+      "url": "projects/project_6.ncs"
+    },
+    {
+      "name": "Strobe Sector",
+      "url": "projects/project_7.ncs"
+    },
+    {
+      "name": "Rust Funk",
+      "url": "projects/project_8.ncs"
+    },
+    {
+      "name": "Circuit Breaker",
+      "url": "projects/project_9.ncs"
+    },
+    {
+      "name": "Crunch Time",
+      "url": "projects/project_10.ncs"
+    },
+    {
+      "name": "Pixel Alley",
+      "url": "projects/project_11.ncs"
+    },
+    {
+      "name": "Slow Aurora",
+      "url": "projects/project_12.ncs"
+    },
+    {
+      "name": "Fog Lines",
+      "url": "projects/project_13.ncs"
+    },
+    {
+      "name": "Still Water",
+      "url": "projects/project_14.ncs"
+    },
+    {
+      "name": "Drift Field",
+      "url": "projects/project_15.ncs"
+    }
+  ],
   "samples": [
     {
       "name": "DeepKickA",
@@ -389,6 +454,390 @@
     {
       "name": "Riser FX",
       "url": "patches/patch_31.syx"
+    },
+    {
+      "name": "Deep Bass I",
+      "url": "patches/patch_32.syx"
+    },
+    {
+      "name": "Deep Bass II",
+      "url": "patches/patch_33.syx"
+    },
+    {
+      "name": "Deep Bass III",
+      "url": "patches/patch_34.syx"
+    },
+    {
+      "name": "Deep Bass IV",
+      "url": "patches/patch_35.syx"
+    },
+    {
+      "name": "Punch Bass I",
+      "url": "patches/patch_36.syx"
+    },
+    {
+      "name": "Punch Bass II",
+      "url": "patches/patch_37.syx"
+    },
+    {
+      "name": "Punch Bass III",
+      "url": "patches/patch_38.syx"
+    },
+    {
+      "name": "Punch Bass IV",
+      "url": "patches/patch_39.syx"
+    },
+    {
+      "name": "Hollow Bass I",
+      "url": "patches/patch_40.syx"
+    },
+    {
+      "name": "Hollow Bass II",
+      "url": "patches/patch_41.syx"
+    },
+    {
+      "name": "Hollow Bass III",
+      "url": "patches/patch_42.syx"
+    },
+    {
+      "name": "Hollow Bass IV",
+      "url": "patches/patch_43.syx"
+    },
+    {
+      "name": "Gnarl Bass I",
+      "url": "patches/patch_44.syx"
+    },
+    {
+      "name": "Gnarl Bass II",
+      "url": "patches/patch_45.syx"
+    },
+    {
+      "name": "Gnarl Bass III",
+      "url": "patches/patch_46.syx"
+    },
+    {
+      "name": "Gnarl Bass IV",
+      "url": "patches/patch_47.syx"
+    },
+    {
+      "name": "Silk Pad I",
+      "url": "patches/patch_48.syx"
+    },
+    {
+      "name": "Silk Pad II",
+      "url": "patches/patch_49.syx"
+    },
+    {
+      "name": "Silk Pad III",
+      "url": "patches/patch_50.syx"
+    },
+    {
+      "name": "Silk Pad IV",
+      "url": "patches/patch_51.syx"
+    },
+    {
+      "name": "Glass Pad I",
+      "url": "patches/patch_52.syx"
+    },
+    {
+      "name": "Glass Pad II",
+      "url": "patches/patch_53.syx"
+    },
+    {
+      "name": "Glass Pad III",
+      "url": "patches/patch_54.syx"
+    },
+    {
+      "name": "Glass Pad IV",
+      "url": "patches/patch_55.syx"
+    },
+    {
+      "name": "Vox Pad I",
+      "url": "patches/patch_56.syx"
+    },
+    {
+      "name": "Vox Pad II",
+      "url": "patches/patch_57.syx"
+    },
+    {
+      "name": "Vox Pad III",
+      "url": "patches/patch_58.syx"
+    },
+    {
+      "name": "Vox Pad IV",
+      "url": "patches/patch_59.syx"
+    },
+    {
+      "name": "Haze Pad I",
+      "url": "patches/patch_60.syx"
+    },
+    {
+      "name": "Haze Pad II",
+      "url": "patches/patch_61.syx"
+    },
+    {
+      "name": "Haze Pad III",
+      "url": "patches/patch_62.syx"
+    },
+    {
+      "name": "Haze Pad IV",
+      "url": "patches/patch_63.syx"
+    },
+    {
+      "name": "Solar Lead I",
+      "url": "patches/patch_64.syx"
+    },
+    {
+      "name": "Solar Lead II",
+      "url": "patches/patch_65.syx"
+    },
+    {
+      "name": "Solar Lead III",
+      "url": "patches/patch_66.syx"
+    },
+    {
+      "name": "Solar Lead IV",
+      "url": "patches/patch_67.syx"
+    },
+    {
+      "name": "Square Lead I",
+      "url": "patches/patch_68.syx"
+    },
+    {
+      "name": "Square Lead II",
+      "url": "patches/patch_69.syx"
+    },
+    {
+      "name": "Square Lead III",
+      "url": "patches/patch_70.syx"
+    },
+    {
+      "name": "Square Lead IV",
+      "url": "patches/patch_71.syx"
+    },
+    {
+      "name": "Nasty Lead I",
+      "url": "patches/patch_72.syx"
+    },
+    {
+      "name": "Nasty Lead II",
+      "url": "patches/patch_73.syx"
+    },
+    {
+      "name": "Nasty Lead III",
+      "url": "patches/patch_74.syx"
+    },
+    {
+      "name": "Nasty Lead IV",
+      "url": "patches/patch_75.syx"
+    },
+    {
+      "name": "Sync Lead I",
+      "url": "patches/patch_76.syx"
+    },
+    {
+      "name": "Sync Lead II",
+      "url": "patches/patch_77.syx"
+    },
+    {
+      "name": "Sync Lead III",
+      "url": "patches/patch_78.syx"
+    },
+    {
+      "name": "Sync Lead IV",
+      "url": "patches/patch_79.syx"
+    },
+    {
+      "name": "Crystal Pluck I",
+      "url": "patches/patch_80.syx"
+    },
+    {
+      "name": "Crystal Pluck II",
+      "url": "patches/patch_81.syx"
+    },
+    {
+      "name": "Crystal Pluck II",
+      "url": "patches/patch_82.syx"
+    },
+    {
+      "name": "Crystal Pluck IV",
+      "url": "patches/patch_83.syx"
+    },
+    {
+      "name": "Saw Pluck I",
+      "url": "patches/patch_84.syx"
+    },
+    {
+      "name": "Saw Pluck II",
+      "url": "patches/patch_85.syx"
+    },
+    {
+      "name": "Saw Pluck III",
+      "url": "patches/patch_86.syx"
+    },
+    {
+      "name": "Saw Pluck IV",
+      "url": "patches/patch_87.syx"
+    },
+    {
+      "name": "Kalimba Pluck I",
+      "url": "patches/patch_88.syx"
+    },
+    {
+      "name": "Kalimba Pluck II",
+      "url": "patches/patch_89.syx"
+    },
+    {
+      "name": "Kalimba Pluck II",
+      "url": "patches/patch_90.syx"
+    },
+    {
+      "name": "Kalimba Pluck IV",
+      "url": "patches/patch_91.syx"
+    },
+    {
+      "name": "Digi Pluck I",
+      "url": "patches/patch_92.syx"
+    },
+    {
+      "name": "Digi Pluck II",
+      "url": "patches/patch_93.syx"
+    },
+    {
+      "name": "Digi Pluck III",
+      "url": "patches/patch_94.syx"
+    },
+    {
+      "name": "Digi Pluck IV",
+      "url": "patches/patch_95.syx"
+    },
+    {
+      "name": "EP Keys I",
+      "url": "patches/patch_96.syx"
+    },
+    {
+      "name": "EP Keys II",
+      "url": "patches/patch_97.syx"
+    },
+    {
+      "name": "EP Keys III",
+      "url": "patches/patch_98.syx"
+    },
+    {
+      "name": "EP Keys IV",
+      "url": "patches/patch_99.syx"
+    },
+    {
+      "name": "Organ Keys I",
+      "url": "patches/patch_100.syx"
+    },
+    {
+      "name": "Organ Keys II",
+      "url": "patches/patch_101.syx"
+    },
+    {
+      "name": "Organ Keys III",
+      "url": "patches/patch_102.syx"
+    },
+    {
+      "name": "Organ Keys IV",
+      "url": "patches/patch_103.syx"
+    },
+    {
+      "name": "Clav Keys I",
+      "url": "patches/patch_104.syx"
+    },
+    {
+      "name": "Clav Keys II",
+      "url": "patches/patch_105.syx"
+    },
+    {
+      "name": "Clav Keys III",
+      "url": "patches/patch_106.syx"
+    },
+    {
+      "name": "Clav Keys IV",
+      "url": "patches/patch_107.syx"
+    },
+    {
+      "name": "Stab Keys I",
+      "url": "patches/patch_108.syx"
+    },
+    {
+      "name": "Stab Keys II",
+      "url": "patches/patch_109.syx"
+    },
+    {
+      "name": "Stab Keys III",
+      "url": "patches/patch_110.syx"
+    },
+    {
+      "name": "Stab Keys IV",
+      "url": "patches/patch_111.syx"
+    },
+    {
+      "name": "Drone FX I",
+      "url": "patches/patch_112.syx"
+    },
+    {
+      "name": "Drone FX II",
+      "url": "patches/patch_113.syx"
+    },
+    {
+      "name": "Drone FX III",
+      "url": "patches/patch_114.syx"
+    },
+    {
+      "name": "Drone FX IV",
+      "url": "patches/patch_115.syx"
+    },
+    {
+      "name": "Texture FX I",
+      "url": "patches/patch_116.syx"
+    },
+    {
+      "name": "Texture FX II",
+      "url": "patches/patch_117.syx"
+    },
+    {
+      "name": "Texture FX III",
+      "url": "patches/patch_118.syx"
+    },
+    {
+      "name": "Texture FX IV",
+      "url": "patches/patch_119.syx"
+    },
+    {
+      "name": "Swell FX I",
+      "url": "patches/patch_120.syx"
+    },
+    {
+      "name": "Swell FX II",
+      "url": "patches/patch_121.syx"
+    },
+    {
+      "name": "Swell FX III",
+      "url": "patches/patch_122.syx"
+    },
+    {
+      "name": "Swell FX IV",
+      "url": "patches/patch_123.syx"
+    },
+    {
+      "name": "Fall FX I",
+      "url": "patches/patch_124.syx"
+    },
+    {
+      "name": "Fall FX II",
+      "url": "patches/patch_125.syx"
+    },
+    {
+      "name": "Fall FX III",
+      "url": "patches/patch_126.syx"
+    },
+    {
+      "name": "Fall FX IV",
+      "url": "patches/patch_127.syx"
     }
   ]
 }

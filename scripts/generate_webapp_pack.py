@@ -30,6 +30,7 @@ from circuit_tracks.patch_builder import (  # noqa: E402
     preset_pad,
     preset_pluck,
 )
+from circuit_tracks.song import parse_song, song_to_ncs  # noqa: E402
 
 SR = 44100
 OUT = ROOT / "webapp" / "pack"
@@ -519,14 +520,279 @@ def build_patches():
     return patches
 
 
+# 96 family variations filling the bank to 128: 6 families x 4 archetypes x
+# 4 variants (I..IV), each variant a distinct tone/envelope/mod character.
+def build_variation_patches():  # noqa: PLR0915
+    out = []
+    roman = ["I", "II", "III", "IV"]
+
+    # (archetype, osc1 wave, osc2 wave, osc2 semitones)
+    BASS_ARCH = [("Deep", 2, 2, 52), ("Punch", 13, 13, 52), ("Hollow", 1, 0, 52), ("Gnarl", 18, 2, 52)]
+    for arch, w1, w2, semis in BASS_ARCH:
+        for v in range(4):
+            p = preset_bass(f"{arch} Bass {roman[v]}").osc1(wave=w1).osc2(wave=w2, semitones=semis)
+            if v == 0:  # clean
+                p.filter(frequency=50 + 8, resonance=8, filter_type=1, env2_to_freq=80)
+            elif v == 1:  # resonant squelch
+                p.filter(frequency=28, resonance=78, filter_type=1, env2_to_freq=105)
+                p.env_filter(attack=0, decay=50, sustain=0, release=15)
+            elif v == 2:  # slow sub
+                p.filter(frequency=38, resonance=12, filter_type=1, env2_to_freq=45)
+                p.env_amp(attack=10, decay=90, sustain=110, release=45)
+            else:  # driven
+                p.filter(frequency=55, resonance=30, filter_type=1, env2_to_freq=70)
+                p.distortion(level=45, type=1)
+            out.append(p)
+
+    PAD_ARCH = [("Silk", 2, 2), ("Glass", 1, 1), ("Vox", 21, 23), ("Haze", 12, 12)]
+    for arch, w1, w2 in PAD_ARCH:
+        for v in range(4):
+            p = preset_pad(f"{arch} Pad {roman[v]}").osc1(wave=w1).osc2(wave=w2, semitones=64, cents=70)
+            if v == 0:  # slow swell
+                p.env_amp(attack=75, decay=95, sustain=127, release=95)
+            elif v == 1:  # shimmer (slow pitch drift)
+                p.lfo2(waveform=0, rate=22)
+                p.add_mod("LFO 2+/-", "osc 2 pitch", depth=7)
+                p.chorus(level=45, rate=24, feedback=55, mod_depth=75)
+            elif v == 2:  # dark
+                p.filter(frequency=38, resonance=22, filter_type=1, env2_to_freq=40)
+                p.voice(octave=62)
+            else:  # airy (breath noise)
+                p.mixer(osc1_level=90, osc2_level=80, noise=28)
+                p.filter(frequency=80, resonance=10, env2_to_freq=30)
+            out.append(p)
+
+    LEAD_ARCH = [("Solar", 2, 13), ("Square", 13, 13), ("Nasty", 18, 19), ("Sync", 16, 2)]
+    for arch, w1, w2 in LEAD_ARCH:
+        for v in range(4):
+            p = preset_lead(f"{arch} Lead {roman[v]}").osc1(wave=w1).osc2(wave=w2, semitones=76)
+            if v == 0:  # straight
+                p.distortion(level=20, type=0)
+            elif v == 1:  # vibrato
+                p.lfo1(waveform=0, rate=82, delay=50)
+                p.add_mod("LFO 1+/-", "osc 1 & 2 pitch", depth=10)
+            elif v == 2:  # glide
+                p.voice(polyphony=0, portamento=60)
+                p.filter(frequency=62, resonance=18)
+            else:  # screaming
+                p.distortion(level=70, type=2)
+                p.filter(frequency=88, resonance=40)
+            out.append(p)
+
+    PLUCK_ARCH = [("Crystal", 1, 0), ("Saw", 2, 2), ("Kalimba", 0, 0), ("Digi", 20, 13)]
+    for arch, w1, w2 in PLUCK_ARCH:
+        for v in range(4):
+            p = preset_pluck(f"{arch} Pluck {roman[v]}").osc1(wave=w1).osc2(wave=w2, semitones=76 if v == 1 else 64)
+            if v == 0:  # tight
+                p.env_amp(attack=0, decay=55, sustain=0, release=20)
+                p.env_filter(attack=0, decay=45, sustain=0, release=18)
+            elif v == 1:  # ringing octave
+                p.env_amp(attack=0, decay=100, sustain=0, release=85)
+            elif v == 2:  # resonant
+                p.filter(frequency=35, resonance=60, filter_type=1, env2_to_freq=95)
+            else:  # velo-sensitive snap
+                p.add_mod("velocity", "filter frequency", depth=55)
+                p.env_amp(attack=0, decay=70, sustain=0, release=30)
+            out.append(p)
+
+    KEYS_ARCH = [("EP", 0, 1), ("Organ", 0, 13), ("Clav", 12, 12), ("Stab", 2, 2)]
+    for arch, w1, w2 in KEYS_ARCH:
+        for v in range(4):
+            p = preset_pluck(f"{arch} Keys {roman[v]}").osc1(wave=w1).osc2(wave=w2, semitones=76)
+            p.voice(polyphony=2)
+            if arch == "Organ":
+                p.env_amp(attack=0, decay=0, sustain=127, release=8)
+                p.env_filter(attack=0, decay=0, sustain=127, release=8)
+                p.filter(frequency=80 - v * 8, resonance=0, env2_to_freq=0)
+                p.chorus(level=25 + v * 12, rate=40 + v * 8, feedback=40, mod_depth=50)
+            elif v == 0:  # soft
+                p.env_amp(attack=2, decay=85, sustain=35, release=45)
+                p.filter(frequency=58, resonance=8, env2_to_freq=40)
+            elif v == 1:  # bright comp
+                p.filter(frequency=72, resonance=20, env2_to_freq=65)
+                p.env_amp(attack=0, decay=65, sustain=55, release=20)
+            elif v == 2:  # phased (chorus heavy)
+                p.chorus(level=60, rate=30, feedback=65, mod_depth=85)
+                p.env_amp(attack=2, decay=80, sustain=45, release=40)
+            else:  # punchy stab
+                p.env_amp(attack=0, decay=55, sustain=20, release=18)
+                p.env_filter(attack=0, decay=45, sustain=15, release=18)
+                p.filter(frequency=48, resonance=25, env2_to_freq=85)
+            out.append(p)
+
+    FX_ARCH = [("Drone", 2, 2), ("Texture", 22, 25), ("Swell", 1, 1), ("Fall", 13, 0)]
+    for arch, w1, w2 in FX_ARCH:
+        for v in range(4):
+            p = preset_pad(f"{arch} FX {roman[v]}").osc1(wave=w1).osc2(wave=w2, semitones=64, cents=68)
+            if arch == "Drone":
+                p.voice(octave=60 + (v % 2) * 2)
+                p.filter(frequency=26 + v * 10, resonance=55 + v * 8, filter_type=1, env2_to_freq=25)
+                p.lfo1(waveform=0, rate=10 + v * 6)
+                p.add_mod("LFO 1+", "filter frequency", depth=30 + v * 10)
+            elif arch == "Texture":
+                p.lfo2(waveform=4 if v >= 2 else 0, rate=15 + v * 12)
+                p.add_mod("LFO 2+", "osc 1 pulse width / index", depth=60 + v * 15)
+                p.add_mod("LFO 2+/-", "filter frequency", depth=30 + v * 8)
+            elif arch == "Swell":
+                p.mixer(osc1_level=70, osc2_level=60, noise=40 + v * 18)
+                p.env_amp(attack=80 + v * 12, decay=100, sustain=127, release=80)
+                p.filter(frequency=30 + v * 14, resonance=45, filter_type=3, env2_to_freq=100)
+                p.env_filter(attack=90 + v * 10, decay=90, sustain=127, release=60)
+            else:  # Fall: pitched drops via env3
+                p.voice(polyphony=0)
+                p.env3(attack=0, decay=40 + v * 22, sustain=0, release=20)
+                p.add_mod("env 3", "osc 1 & 2 pitch", depth=127 - v * 20)
+                p.env_amp(attack=0, decay=55 + v * 18, sustain=0, release=25)
+            out.append(p)
+
+    return out
+
+
+# --- Demo projects ---------------------------------------------------------
+# 16 simple grooves, four per sample bank, written as song dicts and compiled
+# to .ncs with song_to_ncs(). All patterns are 32 steps (one bar of 1/8 feel).
+
+
+def _drums(hits):
+    return {"steps": {str(i): {"velocity": v} for i, v in hits.items()}}
+
+
+def _synth(notes):
+    steps = {}
+    for i, spec in notes.items():
+        note, vel, gate = spec
+        step = {"velocity": vel, "gate": gate}
+        if isinstance(note, list):
+            step["notes"] = note
+        else:
+            step["note"] = note
+        steps[str(i)] = step
+    return {"steps": steps}
+
+
+def _every(start, stride, vel, end=32):
+    return {i: vel for i in range(start, end, stride)}
+
+
+def _demo_song(name, bpm, color, bank, genre, var):
+    base = bank * 16
+    kick, clap, hat, perc = base + 0, base + 11, base + 4, base + 8
+    root = [45, 43, 41, 48][var]  # A, G, F, C
+
+    if genre == "house":
+        d1 = _every(0, 8, 112)
+        d2 = {8: 100, 24: 104}
+        d3 = {**_every(4, 8, 92), **({14: 60, 30: 62} if var % 2 else {})}
+        d4 = {6: 70, 13: 64, 22: 72} if var < 2 else {2: 66, 11: 70, 27: 64}
+        bass = {i: (root, 100, 1.5) for i in (0, 7, 8, 15, 16, 23, 24)} | {28: (root + 12, 92, 1)}
+        chords = {8: ([root + 12, root + 15, root + 19], 84, 3), 24: ([root + 10, root + 14, root + 17], 80, 3)}
+        synth2 = {"preset": "pluck", "name": "Tight Key"}
+        bass2 = dict(bass) | {30: (root + 3, 96, 1), 31: (root - 2, 90, 1)}
+    elif genre == "techno":
+        d1 = _every(0, 8, 120)
+        d2 = {8: 96, 24: 96}
+        d3 = {**_every(2, 4, 88), **_every(0, 8, 56)}
+        d4 = _every(3, 8, 76) if var % 2 else _every(5, 16, 80)
+        bass = {i: (root - 12 if i % 8 else root, 104, 0.8) for i in range(0, 32, 2)}
+        chords = {0: (root + 24, 90, 0.6), 12: (root + 24, 84, 0.6), 22: (root + 27, 88, 0.6)}
+        synth2 = {"preset": "lead", "name": "Sync Scream"}
+        bass2 = dict(bass) | {i: (root + 7, 108, 0.8) for i in (26, 28, 30)}
+    elif genre == "breaks":
+        d1 = {0: 116, 10: 96, 16: 112, 26: 92}
+        d2 = {8: 108, 24: 110, **({30: 70} if var % 2 else {})}
+        d3 = {**_every(2, 4, 82), 15: 58, 31: 60}
+        d4 = {7: 80, 14: 72, 23: 78}
+        bass = {0: (root, 106, 2), 10: (root + 3, 98, 1.5), 16: (root, 104, 2), 26: (root - 5, 100, 1.5)}
+        chords = {4: ([root + 12, root + 17, root + 22], 86, 2), 20: ([root + 10, root + 15, root + 19], 82, 2)}
+        synth2 = {"preset": "pluck", "name": "Brass Stab"}
+        bass2 = dict(bass) | {30: (root + 7, 102, 1), 31: (root + 5, 96, 1)}
+    else:  # ambient
+        d1 = {0: 96, 20: 84}
+        d2 = {24: 58}
+        d3 = _every(2, 4, 48)
+        d4 = {12: 60, 28: 54} if var % 2 else {6: 56, 22: 58}
+        bass = {0: (root - 12, 88, 8), 16: (root - 12, 84, 8)}
+        chords = {0: ([root + 12, root + 19, root + 26], 76, 14), 16: ([root + 10, root + 17, root + 24], 72, 14)}
+        synth2 = {"preset": "pad", "name": "Warm Pad"}
+        bass2 = {0: (root - 12, 88, 8), 16: (root - 17, 84, 8)}
+
+    def pattern(b):
+        return {
+            "length": 32,
+            "tracks": {
+                "drum1": _drums(d1),
+                "drum2": _drums(d2),
+                "drum3": _drums(d3),
+                "drum4": _drums(d4),
+                "synth1": _synth(b),
+                "synth2": _synth(chords),
+            },
+        }
+
+    return {
+        "name": name,
+        "bpm": bpm,
+        "color": color,
+        "scale": {"root": "C", "type": "chromatic"},
+        "sounds": {
+            "synth1": {"preset": "bass", "name": "Deep Bass"},
+            "synth2": synth2,
+            "drum1": {"sample": kick},
+            "drum2": {"sample": clap},
+            "drum3": {"sample": hat, "decay": 100},
+            "drum4": {"sample": perc, "level": 92},
+        },
+        "fx": {
+            "reverb_preset": 2,
+            "delay_preset": 5,
+            "reverb_sends": {"synth2": 45 if genre == "ambient" else 25, "drum2": 30},
+            "delay_sends": {"synth2": 30 if genre != "ambient" else 15},
+        },
+        "patterns": {"p1": pattern(bass), "p2": pattern(bass2)},
+        "song": ["p1", "p2"],
+    }
+
+
+def build_projects():
+    SPECS = [
+        # House (Deep bank)
+        ("Neon Harbor", 122, 9, 0, "house"),
+        ("Velvet Loop", 120, 1, 0, "house"),
+        ("Midnight Mall", 124, 12, 0, "house"),
+        ("Glass Garden", 118, 5, 0, "house"),
+        # Techno (Punch bank)
+        ("Concrete Pulse", 132, 0, 1, "techno"),
+        ("Voltage Run", 136, 3, 1, "techno"),
+        ("Iron Orbit", 128, 10, 1, "techno"),
+        ("Strobe Sector", 138, 13, 1, "techno"),
+        # Breaks (Crunch bank)
+        ("Rust Funk", 104, 2, 2, "breaks"),
+        ("Circuit Breaker", 108, 7, 2, "breaks"),
+        ("Crunch Time", 100, 4, 2, "breaks"),
+        ("Pixel Alley", 112, 11, 2, "breaks"),
+        # Ambient (Air bank)
+        ("Slow Aurora", 84, 8, 3, "ambient"),
+        ("Fog Lines", 90, 6, 3, "ambient"),
+        ("Still Water", 78, 12, 3, "ambient"),
+        ("Drift Field", 95, 1, 3, "ambient"),
+    ]
+    out = []
+    for var, (name, bpm, color, bank, genre) in enumerate(SPECS):
+        song = parse_song(_demo_song(name, bpm, color, bank, genre, var % 4))
+        out.append((name, song_to_ncs(song)))
+    return out
+
+
 # --- Pack assembly ---------------------------------------------------------
 
 
 def main():
     samples_dir = OUT / "samples"
     patches_dir = OUT / "patches"
+    projects_dir = OUT / "projects"
     samples_dir.mkdir(parents=True, exist_ok=True)
     patches_dir.mkdir(parents=True, exist_ok=True)
+    projects_dir.mkdir(parents=True, exist_ok=True)
 
     all_samples = bank_deep() + bank_punch() + bank_crunch() + bank_air()
     assert len(all_samples) == 64
@@ -537,19 +803,27 @@ def main():
         index_samples.append({"name": name, "url": f"samples/sample_{i}.wav"})
         print(f"  sample_{i:02d}  {name:14s} {len(data) / SR:.2f}s")
 
+    all_patches = build_patches() + build_variation_patches()
+    assert len(all_patches) == 128, len(all_patches)
     index_patches = []
-    for i, builder in enumerate(build_patches()):
+    for i, builder in enumerate(all_patches):
         syx = builder.build_syx()
         (patches_dir / f"patch_{i}.syx").write_bytes(syx)
         name = builder.build()[:16].decode("ascii", "replace").strip()
         index_patches.append({"name": name, "url": f"patches/patch_{i}.syx"})
-        print(f"  patch_{i:02d}   {name}")
+        print(f"  patch_{i:03d}  {name}")
+
+    index_projects = []
+    for i, (name, data) in enumerate(build_projects()):
+        (projects_dir / f"project_{i}.ncs").write_bytes(data)
+        index_projects.append({"name": name, "url": f"projects/project_{i}.ncs"})
+        print(f"  project_{i:02d}  {name}")
 
     index = {
         "name": "Circuit Web Starter",
         "product": "circuit-tracks",
         "version": "1.0",
-        "projects": [],
+        "projects": index_projects,
         "samples": index_samples,
         "patches": index_patches,
     }

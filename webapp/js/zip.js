@@ -38,6 +38,67 @@ export function readZip(buf) {
   return entries;
 }
 
+// Build a zip Blob from [{name, data: Uint8Array}] entries (stored, no
+// compression — pack content is mostly WAV/NCS that barely compresses).
+export function writeZip(entries) {
+  const enc = new TextEncoder();
+  const parts = [];
+  const central = [];
+  let offset = 0;
+
+  for (const { name, data } of entries) {
+    const nameBytes = enc.encode(name);
+    const crc = crc32(data);
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, LOCAL_SIG, true);
+    local.setUint16(4, 20, true); // version needed
+    local.setUint16(8, 0, true); // method: store
+    local.setUint32(14, crc, true);
+    local.setUint32(18, data.length, true);
+    local.setUint32(22, data.length, true);
+    local.setUint16(26, nameBytes.length, true);
+    parts.push(local.buffer, nameBytes, data);
+
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, CENTRAL_SIG, true);
+    cd.setUint16(4, 20, true);
+    cd.setUint16(6, 20, true);
+    cd.setUint16(10, 0, true);
+    cd.setUint32(16, crc, true);
+    cd.setUint32(20, data.length, true);
+    cd.setUint32(24, data.length, true);
+    cd.setUint16(28, nameBytes.length, true);
+    cd.setUint32(42, offset, true);
+    central.push(cd.buffer, nameBytes);
+    offset += 30 + nameBytes.length + data.length;
+  }
+
+  const cdSize = central.reduce((n, p) => n + (p.byteLength ?? p.length), 0);
+  const eocd = new DataView(new ArrayBuffer(22));
+  eocd.setUint32(0, EOCD_SIG, true);
+  eocd.setUint16(8, entries.length, true);
+  eocd.setUint16(10, entries.length, true);
+  eocd.setUint32(12, cdSize, true);
+  eocd.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, eocd.buffer], { type: 'application/zip' });
+}
+
+let CRC_TABLE = null;
+
+function crc32(data) {
+  if (!CRC_TABLE) {
+    CRC_TABLE = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      CRC_TABLE[n] = c;
+    }
+  }
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) crc = CRC_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 async function extract(data, bytes, localOff, method, compSize, name) {
   if (data.getUint32(localOff, true) !== LOCAL_SIG) throw new Error(`Bad zip entry: ${name}`);
   // Local header name/extra lengths can differ from the central directory's.

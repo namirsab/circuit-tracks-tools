@@ -9,7 +9,7 @@ import { defaultProject, UIState } from './state.js';
 import { buildPanel, buildSidebar } from './ui/panel.js';
 import { Views } from './ui/views.js';
 import { KeyboardInput, buildKeyOverlay } from './keyboard.js';
-import { readZip } from './zip.js';
+import { readZip, writeZip } from './zip.js';
 import { ncsToMidi } from './scales.js';
 import {
   TRACKS, SEND_ORDER, SCALE_TYPES, SCALE_ROOTS,
@@ -46,9 +46,10 @@ class CircuitApp {
     this.seq = new Sequencer(this.engine, this.synthTracks, this.drums, this);
     this.lastNote = {};
     this.patchBank = [];
-    this.projectBank = [];
+    this.projectBank = new Array(64).fill(null);
     this.packName = null;
     this.pendingProject = null;
+    this._slotsDirty = false;
     this.masterVolumeValue = 102;
     this.masterFilterValue = 64;
     this.shiftLatched = false;
@@ -378,7 +379,10 @@ class CircuitApp {
       if (localStorage.getItem('ct-sidebar-hidden') === '1') applySidebar(true);
     } catch { /* private mode */ }
 
-    byId('btn-save').addEventListener('click', () => this.exportProject());
+    byId('btn-save').addEventListener('click', () => this.savePressed());
+    byId('btn-export-project').addEventListener('click', () => this.exportNcs());
+    byId('btn-export-patches').addEventListener('click', () => this.exportPatchesSyx());
+    byId('btn-export-pack').addEventListener('click', () => this.exportPack());
 
     const openPicker = () => byId('file-input').click();
     // Projects opens the project grid; Shift+Projects = Packs (load a pack).
@@ -541,38 +545,47 @@ class CircuitApp {
     return this.exportNcs();
   }
 
-  // Save as a hardware-ready .ncs (send to a Circuit via Components or
+  // Serialize the live project to hardware-ready .ncs bytes.
+  async buildProjectBytes() {
+    let base = this.projectRawBytes;
+    const fresh = !base;
+    if (fresh) {
+      // Fresh in-app project: the blank template supplies the unmodeled bytes.
+      const res = await fetch('data/Empty.ncs');
+      if (!res.ok) throw new Error('No NCS template available');
+      base = await res.arrayBuffer();
+    }
+    // Sync live state that isn't written through to the model.
+    this.project.tempo = this.seq.bpm;
+    this.project.swing = this.seq.swing;
+    for (const s of [0, 1]) {
+      const patch = this.synthTracks[s].patch;
+      const raw = new Uint8Array(patch.raw);
+      // Store the current macro knob positions, as the hardware does.
+      for (let k = 0; k < 8; k++) raw[204 + k * 17] = this.synthTracks[s].macroPositions[k] & 0x7f;
+      this.project[s === 0 ? 'synth1Patch' : 'synth2Patch'] = raw;
+    }
+    return serializeNCS(this.project, base, { freshScenes: fresh });
+  }
+
+  downloadBlob(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  // Export as a hardware-ready .ncs (send to a Circuit via Components or
   // the circuit-tracks MCP send_project_file tool).
   async exportNcs() {
     try {
-      let base = this.projectRawBytes;
-      const fresh = !base;
-      if (fresh) {
-        // Fresh in-app project: the blank template supplies the unmodeled bytes.
-        const res = await fetch('data/Empty.ncs');
-        if (!res.ok) throw new Error('No NCS template available');
-        base = await res.arrayBuffer();
-      }
-      // Sync live state that isn't written through to the model.
-      this.project.tempo = this.seq.bpm;
-      this.project.swing = this.seq.swing;
-      for (const s of [0, 1]) {
-        const patch = this.synthTracks[s].patch;
-        const raw = new Uint8Array(patch.raw);
-        // Store the current macro knob positions, as the hardware does.
-        for (let k = 0; k < 8; k++) raw[204 + k * 17] = this.synthTracks[s].macroPositions[k] & 0x7f;
-        this.project[s === 0 ? 'synth1Patch' : 'synth2Patch'] = raw;
-      }
-      const bytes = serializeNCS(this.project, base, { freshScenes: fresh });
-      const blob = new Blob([bytes], { type: 'application/octet-stream' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${(this.project.name || 'project').trim()}.ncs`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      this.lcdMsg('Project saved as .ncs');
+      const bytes = await this.buildProjectBytes();
+      this.downloadBlob(new Blob([bytes], { type: 'application/octet-stream' }),
+        `${(this.project.name || 'project').trim()}.ncs`);
+      this.lcdMsg('Project exported as .ncs');
     } catch (err) {
-      this.lcdMsg(`Save failed: ${err.message}`);
+      this.lcdMsg(`Export failed: ${err.message}`);
     }
   }
 
@@ -587,6 +600,11 @@ class CircuitApp {
   }
 
   setView(view) {
+    if (this.ui.saveArmed && view !== 'saveColor') {
+      // Navigating away cancels an armed save.
+      this.ui.saveArmed = false;
+      document.getElementById('btn-save').classList.remove('armed');
+    }
     this.ui.view = view;
     for (const [v, btnId] of Object.entries(VIEW_BUTTON)) {
       if (v === view) document.getElementById(btnId)?.classList.add('active');
@@ -599,6 +617,7 @@ class CircuitApp {
     const labels = {
       microStep: 'micro step', patternSettings: 'pattern settings',
       sidechain: 'side chain', noteExpanded: 'note (expanded)',
+      saveColor: 'save: colour',
     };
     document.getElementById('lcd-view').textContent =
       view === 'note' && this.ui.noteExpanded ? 'note (expanded)' : (labels[view] ?? view);
@@ -1114,10 +1133,31 @@ class CircuitApp {
         this.lcdMsg('Drop contained no files');
         return;
       }
+      // In Projects view, dropping a .ncs on a pad fills that slot
+      // without switching to it.
+      const pad = e.target.closest?.('.pad');
+      if (pad && this.ui.view === 'projects') {
+        const padIdx = this.pads.indexOf(pad);
+        const ncsFile = files.find((f) => /\.ncs$/i.test(f.name));
+        if (padIdx >= 0 && ncsFile) {
+          const slot = this.ui.projectPage * 32 + padIdx;
+          ncsFile.arrayBuffer().then((buf) => this.loadProjectIntoSlot(slot, buf, ncsFile.name));
+          return;
+        }
+      }
       const btn = e.target.closest?.('.track-btn');
       const syxTarget = btn ? Number(btn.dataset.track) : null;
       this.loadFiles(files, syxTarget);
     }, true);
+
+    // Saved slots live in memory only — warn before the page unloads if
+    // there is unexported slot data.
+    window.addEventListener('beforeunload', (e) => {
+      if (this._slotsDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
   }
 
   // ---------- Pack loading ----------
@@ -1188,20 +1228,34 @@ class CircuitApp {
 
     for (const url of this._packPatchUrls ?? []) URL.revokeObjectURL(url);
     this.patchBank = patches.filter(Boolean)
-      .map((p) => ({ name: p.name, url: URL.createObjectURL(new Blob([p.buf])) }));
+      .map((p) => ({ name: p.name, bytes: p.buf, url: URL.createObjectURL(new Blob([p.buf])) }));
     this._packPatchUrls = this.patchBank.map((p) => p.url);
     this.ui.patchIndex = [null, null];
 
-    this.projectBank = projects.filter(Boolean).map((p) => ({
-      name: p.name,
-      buf: p.buf,
-      // Colour index lives at byte 12 of the .ncs header.
-      color: p.buf.byteLength >= 16 ? new DataView(p.buf).getUint32(12, true) : 0,
-    }));
+    this.projectBank = new Array(64).fill(null);
+    let cursor = 0;
+    for (const p of projects.filter(Boolean)) {
+      // Honour explicit slot numbers (project_<N>.ncs) so exported banks
+      // round-trip into the same slots; fall back to the next free slot.
+      const m = /project_(\d+)\.ncs$/i.exec(p.url ?? '');
+      let slot = m && Number(m[1]) < 64 && !this.projectBank[Number(m[1])] ? Number(m[1]) : -1;
+      if (slot < 0) {
+        while (cursor < 64 && this.projectBank[cursor]) cursor++;
+        if (cursor >= 64) break;
+        slot = cursor;
+      }
+      this.projectBank[slot] = {
+        name: p.name,
+        buf: p.buf,
+        // Colour index lives at byte 12 of the .ncs header.
+        color: p.buf.byteLength >= 16 ? new DataView(p.buf).getUint32(12, true) : 0,
+      };
+    }
     this.packName = index.name || 'unnamed';
     this.pendingProject = null;
     this.ui.currentProjectIdx = null;
     this.ui.projectPage = 0;
+    this._slotsDirty = false; // the bank now mirrors a pack the user has on disk
 
     if (!quiet) this.lcdMsg(`Pack: ${this.packName}`);
     this.refreshSidebar();
@@ -1209,15 +1263,15 @@ class CircuitApp {
   }
 
   // ---------- Project bank (Projects view) ----------
-  // Pressing a project pad mirrors the hardware: when stopped the project
-  // loads immediately; while playing the switch is queued for the end of the
-  // current pattern (same Drum 1 boundary scene queueing uses).
+  // 64 fixed slots, like the hardware. Pressing a pad mirrors the hardware:
+  // when stopped the project loads immediately; while playing the switch is
+  // queued for the end of the current pattern (same Drum 1 boundary scene
+  // queueing uses). Shift+pad switches immediately. Empty slots load an
+  // init project into that slot context.
   selectProjectFromBank(idx) {
-    const entry = this.projectBank[idx];
-    if (!entry) return;
     if (this.seq.playing) {
       this.pendingProject = { idx, time: this.seq.nextDrum1Boundary() };
-      this.lcdMsg(`Next: ${entry.name}`);
+      this.lcdMsg(`Next: ${this.projectBank[idx]?.name ?? 'Init project'}`);
       this.views.render();
     } else {
       this.loadProjectFromBank(idx);
@@ -1225,15 +1279,120 @@ class CircuitApp {
   }
 
   loadProjectFromBank(idx) {
-    const entry = this.projectBank[idx];
-    if (!entry) return;
     this.pendingProject = null;
-    // Hand a copy to the loader: exports write modeled fields over the raw
-    // bytes, and the bank entry must stay pristine for the next switch.
-    // applyProject resumes playback itself if the sequencer was running.
-    this.loadProjectFromArrayBuffer(entry.buf.slice(0), entry.name);
+    const entry = this.projectBank[idx];
+    if (entry) {
+      // Hand a copy to the loader: exports write modeled fields over the raw
+      // bytes, and the bank entry must stay pristine for the next switch.
+      // applyProject resumes playback itself if the sequencer was running.
+      this.loadProjectFromArrayBuffer(entry.buf.slice(0), entry.name);
+    } else {
+      this.projectRawBytes = null;
+      this.applyProject(defaultProject());
+      this.lcdMsg('Init project');
+    }
     this.ui.currentProjectIdx = idx;
     this.views.render();
+  }
+
+  // Load a .ncs into a slot without switching to it (drag-drop on a pad).
+  loadProjectIntoSlot(idx, buf, filename = '') {
+    const name = parseNCS(buf).name?.trim() || filename.replace(/\.ncs$/i, '') || `Project ${idx + 1}`;
+    this.projectBank[idx] = {
+      name,
+      buf: buf.slice(0),
+      color: buf.byteLength >= 16 ? new DataView(buf).getUint32(12, true) : 0,
+    };
+    this._slotsDirty = true;
+    this.lcdMsg(`${name} → slot ${idx + 1}`);
+    this.views.render();
+  }
+
+  // ---------- Save (hardware flow) ----------
+  // First press arms save: the button blinks and the grid shows the 14
+  // project colours (press one to recolour). Second press writes the live
+  // project into the current slot. Shift+Save exports a .ncs download.
+  async savePressed() {
+    if (this.ui.shift) return this.exportProject();
+    if (!this.ui.saveArmed) {
+      this.ui.saveArmed = true;
+      this._saveReturnView = this.ui.view;
+      document.getElementById('btn-save').classList.add('armed');
+      this.setView('saveColor');
+      this.lcdMsg('Pick a colour · Save again to confirm');
+      return;
+    }
+    await this.commitSave();
+  }
+
+  async commitSave() {
+    try {
+      let slot = this.ui.currentProjectIdx ?? this.projectBank.findIndex((e) => !e);
+      if (slot < 0) slot = 0;
+      const bytes = await this.buildProjectBytes();
+      this.projectBank[slot] = {
+        name: (this.project.name || 'Project').trim() || `Project ${slot + 1}`,
+        buf: bytes.slice().buffer,
+        color: this.project.color ?? 0,
+      };
+      this.ui.currentProjectIdx = slot;
+      this._slotsDirty = true;
+      this.lcdMsg(`Saved to slot ${slot + 1}`);
+    } catch (err) {
+      this.lcdMsg(`Save failed: ${err.message}`);
+    }
+    this.exitSaveMode();
+  }
+
+  exitSaveMode() {
+    if (!this.ui.saveArmed) return;
+    this.ui.saveArmed = false;
+    document.getElementById('btn-save').classList.remove('armed');
+    if (this.ui.view === 'saveColor') this.setView(this._saveReturnView ?? 'note');
+  }
+
+  // ---------- Exports ----------
+  exportPatchesSyx() {
+    for (const s of [0, 1]) {
+      const patch = this.synthTracks[s].patch;
+      if (!patch?.raw) continue;
+      const raw = new Uint8Array(patch.raw).slice(0, 340);
+      const syx = new Uint8Array([0xf0, 0x00, 0x20, 0x29, 0x01, 0x64, 0x00, s, 0x00, ...raw, 0xf7]);
+      const name = (patch.name || `synth${s + 1}`).trim() || `synth${s + 1}`;
+      this.downloadBlob(new Blob([syx], { type: 'application/octet-stream' }), `${name}.syx`);
+    }
+    this.lcdMsg('Patches exported as .syx');
+  }
+
+  // Bundle the current bank — samples, patches, and every stored project
+  // slot — into a .circuittrackspack (zipped Components pack).
+  exportPack() {
+    const entries = [];
+    const index = {
+      name: this.packName || 'Circuit Web Pack',
+      product: 'circuit-tracks',
+      version: '1.0',
+      projects: [], samples: [], patches: [],
+    };
+    this.projectBank.forEach((e, i) => {
+      if (!e) return;
+      index.projects.push({ name: e.name, url: `projects/project_${i}.ncs` });
+      entries.push({ name: `projects/project_${i}.ncs`, data: new Uint8Array(e.buf) });
+    });
+    this.drums.rawBuffers.forEach((raw, i) => {
+      if (!raw) return;
+      index.samples.push({ name: this.drums.names[i] || `sample_${i}`, url: `samples/sample_${i}.wav` });
+      entries.push({ name: `samples/sample_${i}.wav`, data: new Uint8Array(raw) });
+    });
+    this.patchBank.forEach((p, i) => {
+      if (!p.bytes) return;
+      index.patches.push({ name: p.name, url: `patches/patch_${i}.syx` });
+      entries.push({ name: `patches/patch_${i}.syx`, data: new Uint8Array(p.bytes) });
+    });
+    entries.push({ name: 'index.json', data: new TextEncoder().encode(JSON.stringify(index, null, 2)) });
+    this.downloadBlob(writeZip(entries), `${index.name.replace(/\s+/g, '')}.circuittrackspack`);
+    this._slotsDirty = false;
+    this.lcdMsg('Pack exported');
   }
 
   async loadPatchFromBank(synthIdx, bankIdx) {

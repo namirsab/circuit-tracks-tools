@@ -90,6 +90,7 @@ export class UIState {
     this.patternPage = 0; // patterns view: 0 = patterns 1-4, 1 = 5-8
     this.projectPage = 0; // projects view: pages of 32 pack projects
     this.currentProjectIdx = null; // pack project slot currently loaded
+    this.saveArmed = false; // Save pressed once; next press commits to slot
     this.patchIndex = [null, null]; // selected bank patch per synth track
     this.midiTemplate = [0, 0]; // selected template per MIDI track
     this.currentPattern = [0, 0, 0, 0, 0, 0, 0, 0];
