@@ -26,6 +26,13 @@ html, body {
    z-index:-1 glow layer (#beat-bg) isn't painted over. */
 html { background: #15161d; }
 
+/* Slim dark scrollbars everywhere (sidebar is the main scroller).
+   scrollbar-color inherits from html, but scrollbar-width does NOT —
+   it has to sit on every scroller, hence the * selector. Chrome ignores
+   ::-webkit-scrollbar once these standard props are set. */
+html { scrollbar-color: #45415c transparent; }
+* { scrollbar-width: thin; }
+
 #app {
   display: flex;
   gap: 16px;
