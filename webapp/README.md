@@ -36,6 +36,22 @@ python3 -m http.server 8765
 (Opening `index.html` via `file://` won't work — browsers block module imports
 and sample fetches without a server.)
 
+## Deploy
+
+The app is 100% static — no build step, no backend. Any static host works.
+
+**With Coolify** (two options):
+
+- *Dockerfile (recommended, deterministic):* New Resource → your Git repo →
+  Build Pack **Dockerfile** → set **Base Directory** to `/webapp` (the
+  `Dockerfile` in this folder serves it with nginx). Attach your domain,
+  deploy; Coolify handles HTTPS via Let's Encrypt and redeploys on push.
+- *Static build pack:* New Resource → your Git repo → Build Pack **Static**,
+  no build command, **Publish Directory** `/webapp`.
+
+No SPA fallback or special headers are needed — it's a single page, all
+assets are same-origin relative paths, and packs/samples are plain files.
+
 ## What's bundled
 
 - `pack/` — the **Web Tracks Starter** pack: 64 drum samples, a full bank

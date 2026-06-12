@@ -9,6 +9,7 @@ import { defaultProject, UIState } from './state.js';
 import { buildPanel, buildSidebar } from './ui/panel.js';
 import { Views } from './ui/views.js';
 import { KeyboardInput, buildKeyOverlay } from './keyboard.js';
+import { buildWelcome, bindWelcome } from './welcome.js';
 import { readZip, writeZip } from './zip.js';
 import { ncsToMidi } from './scales.js';
 import {
@@ -61,6 +62,9 @@ class CircuitApp {
     this.trackButtons = trackButtons;
     buildSidebar(document.getElementById('sidebar'));
     buildKeyOverlay(document.getElementById('key-overlay'));
+    const welcomeRoot = document.getElementById('welcome-overlay');
+    buildWelcome(welcomeRoot);
+    bindWelcome(welcomeRoot);
 
     this.views = new Views(this);
     new KeyboardInput(this);
