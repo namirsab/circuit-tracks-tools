@@ -508,14 +508,19 @@ body.sidebar-hidden #sidebar { display: none; }
 }
 
 /* ---------- Footer disclaimer ---------- */
+/* The page never scrolls (html/body overflow:hidden, #app is 100vh), so the
+   footer must be pinned inside the viewport rather than placed after #app. */
 #app-footer {
-  max-width: 900px;
-  margin: 10px auto 18px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 4px;
   padding: 0 16px;
   font-size: 11px;
   line-height: 1.5;
   color: #6a6a76;
   text-align: center;
+  z-index: 5;
 }
 #app-footer a { color: #8ee6ff; text-decoration: none; }
 #app-footer a:hover { text-decoration: underline; }
