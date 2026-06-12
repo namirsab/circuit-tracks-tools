@@ -485,17 +485,22 @@ body.sidebar-hidden #sidebar { display: none; }
 }
 .ko-close:hover { color: #fff; }
 
-/* Beat-synced background glow (opacity animated from JS; compositor-only) */
+/* Music-reactive glow: one spot per track along the bottom edge, lit in
+   the track's colour when it sounds (opacity animated from JS; compositor-
+   only). Click-through, below the key/drop overlays (z 50/60). */
 #beat-bg {
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 40;
   pointer-events: none;
-  --beat-color: #34d058;
-  background:
-    radial-gradient(ellipse 90% 70% at 50% 105%, var(--beat-color), transparent 60%),
-    radial-gradient(ellipse 60% 40% at 50% -10%, var(--beat-color), transparent 65%);
+}
+.beat-spot {
+  position: absolute;
+  bottom: -14vh;
+  width: 26vw;
+  height: 34vh;
+  transform: translateX(-50%);
+  background: radial-gradient(closest-side, var(--c), transparent 72%);
   opacity: 0;
-  transition: opacity 0.12s linear;
   will-change: opacity;
 }

@@ -12,7 +12,7 @@ import { KeyboardInput, buildKeyOverlay } from './keyboard.js';
 import { readZip, writeZip } from './zip.js';
 import { ncsToMidi } from './scales.js';
 import {
-  TRACKS, SEND_ORDER, SCALE_TYPES, SCALE_ROOTS,
+  TRACKS, TRACK_COLORS, SEND_ORDER, SCALE_TYPES, SCALE_ROOTS,
   REVERB_PRESETS, DELAY_PRESETS, REVERB_TYPES,
 } from './constants.js';
 
@@ -82,9 +82,23 @@ class CircuitApp {
     this.refreshSidebar();
     this.updateLcd();
 
-    // Beat-synced background glow: opacity-only updates on a fixed layer,
-    // so the effect stays on the compositor (no layout/paint per frame).
+    // Music-reactive background: one glow spot per track along the bottom
+    // edge, lit in the track's colour whenever that track actually sounds
+    // (drum hits / synth notes) and decaying over ~250ms. Only opacity is
+    // touched per frame, so the whole effect stays on the compositor.
     const beatBg = document.getElementById('beat-bg');
+    const beatSpots = [];
+    for (let i = 0; i < 8; i++) {
+      const s = document.createElement('span');
+      s.className = 'beat-spot';
+      s.style.setProperty('--c', TRACK_COLORS[i]);
+      s.style.left = `${(i + 0.5) * 12.5}%`;
+      beatBg.appendChild(s);
+      beatSpots.push(s);
+    }
+    const beatLevels = new Float32Array(8);
+    let beatLastMs = performance.now();
+
     const tick = () => {
       const events = this.seq.drainVisualEvents();
       if (events.length) this.views.applyVisualEvents(events);
@@ -92,12 +106,16 @@ class CircuitApp {
       if (this.pendingProject && this.engine.now() >= this.pendingProject.time) {
         this.loadProjectFromBank(this.pendingProject.idx);
       }
-      if (this.seq.playing) {
-        const beat = 60 / this.seq.bpm;
-        const phase = (((this.engine.now() - (this.seq.startTime ?? 0)) % beat) + beat) % beat / beat;
-        beatBg.style.opacity = (0.13 * (1 - phase) ** 2.2).toFixed(3);
-      } else if (beatBg.style.opacity !== '0') {
-        beatBg.style.opacity = '0';
+      const nowMs = performance.now();
+      const fade = Math.exp(-(nowMs - beatLastMs) / 250);
+      beatLastMs = nowMs;
+      for (const e of events) {
+        if (e.type === 'drumhit' || e.type === 'note') beatLevels[e.trackId] = 1;
+      }
+      for (let i = 0; i < 8; i++) {
+        beatLevels[i] *= fade;
+        if (beatLevels[i] < 0.012) beatLevels[i] = 0;
+        beatSpots[i].style.opacity = (beatLevels[i] * 0.3).toFixed(3);
       }
       requestAnimationFrame(tick);
     };
@@ -648,7 +666,6 @@ class CircuitApp {
     this.ui.currentTrack = t;
     this.trackButtons.forEach((b, i) => b.classList.toggle('active', i === t));
     document.getElementById('device').style.setProperty('--accent', this.views.trackColor(t));
-    document.getElementById('beat-bg').style.setProperty('--beat-color', this.views.trackColor(t));
     this.views.render();
     this.updateKnobs();
   }
