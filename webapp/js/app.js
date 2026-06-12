@@ -159,16 +159,17 @@ class CircuitApp {
     window.addEventListener('pointerdown', resume, { passive: true });
     window.addEventListener('keydown', resume);
 
-    // Scale the whole console — device AND sidebar — up on large screens
-    // (zoom keeps layout + events consistent). The sidebar gets the same
-    // factor so it doesn't look miniature next to the scaled device; its
-    // 100vh max-height is divided back via --ui-zoom in CSS. Never scale
-    // below 1 — small screens use the media query.
+    // Scale the whole #app — device, sidebar, padding, gap — up on large
+    // screens as one unit, so big screens get exactly the small-screen
+    // layout magnified (zoom keeps layout + events consistent). #app's
+    // 100vh height is divided back via --ui-zoom in CSS, since vh units
+    // ignore element zoom. Never scale below 1 — small screens use the
+    // media query.
+    const appEl = document.getElementById('app');
     const device = document.getElementById('device');
     const sidebar = document.getElementById('sidebar');
     const fit = () => {
-      device.style.zoom = 1;
-      sidebar.style.zoom = 1;
+      appEl.style.zoom = 1;
       document.documentElement.style.setProperty('--ui-zoom', 1);
       if (window.innerWidth >= 1250) {
         const sidebarW = document.body.classList.contains('sidebar-hidden')
@@ -180,11 +181,12 @@ class CircuitApp {
           2.0,
         );
         if (scale > 1.02) {
-          device.style.zoom = scale;
-          sidebar.style.zoom = scale;
+          appEl.style.zoom = scale;
           document.documentElement.style.setProperty('--ui-zoom', scale);
         }
       }
+      // Sidebar never outgrows the device: bottoms align, content scrolls.
+      sidebar.style.maxHeight = `${device.offsetHeight}px`;
       this.fitGlow?.();
     };
     this.fitDevice = fit;

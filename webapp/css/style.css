@@ -30,7 +30,9 @@ html { background: #15161d; }
   display: flex;
   gap: 16px;
   padding: 8px;
-  height: 100vh;
+  /* fit() in app.js zooms #app on large screens; vh ignores element zoom,
+     so divide it back out to keep the box exactly one viewport tall. */
+  height: calc(100vh / var(--ui-zoom, 1));
   align-items: flex-start;
   justify-content: center;
 }
