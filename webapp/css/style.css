@@ -469,3 +469,33 @@ body.sidebar-hidden #sidebar { display: none; }
   50%, 100% { background: transparent; color: #f0f0f8; }
 }
 #btn-save.armed { animation: save-blink 0.7s steps(1) infinite; }
+
+.ko-panel { position: relative; }
+.ko-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #c8c8d4;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.ko-close:hover { color: #fff; }
+
+/* Beat-synced background glow (opacity animated from JS; compositor-only) */
+#beat-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  --beat-color: #34d058;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 105%, var(--beat-color), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 50% -10%, var(--beat-color), transparent 65%);
+  opacity: 0;
+  transition: opacity 0.12s linear;
+  will-change: opacity;
+}

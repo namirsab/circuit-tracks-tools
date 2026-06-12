@@ -477,7 +477,7 @@ def build_patches():
     p.mixer(osc1_level=110, osc2_level=55)
     p.env_amp(attack=0, decay=0, sustain=127, release=10)
     p.env_filter(attack=0, decay=0, sustain=127, release=10)
-    p.filter(frequency=85, resonance=0, env2_to_freq=0)
+    p.filter(frequency=115, resonance=0, env2_to_freq=0)
     p.chorus(level=30, rate=45, feedback=40, mod_depth=50)
     patches.append(p)
 
@@ -603,7 +603,7 @@ def build_variation_patches():  # noqa: PLR0915
             if arch == "Organ":
                 p.env_amp(attack=0, decay=0, sustain=127, release=8)
                 p.env_filter(attack=0, decay=0, sustain=127, release=8)
-                p.filter(frequency=80 - v * 8, resonance=0, env2_to_freq=0)
+                p.filter(frequency=118 - v * 4, resonance=0, env2_to_freq=0)
                 p.chorus(level=25 + v * 12, rate=40 + v * 8, feedback=40, mod_depth=50)
             elif v == 0:  # soft
                 p.env_amp(attack=2, decay=85, sustain=35, release=45)
@@ -649,137 +649,942 @@ def build_variation_patches():  # noqa: PLR0915
 
 
 # --- Demo projects ---------------------------------------------------------
-# 16 simple grooves, four per sample bank, written as song dicts and compiled
-# to .ncs with song_to_ncs(). All patterns are 32 steps (one bar of 1/8 feel).
+# 16 individually composed grooves, four per sample bank, written as song
+# dicts and compiled to .ncs with song_to_ncs(). All patterns are 32 steps.
+# Each project leans on a different trick: probability ghosts, per-step
+# sample flips, tie slides, macro automation lanes, sidechain, FX throws.
 
 
-def _drums(hits):
-    return {"steps": {str(i): {"velocity": v} for i, v in hits.items()}}
+def _drums(hits, **extra):
+    # hits: {pos: vel} or {pos: (vel, {extras})} — extras: probability, sample
+    steps = {}
+    for i, v in hits.items():
+        steps[str(i)] = {"velocity": v[0], **v[1]} if isinstance(v, tuple) else {"velocity": v}
+    return {"steps": steps, **extra}
 
 
-def _synth(notes):
+def _synth(notes, **extra):
+    # notes: {pos: (note_or_chord, vel, gate)} or (..., {extras: tie/probability/macros})
     steps = {}
     for i, spec in notes.items():
-        note, vel, gate = spec
-        step = {"velocity": vel, "gate": gate}
-        if isinstance(note, list):
-            step["notes"] = note
+        st = {"velocity": spec[1], "gate": spec[2], **(spec[3] if len(spec) > 3 else {})}
+        if isinstance(spec[0], list):
+            st["notes"] = spec[0]
         else:
-            step["note"] = note
-        steps[str(i)] = step
-    return {"steps": steps}
+            st["note"] = spec[0]
+        steps[str(i)] = st
+    return {"steps": steps, **extra}
 
 
 def _every(start, stride, vel, end=32):
     return {i: vel for i in range(start, end, stride)}
 
 
-def _demo_song(name, bpm, color, bank, genre, var):
-    base = bank * 16
-    kick, clap, hat, perc = base + 0, base + 11, base + 4, base + 8
-    root = [45, 43, 41, 48][var]  # A, G, F, C
-
-    if genre == "house":
-        d1 = _every(0, 8, 112)
-        d2 = {8: 100, 24: 104}
-        d3 = {**_every(4, 8, 92), **({14: 60, 30: 62} if var % 2 else {})}
-        d4 = {6: 70, 13: 64, 22: 72} if var < 2 else {2: 66, 11: 70, 27: 64}
-        bass = {i: (root, 100, 1.5) for i in (0, 7, 8, 15, 16, 23, 24)} | {28: (root + 12, 92, 1)}
-        chords = {8: ([root + 12, root + 15, root + 19], 84, 3), 24: ([root + 10, root + 14, root + 17], 80, 3)}
-        synth2 = {"preset": "pluck", "name": "Tight Key"}
-        bass2 = dict(bass) | {30: (root + 3, 96, 1), 31: (root - 2, 90, 1)}
-    elif genre == "techno":
-        d1 = _every(0, 8, 120)
-        d2 = {8: 96, 24: 96}
-        d3 = {**_every(2, 4, 88), **_every(0, 8, 56)}
-        d4 = _every(3, 8, 76) if var % 2 else _every(5, 16, 80)
-        bass = {i: (root - 12 if i % 8 else root, 104, 0.8) for i in range(0, 32, 2)}
-        chords = {0: (root + 24, 90, 0.6), 12: (root + 24, 84, 0.6), 22: (root + 27, 88, 0.6)}
-        synth2 = {"preset": "lead", "name": "Sync Scream"}
-        bass2 = dict(bass) | {i: (root + 7, 108, 0.8) for i in (26, 28, 30)}
-    elif genre == "breaks":
-        d1 = {0: 116, 10: 96, 16: 112, 26: 92}
-        d2 = {8: 108, 24: 110, **({30: 70} if var % 2 else {})}
-        d3 = {**_every(2, 4, 82), 15: 58, 31: 60}
-        d4 = {7: 80, 14: 72, 23: 78}
-        bass = {0: (root, 106, 2), 10: (root + 3, 98, 1.5), 16: (root, 104, 2), 26: (root - 5, 100, 1.5)}
-        chords = {4: ([root + 12, root + 17, root + 22], 86, 2), 20: ([root + 10, root + 15, root + 19], 82, 2)}
-        synth2 = {"preset": "pluck", "name": "Brass Stab"}
-        bass2 = dict(bass) | {30: (root + 7, 102, 1), 31: (root + 5, 96, 1)}
-    else:  # ambient
-        d1 = {0: 96, 20: 84}
-        d2 = {24: 58}
-        d3 = _every(2, 4, 48)
-        d4 = {12: 60, 28: 54} if var % 2 else {6: 56, 22: 58}
-        bass = {0: (root - 12, 88, 8), 16: (root - 12, 84, 8)}
-        chords = {0: ([root + 12, root + 19, root + 26], 76, 14), 16: ([root + 10, root + 17, root + 24], 72, 14)}
-        synth2 = {"preset": "pad", "name": "Warm Pad"}
-        bass2 = {0: (root - 12, 88, 8), 16: (root - 17, 84, 8)}
-
-    def pattern(b):
-        return {
-            "length": 32,
-            "tracks": {
-                "drum1": _drums(d1),
-                "drum2": _drums(d2),
-                "drum3": _drums(d3),
-                "drum4": _drums(d4),
-                "synth1": _synth(b),
-                "synth2": _synth(chords),
-            },
-        }
-
+def _project(name, bpm, color, sounds, patterns, order, fx, swing=50):
     return {
         "name": name,
         "bpm": bpm,
+        "swing": swing,
         "color": color,
         "scale": {"root": "C", "type": "chromatic"},
-        "sounds": {
-            "synth1": {"preset": "bass", "name": "Deep Bass"},
-            "synth2": synth2,
-            "drum1": {"sample": kick},
-            "drum2": {"sample": clap},
-            "drum3": {"sample": hat, "decay": 100},
-            "drum4": {"sample": perc, "level": 92},
-        },
-        "fx": {
-            "reverb_preset": 2,
-            "delay_preset": 5,
-            "reverb_sends": {"synth2": 45 if genre == "ambient" else 25, "drum2": 30},
-            "delay_sends": {"synth2": 30 if genre != "ambient" else 15},
-        },
-        "patterns": {"p1": pattern(bass), "p2": pattern(bass2)},
-        "song": ["p1", "p2"],
+        "sounds": sounds,
+        "fx": fx,
+        "patterns": patterns,
+        "song": order,
     }
 
 
+# Deep bank: 0 kickA 1 kickB 2 snA 3 snB 4 hh 5 hh2 6 ohh 7 ohh2
+#            8 blip 9 tom 10 shaker 11 clap 12 bass 13 stab 14 bell 15 riser
+# Punch +16, Crunch +32, Air +48 (Air: 53 shaker, 55 wash, 57/62 bells, 58 tom)
+
+
+def _neon_harbor():
+    """Deep house: ghost kick, OHH flips, shaker probability, sidechained
+    Am9/Fmaj7 keys, slow filter sweep riding the bass."""
+    a = 45
+    drums = {
+        "drum1": _drums(_every(0, 8, 112) | {30: (58, {"probability": 0.45})}),
+        "drum2": _drums({8: 102, 24: 106, 28: (64, {"probability": 0.3, "sample": 2})}),
+        "drum3": _drums({**_every(4, 8, 90), 12: (84, {"sample": 6}), 28: (88, {"sample": 6})}),
+        "drum4": _drums({i: (44 + (i % 8) * 3, {"probability": 0.7}) for i in range(2, 32, 4)}),
+    }
+    bass1 = _synth(
+        {
+            0: (a, 104, 1.5),
+            7: (a, 88, 0.8),
+            8: (a, 100, 1.5),
+            15: (a + 12, 84, 0.8),
+            16: (a, 104, 1.5),
+            23: (a + 7, 88, 0.8),
+            24: (a + 3, 100, 1.5),
+            30: (a - 2, 92, 1),
+        },
+        macros={"5": {str(s): 18 + s * 3 for s in range(0, 32, 4)}},
+    )
+    bass2 = _synth(
+        {
+            0: (a, 104, 1.5),
+            8: (a + 8, 100, 1.5),
+            16: (a + 7, 104, 1.5),
+            24: (a + 5, 100, 1.5),
+            28: (a + 12, 90, 0.8),
+            30: (a + 10, 86, 0.8),
+        },
+        macros={"5": {str(s): 110 - s * 2 for s in range(0, 32, 4)}},
+    )
+    keys1 = _synth({4: ([57, 64, 71], 84, 3), 12: ([57, 64, 71], 70, 2), 20: ([57, 65, 69], 84, 3)})
+    keys2 = _synth({4: ([53, 60, 69], 84, 3), 12: ([55, 62, 71], 78, 2), 20: ([57, 64, 72], 86, 4)})
+    return _project(
+        "Neon Harbor",
+        122,
+        9,
+        sounds={
+            "synth1": {"preset": "bass", "name": "Harbor Sub", "params": {"filter_frequency": 20}},
+            "synth2": {"preset": "pluck", "name": "Neon Keys", "params": {"chorus_level": 40, "env1_release": 70}},
+            "drum1": {"sample": 0},
+            "drum2": {"sample": 11},
+            "drum3": {"sample": 4, "decay": 96},
+            "drum4": {"sample": 10, "level": 84, "pan": 80},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": bass1, "synth2": keys1}},
+            "p2": {"length": 32, "tracks": drums | {"synth1": bass2, "synth2": keys2}},
+        },
+        order=["p1", "p1", "p2", "p2"],
+        fx={
+            "reverb_preset": 2,
+            "delay_preset": 6,
+            "reverb_sends": {"synth2": 35, "drum2": 28},
+            "delay_sends": {"synth2": 25},
+            "sidechain": {"synth2": {"preset": 3, "source": "drum1", "depth": 95}},
+        },
+    )
+
+
+def _velvet_loop():
+    """Lo-fi swung house: dusty kick B, rim ghosts, tied EP chords with a
+    delay throw on the second half."""
+    drums = {
+        "drum1": _drums({0: 110, 8: 104, 16: 110, 24: 104, 11: (70, {"probability": 0.5})}),
+        "drum2": _drums({8: 96, 24: 100}),
+        "drum3": _drums({4: 80, 6: (48, {"probability": 0.6}), 12: 84, 20: 80, 22: (52, {"probability": 0.6}), 28: 84}),
+        "drum4": _drums({3: (58, {"probability": 0.65}), 13: 62, 19: (54, {"probability": 0.65}), 29: 60}),
+    }
+    keys1 = _synth(
+        {
+            0: ([53, 60, 65], 78, 4, {"tie": True}),
+            4: ([53, 60, 65], 60, 2),
+            16: ([51, 58, 65], 78, 4, {"tie": True}),
+            20: ([51, 58, 65], 60, 2),
+        },
+        mixer={"delay_send": {"24": 80, "28": 10}},
+    )
+    keys2 = _synth(
+        {
+            0: ([48, 57, 64], 78, 4, {"tie": True}),
+            8: ([48, 57, 64], 58, 2),
+            16: ([50, 58, 65], 80, 6, {"tie": True}),
+            26: ([53, 60, 67], 64, 2),
+        },
+        mixer={"delay_send": {"24": 90, "28": 10}},
+    )
+    bass = _synth({0: (41, 96, 3), 12: (41, 70, 1), 16: (39, 96, 3), 28: (44, 80, 1.5)})
+    return _project(
+        "Velvet Loop",
+        116,
+        1,
+        sounds={
+            "synth1": {"preset": "bass", "name": "Felt Bass", "params": {"filter_frequency": 32}},
+            "synth2": {
+                "preset": "pluck",
+                "name": "Velvet EP",
+                "params": {"env1_attack": 8, "env1_release": 60, "chorus_level": 55, "filter_frequency": 48},
+            },
+            "drum1": {"sample": 1, "decay": 110},
+            "drum2": {"sample": 3, "pitch": 60},
+            "drum3": {"sample": 5, "decay": 80, "level": 88},
+            "drum4": {"sample": 9, "pitch": 70, "level": 80},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": bass, "synth2": keys1}},
+            "p2": {"length": 32, "tracks": drums | {"synth1": bass, "synth2": keys2}},
+        },
+        order=["p1", "p2"],
+        fx={
+            "reverb_preset": 1,
+            "delay_preset": 8,
+            "reverb_sends": {"synth2": 30, "drum2": 35},
+            "delay_sends": {"synth2": 20},
+        },
+        swing=58,
+    )
+
+
+def _glass_garden():
+    """Melodic house: 16th arp with a velocity wave, bell hits on drum 4,
+    riser flip at the turnaround."""
+    arp_notes = [48, 55, 60, 64, 67, 64, 60, 55]
+    arp1 = {i: (arp_notes[(i // 2) % 8], 64 + 28 * (i % 8 == 0) + 12 * (i % 4 == 0), 0.6) for i in range(0, 32, 2)}
+    arp2 = {i: (arp_notes[(i // 2) % 8] + 5, 64 + 28 * (i % 8 == 0) + 12 * (i % 4 == 0), 0.6) for i in range(0, 32, 2)}
+    drums = {
+        "drum1": _drums(_every(0, 8, 110)),
+        "drum2": _drums({8: 98, 24: 100}),
+        "drum3": _drums(_every(4, 8, 86) | {18: (60, {"probability": 0.55})}),
+        "drum4": _drums(
+            {0: (72, {"sample": 14}), 11: (58, {"sample": 14, "probability": 0.6}), 22: (66, {"sample": 14})}
+        ),
+    }
+    drums2 = dict(drums) | {"drum2": _drums({8: 98, 24: 100, 28: (74, {"sample": 15})})}
+    bass = _synth({i: (36 + (7 if i >= 16 else 0), 100, 1.8) for i in (0, 6, 8, 14, 16, 22, 24, 30)})
+    return _project(
+        "Glass Garden",
+        124,
+        5,
+        sounds={
+            "synth1": {"preset": "bass", "name": "Garden Sub", "params": {"filter_frequency": 26}},
+            "synth2": {
+                "preset": "pluck",
+                "name": "Glass Arp",
+                "params": {"osc1_wave": 1, "env1_release": 45, "filter_frequency": 30},
+            },
+            "drum1": {"sample": 0},
+            "drum2": {"sample": 11},
+            "drum3": {"sample": 4, "decay": 90},
+            "drum4": {"sample": 14, "pitch": 76, "level": 78, "pan": 48},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": bass, "synth2": _synth(arp1)}},
+            "p2": {"length": 32, "tracks": drums2 | {"synth1": bass, "synth2": _synth(arp2)}},
+        },
+        order=["p1", "p1", "p2", "p2"],
+        fx={
+            "reverb_preset": 4,
+            "delay_preset": 5,
+            "reverb_sends": {"synth2": 40, "drum4": 50},
+            "delay_sends": {"synth2": 35},
+            "sidechain": {"synth2": {"preset": 2, "source": "drum1", "depth": 70}},
+        },
+    )
+
+
+def _midnight_mall():
+    """UK garage: broken kick, shuffled zig-zag hats, chopped chord stabs
+    with probability, tied sub slides."""
+    chop = {
+        2: ([63, 67, 70], 88, 0.8),
+        5: ([63, 67, 70], 60, 0.5, {"probability": 0.7}),
+        10: ([62, 65, 70], 84, 0.8),
+        18: ([63, 67, 70], 88, 0.8),
+        21: ([65, 68, 72], 64, 0.5, {"probability": 0.55}),
+        26: ([62, 65, 70], 84, 0.8),
+    }
+    drums = {
+        "drum1": _drums({0: 114, 10: 92, 16: 110, 22: 90}),
+        "drum2": _drums({8: 104, 24: 106, 30: (62, {"probability": 0.5})}),
+        "drum3": _drums(
+            {
+                i: (88 if i % 8 == 4 else 46 + (i * 5) % 22, {"probability": 0.8 if i % 8 != 4 else 1.0})
+                for i in range(2, 32, 2)
+            }
+        ),
+        "drum4": _drums({7: (66, {"probability": 0.6}), 15: 70, 23: (60, {"probability": 0.6}), 31: 72}),
+    }
+    bass1 = _synth(
+        {
+            0: (39, 102, 2, {"tie": True}),
+            4: (39, 90, 1),
+            16: (37, 102, 2, {"tie": True}),
+            20: (37, 90, 1),
+            28: (42, 94, 1),
+        }
+    )
+    bass2 = _synth(
+        {0: (39, 102, 2), 8: (44, 96, 1.5, {"tie": True}), 11: (42, 88, 1), 16: (37, 102, 2), 24: (34, 100, 3)}
+    )
+    return _project(
+        "Midnight Mall",
+        130,
+        12,
+        sounds={
+            "synth1": {"preset": "bass", "name": "Mall Sub", "params": {"filter_frequency": 24, "portamento_rate": 45}},
+            "synth2": {"preset": "pluck", "name": "Chop Chord", "params": {"env1_release": 30, "filter_frequency": 55}},
+            "drum1": {"sample": 0},
+            "drum2": {"sample": 2},
+            "drum3": {"sample": 4, "decay": 84},
+            "drum4": {"sample": 8, "pitch": 72, "level": 82},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": bass1, "synth2": _synth(chop)}},
+            "p2": {"length": 32, "tracks": drums | {"synth1": bass2, "synth2": _synth(chop)}},
+        },
+        order=["p1", "p2"],
+        fx={
+            "reverb_preset": 1,
+            "delay_preset": 4,
+            "reverb_sends": {"synth2": 22, "drum2": 26},
+            "delay_sends": {"synth2": 28},
+        },
+        swing=55,
+    )
+
+
+def _concrete_pulse():
+    """Peak techno: rolling accented 16th bass under a rising filter lane,
+    zap percs with a falling pitch lane, sidechained stabs."""
+    bass = {i: (41 - 12 * (i % 4 == 2), 70 + 44 * (i % 4 == 0), 0.7) for i in range(0, 32, 2)}
+    drums = {
+        "drum1": _drums(_every(0, 8, 122)),
+        "drum2": _drums({8: 98, 24: 98}),
+        "drum3": _drums(_every(4, 8, 92) | _every(2, 8, 50)),
+        "drum4": _drums(
+            {3: (78, {"probability": 0.7}), 11: (70, {"probability": 0.7}), 19: 82, 27: (74, {"probability": 0.7})},
+            params={"pitch": {"0": 80, "16": 64, "28": 52}},
+        ),
+    }
+    stabs1 = _synth({12: (65, 96, 0.6), 28: (65, 92, 0.6)})
+    stabs2 = _synth({4: (65, 96, 0.6), 12: (68, 92, 0.6), 20: (65, 96, 0.6), 28: (72, 98, 0.8)})
+    syn1 = {"macros": {"5": {str(s): 20 + s * 3 for s in range(0, 32, 2)}}}
+    return _project(
+        "Concrete Pulse",
+        132,
+        0,
+        sounds={
+            "synth1": {
+                "preset": "bass",
+                "name": "Pulse Roll",
+                "params": {"filter_frequency": 15, "filter_resonance": 35},
+            },
+            "synth2": {
+                "preset": "lead",
+                "name": "Concrete Stab",
+                "params": {"env1_release": 25, "distortion_level": 35},
+            },
+            "drum1": {"sample": 16},
+            "drum2": {"sample": 27},
+            "drum3": {"sample": 20, "decay": 88},
+            "drum4": {"sample": 25, "level": 86},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": _synth(bass, **syn1), "synth2": stabs1}},
+            "p2": {"length": 32, "tracks": drums | {"synth1": _synth(bass, **syn1), "synth2": stabs2}},
+        },
+        order=["p1", "p1", "p2", "p2"],
+        fx={
+            "reverb_preset": 3,
+            "delay_preset": 3,
+            "reverb_sends": {"synth2": 30, "drum2": 20},
+            "delay_sends": {"synth2": 22, "drum4": 30},
+            "sidechain": {
+                "synth1": {"preset": 4, "source": "drum1", "depth": 80},
+                "synth2": {"preset": 3, "source": "drum1", "depth": 100},
+            },
+        },
+    )
+
+
+def _voltage_run():
+    """Acid: tied 16th line with octave jumps and accents, filter and
+    resonance lanes ramping all pattern long, metallic sprinkles."""
+    line1 = {
+        0: (45, 112, 0.7),
+        2: (45, 64, 0.5, {"tie": True}),
+        4: (57, 100, 0.5),
+        6: (45, 64, 0.5),
+        8: (45, 110, 0.7),
+        10: (48, 70, 0.5, {"tie": True}),
+        12: (48, 96, 0.5),
+        14: (45, 60, 0.5),
+        16: (45, 112, 0.7),
+        18: (45, 64, 0.5),
+        20: (57, 104, 0.5, {"tie": True}),
+        22: (55, 72, 0.5),
+        24: (45, 110, 0.7),
+        26: (43, 88, 0.5),
+        28: (45, 96, 0.5),
+        30: (52, 90, 0.5, {"tie": True}),
+    }
+    line2 = {i: (n + 5, v, g, *e) for i, (n, v, g, *e) in line1.items()}
+    drums = {
+        "drum1": _drums(_every(0, 8, 118)),
+        "drum2": _drums({8: 92, 24: 94}),
+        "drum3": _drums(_every(4, 8, 88)),
+        "drum4": _drums(
+            {
+                5: (54, {"probability": 0.4}),
+                13: (58, {"probability": 0.4}),
+                21: (50, {"probability": 0.4}),
+                29: (60, {"probability": 0.4}),
+            }
+        ),
+    }
+    lanes = {
+        "macros": {"5": {str(s): 10 + s * 3 for s in range(0, 32, 2)}, "6": {"0": 40, "8": 65, "16": 90, "24": 115}}
+    }
+    return _project(
+        "Voltage Run",
+        138,
+        3,
+        sounds={
+            "synth1": {
+                "preset": "bass",
+                "name": "Voltage 303",
+                "params": {"filter_frequency": 8, "filter_resonance": 70, "env2_decay": 55},
+            },
+            "synth2": {"preset": "pad", "name": "Static Air", "params": {"filter_frequency": 30}},
+            "drum1": {"sample": 17},
+            "drum2": {"sample": 27},
+            "drum3": {"sample": 21, "decay": 78},
+            "drum4": {"sample": 31, "level": 70, "decay": 70},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": _synth(line1, **lanes)}},
+            "p2": {"length": 32, "tracks": drums | {"synth1": _synth(line2, **lanes)}},
+        },
+        order=["p1", "p1", "p1", "p2"],
+        fx={
+            "reverb_preset": 2,
+            "delay_preset": 2,
+            "reverb_sends": {"drum2": 25},
+            "delay_sends": {"synth1": 18, "drum4": 45},
+        },
+    )
+
+
+def _iron_orbit():
+    """EBM: syncopated kick, rim 16ths on probability, gliding minor-key
+    lead riff, driven tom fills closing the loop."""
+    riff = {
+        0: (48, 106, 1.5),
+        6: (48, 88, 0.8),
+        8: (51, 100, 1, {"tie": True}),
+        11: (50, 84, 0.8),
+        16: (48, 106, 1.5),
+        22: (55, 92, 0.8),
+        24: (53, 100, 1.5, {"tie": True}),
+        30: (51, 88, 0.8),
+    }
+    drums = {
+        "drum1": _drums({0: 118, 7: 96, 8: 112, 16: 118, 23: 96, 24: 112}),
+        "drum2": _drums({8: 100, 24: 102}),
+        "drum3": _drums({i: (52 + (i % 4) * 8, {"probability": 0.5}) for i in range(0, 32, 2)}),
+        "drum4": _drums({12: (74, {"probability": 0.6}), 28: 80}),
+    }
+    drums2 = dict(drums) | {
+        "drum4": _drums({12: 74, 26: (84, {"sample": 26}), 28: (92, {"sample": 26}), 30: (100, {"sample": 26})}),
+    }
+    return _project(
+        "Iron Orbit",
+        126,
+        10,
+        sounds={
+            "synth1": {
+                "preset": "lead",
+                "name": "Orbit Riff",
+                "params": {"portamento_rate": 38, "distortion_level": 30, "filter_frequency": 45},
+            },
+            "synth2": {
+                "preset": "pad",
+                "name": "Iron Drone",
+                "params": {"filter_frequency": 28, "keyboard_octave": 62},
+            },
+            "drum1": {"sample": 16, "decay": 105},
+            "drum2": {"sample": 18},
+            "drum3": {"sample": 24, "level": 84},
+            "drum4": {"sample": 26, "pitch": 58},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": _synth(riff), "synth2": _synth({0: ([36, 43], 70, 16)})}},
+            "p2": {
+                "length": 32,
+                "tracks": drums2 | {"synth1": _synth(riff), "synth2": _synth({0: ([36, 43], 70, 16)})},
+            },
+        },
+        order=["p1", "p2"],
+        fx={
+            "reverb_preset": 3,
+            "delay_preset": 7,
+            "reverb_sends": {"synth1": 18, "drum2": 30},
+            "delay_sends": {"synth1": 25},
+        },
+    )
+
+
+def _strobe_sector():
+    """Hard techno: offbeat bass stabs, one-note 16th lead on probability,
+    snare build with rising velocity through the second pattern."""
+    drums1 = {
+        "drum1": _drums(_every(0, 8, 124)),
+        "drum2": _drums({8: 96, 24: 96}),
+        "drum3": _drums(_every(4, 8, 94)),
+        "drum4": _drums({0: (60, {"sample": 31})}),
+    }
+    drums2 = dict(drums1) | {
+        "drum2": _drums({8: 96, 24: 96} | {i: (50 + (i - 16) * 4, {}) for i in range(16, 32, 2)}),
+    }
+    stabs = _synth({i: (31, 108, 0.8) for i in (4, 12, 20, 28)})
+    lead = _synth({i: (67, 58 + (i % 8) * 6, 0.4, {"probability": 0.8}) for i in range(0, 32, 2)})
+    return _project(
+        "Strobe Sector",
+        142,
+        13,
+        sounds={
+            "synth1": {
+                "preset": "bass",
+                "name": "Strobe Stab",
+                "params": {"filter_frequency": 40, "distortion_level": 40},
+            },
+            "synth2": {"preset": "lead", "name": "Strobe Blip", "params": {"env1_release": 12, "filter_frequency": 70}},
+            "drum1": {"sample": 17, "decay": 100},
+            "drum2": {"sample": 19},
+            "drum3": {"sample": 22, "decay": 70},
+            "drum4": {"sample": 31, "decay": 110, "level": 75},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums1 | {"synth1": stabs, "synth2": lead}},
+            "p2": {"length": 32, "tracks": drums2 | {"synth1": stabs, "synth2": lead}},
+        },
+        order=["p1", "p1", "p1", "p2"],
+        fx={
+            "reverb_preset": 0,
+            "delay_preset": 1,
+            "reverb_sends": {"drum2": 18},
+            "delay_sends": {"synth2": 30},
+            "sidechain": {"synth2": {"preset": 5, "source": "drum1", "depth": 85}},
+        },
+    )
+
+
+def _rust_funk():
+    """Funk break: ghost-note snares, OHH flips, syncopated tie bass,
+    clav-style stabs answering the bassline."""
+    drums = {
+        "drum1": _drums({0: 118, 10: 94, 13: (72, {"probability": 0.6}), 16: 112, 26: 96}),
+        "drum2": _drums(
+            {
+                8: 110,
+                11: (44, {"probability": 0.6}),
+                21: (40, {"probability": 0.6}),
+                24: 112,
+                29: (46, {"probability": 0.55}),
+            }
+        ),
+        "drum3": _drums({**_every(2, 4, 80), 14: (86, {"sample": 38}), 30: (88, {"sample": 38})}),
+        "drum4": _drums({5: (64, {"probability": 0.7}), 13: 70, 23: (62, {"probability": 0.7})}),
+    }
+    bass1 = _synth(
+        {
+            0: (40, 108, 1.5),
+            6: (40, 84, 0.8, {"tie": True}),
+            8: (43, 96, 1),
+            14: (45, 88, 0.8),
+            16: (40, 106, 1.5),
+            24: (35, 100, 2, {"tie": True}),
+            28: (38, 90, 1),
+        }
+    )
+    bass2 = _synth(
+        {
+            0: (40, 108, 1.5),
+            8: (47, 98, 1),
+            12: (45, 90, 0.8, {"tie": True}),
+            16: (43, 104, 1.5),
+            22: (40, 92, 0.8),
+            24: (38, 102, 2),
+            30: (42, 94, 0.8),
+        }
+    )
+    clav = _synth(
+        {
+            4: ([52, 59], 92, 0.6),
+            7: ([52, 59], 70, 0.4, {"probability": 0.7}),
+            20: ([50, 57], 92, 0.6),
+            27: ([55, 62], 80, 0.5, {"probability": 0.6}),
+        }
+    )
+    return _project(
+        "Rust Funk",
+        104,
+        2,
+        sounds={
+            "synth1": {
+                "preset": "bass",
+                "name": "Rust Bass",
+                "params": {"filter_frequency": 38, "filter_resonance": 25},
+            },
+            "synth2": {
+                "preset": "pluck",
+                "name": "Rust Clav",
+                "params": {"osc1_wave": 12, "env1_release": 22, "filter_frequency": 60},
+            },
+            "drum1": {"sample": 32},
+            "drum2": {"sample": 34},
+            "drum3": {"sample": 36, "decay": 82},
+            "drum4": {"sample": 42, "level": 80, "pan": 86},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": bass1, "synth2": clav}},
+            "p2": {"length": 32, "tracks": drums | {"synth1": bass2, "synth2": clav}},
+        },
+        order=["p1", "p2"],
+        fx={"reverb_preset": 1, "delay_preset": 9, "reverb_sends": {"drum2": 22}, "delay_sends": {"synth2": 20}},
+        swing=54,
+    )
+
+
+def _circuit_breaker():
+    """Electro: zap hits riding a falling pitch lane, octave-bounce bass,
+    sparse bleep melody, kick A/B flips."""
+    drums = {
+        "drum1": _drums({0: 116, 8: 108, 16: 114, 26: (100, {"sample": 33})}),
+        "drum2": _drums({8: 104, 24: 106}),
+        "drum3": _drums({i: (46 + (i % 8) * 4, {"probability": 0.75}) for i in range(0, 32, 2)}),
+        "drum4": _drums({6: 84, 14: 78, 22: 86, 30: 80}, params={"pitch": {"0": 96, "8": 80, "16": 64, "24": 48}}),
+    }
+    bass = _synth({i: (45 - 12 * ((i // 4) % 2), 102, 0.8) for i in range(0, 32, 4)})
+    bleeps1 = _synth({10: (69, 88, 0.4), 14: (72, 80, 0.4, {"probability": 0.7}), 26: (67, 86, 0.4)})
+    bleeps2 = _synth({2: (69, 88, 0.4), 10: (74, 84, 0.4), 18: (72, 86, 0.4, {"probability": 0.7}), 26: (76, 90, 0.5)})
+    return _project(
+        "Circuit Breaker",
+        112,
+        7,
+        sounds={
+            "synth1": {"preset": "bass", "name": "Breaker Bass", "params": {"osc1_wave": 13, "filter_frequency": 42}},
+            "synth2": {
+                "preset": "pluck",
+                "name": "Data Bleep",
+                "params": {"osc1_wave": 20, "env1_release": 18, "filter_frequency": 75},
+            },
+            "drum1": {"sample": 32},
+            "drum2": {"sample": 43},
+            "drum3": {"sample": 40, "level": 82},
+            "drum4": {"sample": 47, "level": 88},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": bass, "synth2": bleeps1}},
+            "p2": {"length": 32, "tracks": drums | {"synth1": bass, "synth2": bleeps2}},
+        },
+        order=["p1", "p2"],
+        fx={
+            "reverb_preset": 2,
+            "delay_preset": 10,
+            "reverb_sends": {"synth2": 26},
+            "delay_sends": {"synth2": 38, "drum4": 30},
+        },
+    )
+
+
+def _pixel_alley():
+    """Boom bap: lazy swung kick, fat snare, tied long bass, bell hook on
+    probability, EP chords holding the changes."""
+    drums = {
+        "drum1": _drums({0: 114, 7: (92, {"probability": 0.8}), 17: 108, 24: 100}),
+        "drum2": _drums({8: 118, 24: 116}),
+        "drum3": _drums({i: (78 if i % 4 == 0 else 52, {}) for i in range(0, 32, 2)}),
+        "drum4": _drums(
+            {
+                4: (66, {"probability": 0.6, "sample": 46}),
+                15: (58, {"sample": 46}),
+                22: (62, {"probability": 0.5, "sample": 46}),
+            }
+        ),
+    }
+    bass = _synth({0: (38, 102, 4, {"tie": True}), 8: (38, 80, 2), 16: (34, 102, 4, {"tie": True}), 26: (41, 88, 1.5)})
+    keys1 = _synth({0: ([50, 57, 65], 72, 6), 16: ([48, 55, 64], 72, 6)})
+    keys2 = _synth({0: ([50, 57, 65], 72, 6), 16: ([53, 60, 69], 74, 6), 28: ([55, 62, 70], 60, 3)})
+    return _project(
+        "Pixel Alley",
+        92,
+        11,
+        sounds={
+            "synth1": {"preset": "bass", "name": "Alley Bass", "params": {"filter_frequency": 30}},
+            "synth2": {
+                "preset": "pluck",
+                "name": "Pixel EP",
+                "params": {"env1_attack": 6, "env1_release": 70, "chorus_level": 45},
+            },
+            "drum1": {"sample": 33, "decay": 115},
+            "drum2": {"sample": 35, "decay": 105},
+            "drum3": {"sample": 37, "decay": 76, "level": 84},
+            "drum4": {"sample": 46, "pitch": 70, "level": 80},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": bass, "synth2": keys1}},
+            "p2": {"length": 32, "tracks": drums | {"synth1": bass, "synth2": keys2}},
+        },
+        order=["p1", "p1", "p2", "p2"],
+        fx={
+            "reverb_preset": 1,
+            "delay_preset": 12,
+            "reverb_sends": {"drum2": 30, "drum4": 40},
+            "delay_sends": {"synth2": 15},
+        },
+        swing=62,
+    )
+
+
+def _crunch_time():
+    """Big beat: heavy break, power-chord stabs, distortion lane driving the
+    kick harder through the second pattern, zap FX turnaround."""
+    drums1 = {
+        "drum1": _drums({0: 122, 5: 100, 16: 118, 21: 102, 26: (96, {"probability": 0.7})}),
+        "drum2": _drums({8: 114, 24: 116}),
+        "drum3": _drums({**_every(2, 4, 84), 18: (88, {"sample": 38})}),
+        "drum4": _drums({30: (90, {"sample": 47})}),
+    }
+    drums2 = dict(drums1) | {
+        "drum1": _drums(
+            {0: 122, 5: 100, 16: 118, 21: 102, 26: 96}, params={"distortion": {"0": 20, "16": 60, "28": 100}}
+        ),
+        "drum2": _drums({8: 114, 24: 116, 28: 80, 29: 88, 30: 100, 31: 112}),
+    }
+    stabs = _synth(
+        {
+            0: ([43, 50, 55], 104, 1.5),
+            11: ([43, 50, 55], 88, 0.8),
+            16: ([41, 48, 53], 104, 1.5),
+            27: ([46, 53, 58], 92, 0.8),
+        }
+    )
+    bass = _synth({0: (31, 106, 2), 11: (31, 88, 1), 16: (29, 106, 2), 27: (34, 92, 1)})
+    return _project(
+        "Crunch Time",
+        126,
+        4,
+        sounds={
+            "synth1": {
+                "preset": "bass",
+                "name": "Crunch Bass",
+                "params": {"filter_frequency": 36, "distortion_level": 35},
+            },
+            "synth2": {
+                "preset": "pluck",
+                "name": "Power Stab",
+                "params": {"distortion_level": 45, "env1_release": 35, "filter_frequency": 50},
+            },
+            "drum1": {"sample": 32, "decay": 108},
+            "drum2": {"sample": 34},
+            "drum3": {"sample": 36, "decay": 80},
+            "drum4": {"sample": 47},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums1 | {"synth1": bass, "synth2": stabs}},
+            "p2": {"length": 32, "tracks": drums2 | {"synth1": bass, "synth2": stabs}},
+        },
+        order=["p1", "p2"],
+        fx={"reverb_preset": 2, "delay_preset": 0, "reverb_sends": {"drum2": 28}, "delay_sends": {"synth2": 12}},
+    )
+
+
+def _slow_aurora():
+    """Ambient: a real four-chord progression across two patterns, bell
+    melody with sample flips and a pitch lane, slow pad filter sweep."""
+    pads1 = _synth(
+        {0: ([48, 55, 64, 71], 74, 16), 16: ([45, 52, 60, 67], 72, 16)},
+        macros={"5": {"0": 25, "8": 45, "16": 60, "24": 40}},
+    )
+    pads2 = _synth(
+        {0: ([41, 48, 57, 65], 74, 16), 16: ([43, 50, 59, 67], 76, 16)},
+        macros={"5": {"0": 45, "8": 65, "16": 80, "24": 55}},
+    )
+    bells = {
+        "drum4": _drums(
+            {
+                4: (62, {"sample": 57}),
+                13: (54, {"sample": 62, "probability": 0.6}),
+                20: (58, {"sample": 57, "probability": 0.7}),
+                27: (50, {"sample": 62}),
+            },
+            params={"pitch": {"0": 70, "16": 76}},
+        ),
+    }
+    drums = {
+        "drum1": _drums({0: 88, 20: (72, {"probability": 0.8})}),
+        "drum2": _drums({24: (52, {"sample": 51})}),
+        "drum3": _drums({i: (38 + (i % 8), {"probability": 0.6}) for i in range(2, 32, 4)}),
+        **bells,
+    }
+    sub = _synth({0: (36, 80, 14, {"tie": True}), 16: (33, 78, 14)})
+    return _project(
+        "Slow Aurora",
+        84,
+        8,
+        sounds={
+            "synth1": {
+                "preset": "pad",
+                "name": "Aurora Pad",
+                "params": {"filter_frequency": 18, "env1_attack": 70, "chorus_level": 50},
+            },
+            "synth2": {"preset": "bass", "name": "Aurora Sub", "params": {"filter_frequency": 22}},
+            "drum1": {"sample": 49, "decay": 115},
+            "drum2": {"sample": 51, "decay": 110},
+            "drum3": {"sample": 53, "level": 70},
+            "drum4": {"sample": 57, "level": 76, "decay": 120},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": pads1, "synth2": sub}},
+            "p2": {"length": 32, "tracks": drums | {"synth1": pads2, "synth2": sub}},
+        },
+        order=["p1", "p2"],
+        fx={
+            "reverb_preset": 5,
+            "delay_preset": 14,
+            "reverb_sends": {"synth1": 55, "drum4": 70, "drum2": 60},
+            "delay_sends": {"drum4": 35},
+        },
+    )
+
+
+def _fog_lines():
+    """Trip-hop: brushed snare, sparse kick, sub slides, dark slow-LFO pad,
+    rim ghosts low in the mix."""
+    drums = {
+        "drum1": _drums({0: 104, 9: (84, {"probability": 0.7}), 16: 100}),
+        "drum2": _drums({8: 92, 24: 94}),
+        "drum3": _drums({**_every(2, 4, 44), 14: (70, {"sample": 54})}),
+        "drum4": _drums({5: (40, {"probability": 0.5, "sample": 56}), 21: (44, {"probability": 0.5, "sample": 56})}),
+    }
+    bass = _synth({0: (43, 96, 3, {"tie": True}), 6: (41, 84, 2), 16: (39, 96, 4, {"tie": True}), 24: (38, 88, 3)})
+    pad = _synth({0: ([55, 62, 70], 66, 16), 16: ([53, 60, 68], 64, 16)}, mixer={"reverb_send": {"0": 40, "16": 70}})
+    return _project(
+        "Fog Lines",
+        86,
+        6,
+        sounds={
+            "synth1": {"preset": "bass", "name": "Fog Sub", "params": {"filter_frequency": 26, "portamento_rate": 50}},
+            "synth2": {
+                "preset": "pad",
+                "name": "Fog Pad",
+                "params": {"filter_frequency": 32, "lfo1_rate": 18, "env1_attack": 55},
+            },
+            "drum1": {"sample": 48, "decay": 100},
+            "drum2": {"sample": 51, "pitch": 60},
+            "drum3": {"sample": 52, "decay": 70, "level": 78},
+            "drum4": {"sample": 56, "level": 64, "pan": 44},
+        },
+        patterns={"p1": {"length": 32, "tracks": drums | {"synth1": bass, "synth2": pad}}},
+        order=["p1"],
+        fx={
+            "reverb_preset": 4,
+            "delay_preset": 13,
+            "reverb_sends": {"synth2": 50, "drum2": 45},
+            "delay_sends": {"synth1": 10},
+        },
+        swing=56,
+    )
+
+
+def _still_water():
+    """Near-beatless ambient: heartbeat kick, level-lane pad swells, bell
+    arpeggio on coin-flip probability, long noise wash."""
+    pad1 = _synth({0: ([50, 57, 64, 72], 70, 16)}, mixer={"level": {"0": 60, "8": 90, "16": 110, "24": 75}})
+    pad2 = _synth({0: ([48, 55, 64, 71], 70, 16)}, mixer={"level": {"0": 70, "8": 100, "16": 85, "24": 60}})
+    arp = {i: (62 + [0, 5, 7, 12][(i // 2) % 4], 48, 0.8, {"probability": 0.5}) for i in range(0, 32, 2)}
+    drums = {
+        "drum1": _drums({0: 72, 2: 48}),
+        "drum2": _drums({16: (60, {"sample": 55})}),
+        "drum3": _drums({}),
+        "drum4": _drums({}),
+    }
+    return _project(
+        "Still Water",
+        72,
+        12,
+        sounds={
+            "synth1": {
+                "preset": "pad",
+                "name": "Water Pad",
+                "params": {"filter_frequency": 24, "env1_attack": 85, "env1_release": 110},
+            },
+            "synth2": {
+                "preset": "pluck",
+                "name": "Droplet",
+                "params": {"osc1_wave": 0, "env1_release": 80, "filter_frequency": 55},
+            },
+            "drum1": {"sample": 49, "decay": 127, "pitch": 56, "level": 86},
+            "drum2": {"sample": 55, "decay": 127, "level": 60},
+            "drum3": {"sample": 53},
+            "drum4": {"sample": 57},
+        },
+        patterns={
+            "p1": {"length": 32, "tracks": drums | {"synth1": pad1, "synth2": _synth(arp)}},
+            "p2": {"length": 32, "tracks": drums | {"synth1": pad2, "synth2": _synth(arp)}},
+        },
+        order=["p1", "p2"],
+        fx={
+            "reverb_preset": 5,
+            "delay_preset": 15,
+            "reverb_sends": {"synth2": 70, "drum1": 25, "drum2": 80},
+            "delay_sends": {"synth2": 40},
+        },
+    )
+
+
+def _drift_field():
+    """Dub techno: soft four-floor, dub chord on 2 with a delay-send spike
+    that echoes into the bar, half-note bass, shaker air."""
+    chord = _synth(
+        {2: ([57, 60, 64, 67], 88, 1.5), 18: ([57, 60, 64, 67], 80, 1.5, {"probability": 0.85})},
+        mixer={"delay_send": {"2": 100, "6": 30, "18": 95, "22": 25}},
+    )
+    drums = {
+        "drum1": _drums(_every(0, 8, 100)),
+        "drum2": _drums({8: (70, {"sample": 59}), 24: (72, {"sample": 59})}),
+        "drum3": _drums(_every(4, 8, 64)),
+        "drum4": _drums({i: (36 + (i % 8) * 2, {"probability": 0.65}) for i in range(2, 32, 4)}),
+    }
+    bass = _synth({0: (33, 92, 7, {"tie": True}), 16: (33, 88, 7), 30: (40, 70, 1)})
+    return _project(
+        "Drift Field",
+        118,
+        1,
+        sounds={
+            "synth1": {"preset": "bass", "name": "Drift Sub", "params": {"filter_frequency": 20}},
+            "synth2": {
+                "preset": "pluck",
+                "name": "Dub Chord",
+                "params": {"filter_frequency": 38, "filter_resonance": 30, "chorus_level": 35},
+            },
+            "drum1": {"sample": 48, "decay": 95, "level": 96},
+            "drum2": {"sample": 59, "level": 80},
+            "drum3": {"sample": 52, "decay": 72, "level": 72},
+            "drum4": {"sample": 53, "level": 68},
+        },
+        patterns={"p1": {"length": 32, "tracks": drums | {"synth1": bass, "synth2": chord}}},
+        order=["p1"],
+        fx={
+            "reverb_preset": 5,
+            "delay_preset": 6,
+            "reverb_sends": {"synth2": 45, "drum2": 55},
+            "delay_sends": {"synth2": 60, "drum2": 30},
+        },
+    )
+
+
 def build_projects():
-    SPECS = [
-        # House (Deep bank)
-        ("Neon Harbor", 122, 9, 0, "house"),
-        ("Velvet Loop", 120, 1, 0, "house"),
-        ("Midnight Mall", 124, 12, 0, "house"),
-        ("Glass Garden", 118, 5, 0, "house"),
-        # Techno (Punch bank)
-        ("Concrete Pulse", 132, 0, 1, "techno"),
-        ("Voltage Run", 136, 3, 1, "techno"),
-        ("Iron Orbit", 128, 10, 1, "techno"),
-        ("Strobe Sector", 138, 13, 1, "techno"),
-        # Breaks (Crunch bank)
-        ("Rust Funk", 104, 2, 2, "breaks"),
-        ("Circuit Breaker", 108, 7, 2, "breaks"),
-        ("Crunch Time", 100, 4, 2, "breaks"),
-        ("Pixel Alley", 112, 11, 2, "breaks"),
-        # Ambient (Air bank)
-        ("Slow Aurora", 84, 8, 3, "ambient"),
-        ("Fog Lines", 90, 6, 3, "ambient"),
-        ("Still Water", 78, 12, 3, "ambient"),
-        ("Drift Field", 95, 1, 3, "ambient"),
+    builders = [
+        _neon_harbor,
+        _velvet_loop,
+        _glass_garden,
+        _midnight_mall,
+        _concrete_pulse,
+        _voltage_run,
+        _iron_orbit,
+        _strobe_sector,
+        _rust_funk,
+        _circuit_breaker,
+        _pixel_alley,
+        _crunch_time,
+        _slow_aurora,
+        _fog_lines,
+        _still_water,
+        _drift_field,
     ]
     out = []
-    for var, (name, bpm, color, bank, genre) in enumerate(SPECS):
-        song = parse_song(_demo_song(name, bpm, color, bank, genre, var % 4))
-        out.append((name, song_to_ncs(song)))
+    for build in builders:
+        spec = build()
+        song = parse_song(spec)
+        out.append((spec["name"], song_to_ncs(song)))
     return out
 
 

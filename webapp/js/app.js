@@ -82,12 +82,22 @@ class CircuitApp {
     this.refreshSidebar();
     this.updateLcd();
 
+    // Beat-synced background glow: opacity-only updates on a fixed layer,
+    // so the effect stays on the compositor (no layout/paint per frame).
+    const beatBg = document.getElementById('beat-bg');
     const tick = () => {
       const events = this.seq.drainVisualEvents();
       if (events.length) this.views.applyVisualEvents(events);
       this.views.tickVisuals();
       if (this.pendingProject && this.engine.now() >= this.pendingProject.time) {
         this.loadProjectFromBank(this.pendingProject.idx);
+      }
+      if (this.seq.playing) {
+        const beat = 60 / this.seq.bpm;
+        const phase = (((this.engine.now() - (this.seq.startTime ?? 0)) % beat) + beat) % beat / beat;
+        beatBg.style.opacity = (0.13 * (1 - phase) ** 2.2).toFixed(3);
+      } else if (beatBg.style.opacity !== '0') {
+        beatBg.style.opacity = '0';
       }
       requestAnimationFrame(tick);
     };
@@ -360,9 +370,17 @@ class CircuitApp {
       this.views.render();
     });
 
-    byId('btn-keys').addEventListener('click', () => {
-      this.ui.keyOverlay = !this.ui.keyOverlay;
-      document.getElementById('key-overlay').classList.toggle('visible', this.ui.keyOverlay);
+    const setKeyOverlay = (visible) => {
+      this.ui.keyOverlay = visible;
+      byId('key-overlay').classList.toggle('visible', visible);
+    };
+    byId('btn-keys').addEventListener('click', () => setKeyOverlay(!this.ui.keyOverlay));
+    byId('key-overlay-close').addEventListener('click', () => setKeyOverlay(false));
+    byId('key-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'key-overlay') setKeyOverlay(false); // backdrop click
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.ui.keyOverlay) setKeyOverlay(false);
     });
 
     const applySidebar = (hidden) => {
@@ -630,6 +648,7 @@ class CircuitApp {
     this.ui.currentTrack = t;
     this.trackButtons.forEach((b, i) => b.classList.toggle('active', i === t));
     document.getElementById('device').style.setProperty('--accent', this.views.trackColor(t));
+    document.getElementById('beat-bg').style.setProperty('--beat-color', this.views.trackColor(t));
     this.views.render();
     this.updateKnobs();
   }

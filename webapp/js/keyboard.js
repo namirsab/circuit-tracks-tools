@@ -105,10 +105,12 @@ export function buildKeyOverlay(root) {
     .join('');
   root.innerHTML = `
     <div class="ko-panel">
-      <h3>Keyboard mapping <small>(press / to close)</small></h3>
-      <p>The four keyboard rows play the four pad rows:</p>
+      <button class="ko-close" id="key-overlay-close" title="Close">×</button>
+      <h3>Keyboard mapping <small>(/, Esc, or click outside to close)</small></h3>
+      <p>The four keyboard rows press the four pad rows:</p>
       ${rows}
-      <p><b>Shift+1–8</b> select track · hold <b>Shift</b> for shift functions</p>
+      <p><b>Shift+1–8</b> select track · hold <b>Shift</b> for shift functions
+      (e.g. Shift+Space resumes, Shift+<b>[</b> opens Micro Step, Shift+<b>;</b> Side Chain)</p>
       <div class="ko-fns">${fns}</div>
     </div>`;
 }
