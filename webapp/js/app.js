@@ -113,6 +113,7 @@ class CircuitApp {
       });
     };
     fitGlowToDevice();
+    this.fitGlow = fitGlowToDevice;
     new ResizeObserver(fitGlowToDevice).observe(device);
     new ResizeObserver(fitGlowToDevice).observe(sidebar);
     window.addEventListener('resize', fitGlowToDevice);
@@ -158,20 +159,33 @@ class CircuitApp {
     window.addEventListener('pointerdown', resume, { passive: true });
     window.addEventListener('keydown', resume);
 
-    // Scale the device up on large screens (zoom keeps layout + events
-    // consistent). Never scale below 1 — small screens use the media query.
+    // Scale the whole console — device AND sidebar — up on large screens
+    // (zoom keeps layout + events consistent). The sidebar gets the same
+    // factor so it doesn't look miniature next to the scaled device; its
+    // 100vh max-height is divided back via --ui-zoom in CSS. Never scale
+    // below 1 — small screens use the media query.
     const device = document.getElementById('device');
+    const sidebar = document.getElementById('sidebar');
     const fit = () => {
       device.style.zoom = 1;
-      if (window.innerWidth < 1250) return;
-      const sidebarW = document.body.classList.contains('sidebar-hidden') ? 0 : 440;
-      const pad = 70;
-      const scale = Math.min(
-        (window.innerWidth - sidebarW - pad) / device.offsetWidth,
-        (window.innerHeight - 24) / device.offsetHeight,
-        2.0,
-      );
-      if (scale > 1.02) device.style.zoom = scale;
+      sidebar.style.zoom = 1;
+      document.documentElement.style.setProperty('--ui-zoom', 1);
+      if (window.innerWidth >= 1250) {
+        const sidebarW = document.body.classList.contains('sidebar-hidden')
+          ? 0 : sidebar.offsetWidth + 16; // + flex gap
+        const pad = 48;
+        const scale = Math.min(
+          (window.innerWidth - pad) / (device.offsetWidth + sidebarW),
+          (window.innerHeight - 24) / device.offsetHeight,
+          2.0,
+        );
+        if (scale > 1.02) {
+          device.style.zoom = scale;
+          sidebar.style.zoom = scale;
+          document.documentElement.style.setProperty('--ui-zoom', scale);
+        }
+      }
+      this.fitGlow?.();
     };
     this.fitDevice = fit;
     window.addEventListener('resize', fit);

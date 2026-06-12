@@ -378,7 +378,9 @@ body.sidebar-hidden #sidebar { display: none; }
   padding: 12px 16px;
   font-size: 12px;
   overflow-y: auto;
-  max-height: calc(100vh - 16px);
+  /* vh isn't affected by the JS zoom, so divide it back out (--ui-zoom is
+     set alongside element zoom in app.js fit()). */
+  max-height: calc(100vh / var(--ui-zoom, 1) - 16px);
 }
 #sidebar h2 {
   font-size: 11px;
