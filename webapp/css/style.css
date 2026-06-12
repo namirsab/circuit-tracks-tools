@@ -506,3 +506,16 @@ body.sidebar-hidden #sidebar { display: none; }
   opacity: 0;
   will-change: opacity;
 }
+
+/* ---------- Footer disclaimer ---------- */
+#app-footer {
+  max-width: 900px;
+  margin: 10px auto 18px;
+  padding: 0 16px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #6a6a76;
+  text-align: center;
+}
+#app-footer a { color: #8ee6ff; text-decoration: none; }
+#app-footer a:hover { text-decoration: underline; }

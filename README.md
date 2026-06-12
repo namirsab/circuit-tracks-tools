@@ -184,3 +184,15 @@ docs/
 ## License
 
 [MIT](LICENSE)
+
+## Disclaimer
+
+This is an unofficial, non-commercial fan project by
+[Namir Sayed-Ahmad Baraza](https://namirsab.dev). It is **not affiliated
+with, endorsed, or sponsored by Novation or Focusrite plc**. "Circuit
+Tracks", "Novation", and "Components" are trademarks of their respective
+owners, used here only to describe compatibility. The `.ncs` file format and
+SysEx protocol were independently reverse-engineered from files and MIDI
+traffic produced by the device; no proprietary code or documentation was
+used. The bundled [Web Tracks](webapp/) browser groovebox ships only
+code-generated samples, patches, and projects.

@@ -1625,7 +1625,7 @@ def main():
         print(f"  project_{i:02d}  {name}")
 
     index = {
-        "name": "Circuit Web Starter",
+        "name": "Web Tracks Starter",
         "product": "circuit-tracks",
         "version": "1.0",
         "projects": index_projects,

@@ -1,8 +1,28 @@
-# Circuit Tracks Web
+# Web Tracks
 
-A browser clone of the Novation Circuit Tracks groovebox. Fully self-contained:
-everything it needs lives in this folder, so it can be zipped, hosted, or run
-locally as-is.
+An unofficial, fan-made browser groovebox inspired by the Novation Circuit
+Tracks. Fully self-contained: everything it needs lives in this folder, so it
+can be zipped, hosted, or run locally as-is.
+
+By [Namir Sayed-Ahmad Baraza](https://namirsab.dev). MIT licensed (see the
+repository root `LICENSE`).
+
+## Disclaimer
+
+Web Tracks is a **non-commercial fan project**. It is **not affiliated with,
+endorsed, or sponsored by Novation, Focusrite plc, or any of their
+subsidiaries**. "Circuit Tracks", "Novation", and "Components" are trademarks
+of their respective owners and are used here only to describe compatibility.
+
+- The `.ncs` project format and the Components pack format were independently
+  **reverse-engineered** by observing files the hardware/Components produce.
+  No Novation source code, firmware, or proprietary documentation was used.
+- **All bundled content is generated from code**: the 64 drum samples are
+  synthesized by `scripts/generate_webapp_pack.py` (stdlib DSP, no recordings),
+  and the 128 patches and 16 demo projects are authored in this repository.
+  Nothing here is copied from Novation factory content.
+- The synth engine is an original Web Audio implementation; it approximates
+  the hardware's behaviour but shares no code or DSP with it.
 
 ## Run
 
@@ -18,7 +38,7 @@ and sample fetches without a server.)
 
 ## What's bundled
 
-- `pack/` — the **Circuit Web Starter** pack: 64 drum samples, a full bank
+- `pack/` — the **Web Tracks Starter** pack: 64 drum samples, a full bank
   of 128 synth patches, and 16 demo projects in Novation Components pack
   format (`index.json` + `samples/` + `patches/` + `projects/`). All of it
   is generated from code (`scripts/generate_webapp_pack.py` in the parent

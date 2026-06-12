@@ -1425,7 +1425,7 @@ class CircuitApp {
   exportPack() {
     const entries = [];
     const index = {
-      name: this.packName || 'Circuit Web Pack',
+      name: this.packName || 'Web Tracks Pack',
       product: 'circuit-tracks',
       version: '1.0',
       projects: [], samples: [], patches: [],
