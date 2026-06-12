@@ -501,10 +501,6 @@ body.sidebar-hidden #sidebar { display: none; }
   border-radius: 12px;
 }
 
-@media (max-width: 1250px) {
-  .device { width: 780px; }
-  .knob-wrap { width: 64px; }
-}
 
 /* Save button armed (hardware-style blink while awaiting confirm) */
 @keyframes save-blink {
@@ -637,3 +633,26 @@ body.sidebar-hidden #sidebar { display: none; }
 }
 .welcome-disclaimer a { color: var(--brand-accent); text-decoration: none; }
 #app-footer #about-link { margin-left: 6px; }
+
+/* ---------- Stacked layout (tablets & phones) ---------- */
+/* Below 1100px the sidebar moves under the device and the page scrolls
+   vertically; fit() in app.js then only matches the device width to the
+   screen (scaling down below 1 when needed). Keep this breakpoint in sync
+   with the stackedMQ media query in app.js. */
+@media (max-width: 1099px) {
+  html, body { overflow: auto; height: auto; }
+  #app {
+    flex-direction: column;
+    align-items: center;
+    height: auto;
+  }
+  #sidebar {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 900px; /* match the device width */
+  }
+  /* The glow layer is position:fixed and would drift once the page
+     scrolls; it's also a battery cost on mobile. */
+  #beat-bg { display: none; }
+  #app-footer { position: static; padding: 10px 16px 14px; }
+}

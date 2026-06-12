@@ -163,34 +163,39 @@ class CircuitApp {
     window.addEventListener('pointerdown', resume, { passive: true });
     window.addEventListener('keydown', resume);
 
-    // Scale the whole #app — device, sidebar, padding, gap — up on large
-    // screens as one unit, so big screens get exactly the small-screen
-    // layout magnified (zoom keeps layout + events consistent). #app's
-    // 100vh height is divided back via --ui-zoom in CSS, since vh units
-    // ignore element zoom. Never scale below 1 — small screens use the
-    // media query.
+    // One sizing rule for every screen: zoom #app (device, sidebar,
+    // padding, gap — one unit) so the console fits, scaling up to 2x on
+    // big screens and DOWN below 1 on small ones. Below the stacked
+    // breakpoint (tablets/phones, see the media query in style.css) the
+    // sidebar moves under the device, the page scrolls, and the zoom only
+    // matches the device width. #app's 100vh height is divided back via
+    // --ui-zoom in CSS, since vh units ignore element zoom.
     const appEl = document.getElementById('app');
     const device = document.getElementById('device');
     const sidebar = document.getElementById('sidebar');
+    const stackedMQ = window.matchMedia('(max-width: 1099px)');
     const fit = () => {
       appEl.style.zoom = 1;
       document.documentElement.style.setProperty('--ui-zoom', 1);
-      if (window.innerWidth >= 1250) {
+      let scale;
+      if (stackedMQ.matches) {
+        sidebar.style.maxHeight = ''; // stacked: sidebar flows at full height
+        scale = Math.min((window.innerWidth - 12) / device.offsetWidth, 2.0);
+      } else {
         const sidebarW = document.body.classList.contains('sidebar-hidden')
           ? 0 : sidebar.offsetWidth + 16; // + flex gap
-        const pad = 48;
-        const scale = Math.min(
-          (window.innerWidth - pad) / (device.offsetWidth + sidebarW),
+        scale = Math.min(
+          (window.innerWidth - 48) / (device.offsetWidth + sidebarW),
           (window.innerHeight - 24) / device.offsetHeight,
           2.0,
         );
-        if (scale > 1.02) {
-          appEl.style.zoom = scale;
-          document.documentElement.style.setProperty('--ui-zoom', scale);
-        }
+        // Sidebar never outgrows the device: bottoms align, content scrolls.
+        sidebar.style.maxHeight = `${device.offsetHeight}px`;
       }
-      // Sidebar never outgrows the device: bottoms align, content scrolls.
-      sidebar.style.maxHeight = `${device.offsetHeight}px`;
+      if (Math.abs(scale - 1) > 0.02) {
+        appEl.style.zoom = scale;
+        document.documentElement.style.setProperty('--ui-zoom', scale);
+      }
       this.fitGlow?.();
     };
     this.fitDevice = fit;
