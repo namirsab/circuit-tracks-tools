@@ -6,6 +6,17 @@ Python library that lives in the same repository.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.0] — 2026-06-13
+
+### Added
+
+- **Duplicate on steps** — holding **Duplicate** in the step sequencer
+  (Note, Velocity, Gate, Probability, Micro Step views) now copies a step:
+  the first pad press picks the source, each later press pastes the whole
+  step — notes/hit, velocity, gate, probability, and that step's param
+  locks — onto the target. Mirrors the existing Patterns-view copy/paste,
+  including the synth↔drum guard.
+
 ## [1.0.0] — 2026-06-12
 
 First public release.

@@ -49,6 +49,7 @@ export class Views {
     this.activeScene = -1;
     this.heldScenePad = null;
     this.sceneCopySource = null;
+    this.stepCopySource = null;
     this.assignFlash = null;
     this._lastScenePulse = 0;
     this.samplePressTime = new Map(); // padIdx -> timestamp (drum tap vs press)
@@ -725,6 +726,34 @@ export class Views {
       }
       this.app.lcdMsg(`Step ${stepIdx + 1} cleared`);
       this.app.onPatternEdited?.(t);
+      this.render();
+      return true;
+    }
+
+    // Duplicate: first pad press picks the copy source, later presses paste it
+    // (mirrors the Patterns View copy/paste, but step-to-step).
+    if (this.ui.duplicateHeld) {
+      if (!this.stepCopySource) {
+        this.stepCopySource = { pat, stepIdx };
+        this.app.lcdMsg(`Copy step ${stepIdx + 1}…`);
+      } else {
+        const src = this.stepCopySource;
+        if (src.pat.kind !== pat.kind) {
+          this.app.lcdMsg('Cannot copy between synth and drum tracks');
+        } else {
+          pat.steps[stepIdx] = JSON.parse(JSON.stringify(src.pat.steps[src.stepIdx]));
+          // Move the source step's param locks onto the target position.
+          pat.paramLocks = pat.paramLocks ?? {};
+          for (const m of Object.values(pat.paramLocks)) delete m[stepIdx];
+          for (const [param, m] of Object.entries(src.pat.paramLocks ?? {})) {
+            if (m[src.stepIdx] !== undefined) {
+              (pat.paramLocks[param] ??= {})[stepIdx] = JSON.parse(JSON.stringify(m[src.stepIdx]));
+            }
+          }
+          this.app.lcdMsg(`Pasted to step ${stepIdx + 1}`);
+          this.app.onPatternEdited?.(t);
+        }
+      }
       this.render();
       return true;
     }

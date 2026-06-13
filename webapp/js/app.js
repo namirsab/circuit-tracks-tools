@@ -398,6 +398,7 @@ class CircuitApp {
       this.ui.duplicateHeld = false;
       this.ui.copySource = null;
       this.views.sceneCopySource = null;
+      this.views.stepCopySource = null;
       dupBtn.classList.remove('active');
     };
     dupBtn.addEventListener('pointerup', dupUp);
