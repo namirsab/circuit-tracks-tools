@@ -10,6 +10,7 @@ import { buildPanel, buildSidebar } from './ui/panel.js';
 import { Views } from './ui/views.js';
 import { KeyboardInput, buildKeyOverlay } from './keyboard.js';
 import { buildWelcome, bindWelcome } from './welcome.js';
+import { Persistence, showRestorePrompt } from './persistence.js';
 import { readZip, writeZip } from './zip.js';
 import { ncsToMidi } from './scales.js';
 import {
@@ -51,6 +52,10 @@ class CircuitApp {
     this.packName = null;
     this.pendingProject = null;
     this._slotsDirty = false;
+    this.persistence = new Persistence();
+    this._restoring = false;
+    this._saveTimer = null;
+    this._workingDirty = false;
     this.masterVolumeValue = 102;
     this.masterFilterValue = 64;
     this.shiftLatched = false;
@@ -75,9 +80,9 @@ class CircuitApp {
     this.bindDragDrop();
     this.bindResume();
 
-    this.samplesReady = this.loadPackFromUrl('pack/')
+    this.samplesReady = this.initSession()
       .catch((err) => {
-        console.warn('Pack loading failed:', err.message);
+        console.warn('Session init failed:', err.message);
       })
       .finally(() => this.refreshSidebar());
 
@@ -633,9 +638,14 @@ class CircuitApp {
     const fresh = !base;
     if (fresh) {
       // Fresh in-app project: the blank template supplies the unmodeled bytes.
-      const res = await fetch('data/Empty.ncs');
-      if (!res.ok) throw new Error('No NCS template available');
-      base = await res.arrayBuffer();
+      // Cached after the first fetch — autosave reserialises ~once a second,
+      // and serializeNCS only reads from the template, so one copy is safe.
+      if (!this._emptyTemplate) {
+        const res = await fetch('data/Empty.ncs');
+        if (!res.ok) throw new Error('No NCS template available');
+        this._emptyTemplate = await res.arrayBuffer();
+      }
+      base = this._emptyTemplate;
     }
     // Sync live state that isn't written through to the model.
     this.project.tempo = this.seq.bpm;
@@ -648,6 +658,99 @@ class CircuitApp {
       this.project[s === 0 ? 'synth1Patch' : 'synth2Patch'] = raw;
     }
     return serializeNCS(this.project, base, { freshScenes: fresh });
+  }
+
+  // ---------- Session persistence ----------
+  // On load, offer to restore the previous session from browser storage;
+  // otherwise fall back to the bundled pack (the original behaviour).
+  async initSession() {
+    let saved = null;
+    try {
+      await this.persistence.open();
+      saved = await this.persistence.loadAll();
+    } catch (err) {
+      console.warn('Persistence load failed:', err.message);
+    }
+    if (saved && (saved.pack || saved.working)) {
+      if (await showRestorePrompt()) return this.restoreSession(saved);
+      await this.persistence.clear();
+    }
+    await this.loadPackFromUrl('pack/');
+  }
+
+  // Rebuild the workspace from a stored snapshot: pack first (samples, patches,
+  // saved slots) through the normal load path, then the live working project.
+  async restoreSession(saved) {
+    this._restoring = true;
+    try {
+      if (saved.pack?.index) {
+        await this.applyPackIndex(saved.pack.index, async (url) => {
+          const buf = saved.pack.buffers[url];
+          if (!buf) throw new Error(`Missing ${url}`);
+          return buf;
+        }, { quiet: true });
+        if (saved.pack.packName) this.packName = saved.pack.packName;
+      } else {
+        await this.loadPackFromUrl('pack/'); // working-only session: samples baseline
+      }
+      if (saved.working?.bytes) {
+        // applyProject (via loadProjectFromArrayBuffer) resets currentProjectIdx,
+        // so restore the slot pointer after it.
+        this.loadProjectFromArrayBuffer(saved.working.bytes.slice(0), saved.working.name);
+        this.ui.currentProjectIdx = saved.working.idx ?? null;
+      }
+      this.lcdMsg('Restored last session');
+    } catch (err) {
+      console.warn('Restore failed:', err.message);
+      this.lcdMsg('Restore failed — loading bundled pack');
+      await this.loadPackFromUrl('pack/');
+    } finally {
+      this._restoring = false;
+      this.views.render();
+    }
+  }
+
+  // Live-project autosave: debounced so a burst of edits coalesces into one
+  // write. Hooked into the central edit paths (onPatternEdited, knobChanged)
+  // and the direct project mutations in the views.
+  markProjectDirty() {
+    if (this._restoring) return;
+    this._workingDirty = true;
+    clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => this.flushWorking(), 1000);
+  }
+
+  async flushWorking() {
+    if (this._restoring || !this._workingDirty) return;
+    clearTimeout(this._saveTimer);
+    this._workingDirty = false; // edits during the async save re-set this below
+    try {
+      const bytes = await this.buildProjectBytes();
+      await this.persistence.saveWorking({
+        bytes: bytes.slice().buffer, // fresh ArrayBuffer for structured clone
+        idx: this.ui.currentProjectIdx ?? null,
+        name: this.project.name || 'Project',
+      });
+    } catch (err) {
+      this._workingDirty = true; // failed — let a later flush retry
+      console.warn('Autosave failed:', err.message);
+    }
+  }
+
+  // Snapshot the whole pack (saved slots, drum samples, patches) to storage.
+  // These change rarely, so this is called on change rather than per-edit.
+  async snapshotPack() {
+    if (this._restoring) return;
+    try {
+      const { index, files } = this.buildPackData();
+      // buildPackData hands back fresh Uint8Arrays and IndexedDB structure-
+      // clones on put, so the underlying buffers can go straight in.
+      const buffers = {};
+      for (const f of files) buffers[f.url] = f.data.buffer;
+      await this.persistence.savePack({ index, buffers, packName: this.packName });
+    } catch (err) {
+      console.warn('Pack snapshot failed:', err.message);
+    }
   }
 
   downloadBlob(blob, filename) {
@@ -925,6 +1028,7 @@ class CircuitApp {
   knobChanged(i, v) {
     if (this.ui.clearHeld) {
       this.clearKnobLock(i);
+      this.markProjectDirty();
       return;
     }
     // Hold a step + turn a knob = lock that value to the held step without
@@ -936,6 +1040,7 @@ class CircuitApp {
         pat.paramLocks = pat.paramLocks ?? {};
         (pat.paramLocks[target.key] = pat.paramLocks[target.key] ?? {})[this.ui.heldStep] = v;
         this.lcdMsg(`Step ${this.ui.heldStep + 1} ${target.key}: ${v}`);
+        this.markProjectDirty();
         return;
       }
     }
@@ -996,6 +1101,7 @@ class CircuitApp {
     }
     // Knob movements are recorded as per-step locks while in Record Mode.
     if (this.ui.recording && this.seq.playing) this.recordKnobLock(i, v);
+    this.markProjectDirty();
     this.updateKnobLeds();
   }
 
@@ -1165,6 +1271,7 @@ class CircuitApp {
     if (synthIdx === 0) this.project.synth1Patch = raw;
     else if (synthIdx === 1) this.project.synth2Patch = raw;
     this.lcdMsg(`${this.trackName(synthIdx)}: ${patch.name || filename}`);
+    this.markProjectDirty();
     this.refreshSidebar();
     this.updateKnobs();
     return patch;
@@ -1232,9 +1339,21 @@ class CircuitApp {
       this.loadFiles(files, syxTarget);
     }, true);
 
-    // Saved slots live in memory only — warn before the page unloads if
-    // there is unexported slot data.
+    // Best-effort final flush of a pending live-project edit when the tab is
+    // hidden or unloaded. flushWorking() self-gates on _workingDirty, so this
+    // is a no-op unless there's a trailing edit the ~1s debounce hasn't yet
+    // written — it never resurrects storage after a "Start fresh". The pack is
+    // already snapshotted on every change, so it isn't re-saved here. (Async
+    // IndexedDB writes aren't guaranteed on unload, so visibilitychange — fired
+    // on tab switch / app close — is the more reliable hook.)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.flushWorking();
+    });
+
+    // Saved slots live in memory only — warn before the page unloads if there
+    // is unexported (to-disk) slot data.
     window.addEventListener('beforeunload', (e) => {
+      this.flushWorking();
       if (this._slotsDirty) {
         e.preventDefault();
         e.returnValue = '';
@@ -1275,6 +1394,7 @@ class CircuitApp {
         if (!f) throw new Error(`Missing ${url}`);
         return f.arrayBuffer();
       });
+      this.snapshotPack();
     } catch (err) {
       this.lcdMsg(`Pack load failed: ${err.message}`);
       console.warn('Pack load failed:', err);
@@ -1292,6 +1412,7 @@ class CircuitApp {
         if (!e) throw new Error(`Missing ${url}`);
         return e();
       });
+      this.snapshotPack();
     } catch (err) {
       this.lcdMsg(`Pack load failed: ${err.message}`);
       console.warn(`Pack load failed (${filename}):`, err);
@@ -1387,6 +1508,7 @@ class CircuitApp {
     };
     this._slotsDirty = true;
     this.lcdMsg(`${name} → slot ${idx + 1}`);
+    this.snapshotPack();
     this.views.render();
   }
 
@@ -1420,6 +1542,7 @@ class CircuitApp {
       this.ui.currentProjectIdx = slot;
       this._slotsDirty = true;
       this.lcdMsg(`Saved to slot ${slot + 1}`);
+      this.snapshotPack();
     } catch (err) {
       this.lcdMsg(`Save failed: ${err.message}`);
     }
@@ -1446,31 +1569,42 @@ class CircuitApp {
     this.lcdMsg('Patches exported as .syx');
   }
 
-  // Bundle the current bank — samples, patches, and every stored project
-  // slot — into a .circuittrackspack (zipped Components pack).
-  exportPack() {
-    const entries = [];
+  // Enumerate the current bank — samples, patches, every stored project slot —
+  // into a portable pack index + binary files (url-keyed, the same paths the
+  // loader expects). Shared by exportPack (→ zip) and snapshotPack (→ storage).
+  buildPackData() {
     const index = {
       name: this.packName || 'Web Tracks Pack',
       product: 'circuit-tracks',
       version: '1.0',
       projects: [], samples: [], patches: [],
     };
+    const files = [];
     this.projectBank.forEach((e, i) => {
       if (!e) return;
-      index.projects.push({ name: e.name, url: `projects/project_${i}.ncs` });
-      entries.push({ name: `projects/project_${i}.ncs`, data: new Uint8Array(e.buf) });
+      const url = `projects/project_${i}.ncs`;
+      index.projects.push({ name: e.name, url });
+      files.push({ url, data: new Uint8Array(e.buf) });
     });
     this.drums.rawBuffers.forEach((raw, i) => {
       if (!raw) return;
-      index.samples.push({ name: this.drums.names[i] || `sample_${i}`, url: `samples/sample_${i}.wav` });
-      entries.push({ name: `samples/sample_${i}.wav`, data: new Uint8Array(raw) });
+      const url = `samples/sample_${i}.wav`;
+      index.samples.push({ name: this.drums.names[i] || `sample_${i}`, url });
+      files.push({ url, data: new Uint8Array(raw) });
     });
     this.patchBank.forEach((p, i) => {
       if (!p.bytes) return;
-      index.patches.push({ name: p.name, url: `patches/patch_${i}.syx` });
-      entries.push({ name: `patches/patch_${i}.syx`, data: new Uint8Array(p.bytes) });
+      const url = `patches/patch_${i}.syx`;
+      index.patches.push({ name: p.name, url });
+      files.push({ url, data: new Uint8Array(p.bytes) });
     });
+    return { index, files };
+  }
+
+  // Bundle the current bank into a .circuittrackspack (zipped Components pack).
+  exportPack() {
+    const { index, files } = this.buildPackData();
+    const entries = files.map((f) => ({ name: f.url, data: f.data }));
     entries.push({ name: 'index.json', data: new TextEncoder().encode(JSON.stringify(index, null, 2)) });
     this.downloadBlob(writeZip(entries), `${index.name.replace(/\s+/g, '')}.circuittrackspack`);
     this._slotsDirty = false;
@@ -1515,7 +1649,7 @@ class CircuitApp {
     if (!playing) this.views.clearPlayheads();
   }
 
-  onPatternEdited() { /* hook for future undo/save */ }
+  onPatternEdited() { this.markProjectDirty(); }
 
   // A scene became current during playback (queued switch or chain advance).
   onSceneChanged(sceneIdx) {

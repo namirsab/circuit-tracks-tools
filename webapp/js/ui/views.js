@@ -424,6 +424,7 @@ export class Views {
   saveColorPressed(i) {
     if (i >= PROJECT_COLORS.length) return;
     this.project.color = i;
+    this.app.markProjectDirty?.();
     this.render();
   }
 
@@ -667,6 +668,7 @@ export class Views {
           this.project.drumConfigs[drumIdx].patchSelect = sampleIdx;
           this.app.drums.applyConfig(drumIdx, { patchSelect: sampleIdx });
           this.app.lcdMsg(`D${drumIdx + 1}: ${this.app.drums.sampleName(sampleIdx)}`);
+          this.app.markProjectDirty?.();
           this.app.refreshSidebar();
         }
       }
@@ -1034,6 +1036,7 @@ export class Views {
       pat.settings.direction = i - 24;
       this.app.lcdMsg(`Direction: ${['Forward', 'Reverse', 'Ping-Pong', 'Random'][i - 24]}`);
     }
+    this.app.markProjectDirty?.();
     this.render();
   }
 
@@ -1044,6 +1047,7 @@ export class Views {
     if (this.ui.clearHeld) {
       this.app.clearPattern(this.project.patterns[t][patIdx]);
       this.app.lcdMsg(`${this.app.trackName(t)} pattern ${patIdx + 1} cleared`);
+      this.app.markProjectDirty?.();
       this.render();
       return;
     }
@@ -1060,6 +1064,7 @@ export class Views {
           this.project.patterns[t][patIdx] =
             JSON.parse(JSON.stringify(this.project.patterns[src.trackId][src.patIdx]));
           this.app.lcdMsg(`Pasted to ${this.app.trackName(t)} pattern ${patIdx + 1}`);
+          this.app.markProjectDirty?.();
         } else {
           this.app.lcdMsg('Cannot copy between synth and drum tracks');
         }
@@ -1076,6 +1081,7 @@ export class Views {
         this.project.patternChains[t] = { start: lo, end: hi };
         this.ui.currentPattern[t] = lo;
         this.app.lcdMsg(`${this.app.trackName(t)} chain ${lo + 1}-${hi + 1}`);
+        this.app.markProjectDirty?.();
         this.render();
         return;
       }
@@ -1108,6 +1114,7 @@ export class Views {
       scenes[idx].trackChains = Array.from({ length: 8 }, () => ({ start: 0, end: 0 }));
       scenes[idx].flags = 0;
       this.app.lcdMsg(`Scene ${idx + 1} cleared`);
+      this.app.markProjectDirty?.();
       return;
     }
     if (this.ui.duplicateHeld) {
@@ -1118,6 +1125,7 @@ export class Views {
         scenes[idx].trackChains = scenes[this.sceneCopySource].trackChains.map((c) => ({ ...c }));
         scenes[idx].flags = scenes[this.sceneCopySource].flags;
         this.app.lcdMsg(`Scene ${this.sceneCopySource + 1} copied to ${idx + 1}`);
+        this.app.markProjectDirty?.();
       }
       return;
     }
@@ -1135,6 +1143,7 @@ export class Views {
       scenes[idx].flags = 1;
       this.assignFlash = { scene: idx, until: performance.now() + 450 };
       this.app.lcdMsg(`Scene ${idx + 1} stored`);
+      this.app.markProjectDirty?.();
       return;
     }
     if (this.heldScenePad != null && this.heldScenePad !== idx) {
@@ -1148,6 +1157,7 @@ export class Views {
 
   selectScenes(start, end) {
     this.project.sceneChain = { start, end };
+    this.app.markProjectDirty?.();
     this.activeScene = start;
     const label = end > start ? `Scenes ${start + 1}-${end + 1}` : `Scene ${start + 1}`;
     if (this.app.seq.playing) {
@@ -1190,6 +1200,7 @@ export class Views {
       this.app.lcdMsg(`FX ${fx.fxBypass ? 'off' : 'on'}`);
       this.app.refreshSidebar();
     }
+    this.app.markProjectDirty?.();
     this.render();
   }
 
@@ -1232,6 +1243,7 @@ export class Views {
       this.project.scaleType = i - 16;
       this.app.lcdMsg(`Scale: ${SCALE_TYPES[i - 16].name}`);
     }
+    this.app.markProjectDirty?.();
     this.app.refreshSidebar();
     this.render();
   }
@@ -1253,6 +1265,7 @@ export class Views {
           this.app.drums.play(drumIdx, this.app.engine.now(), 110);
           this.ui.samplePage[drumIdx] = Math.floor(idx / 16);
           this.app.lcdMsg(`D${drumIdx + 1}: ${this.app.drums.sampleName(idx)}`);
+          this.app.markProjectDirty?.();
           this.app.refreshSidebar();
         }
       }
