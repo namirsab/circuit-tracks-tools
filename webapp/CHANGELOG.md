@@ -6,6 +6,18 @@ Python library that lives in the same repository.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.0] — 2026-06-14
+
+### Added
+
+- **Session persistence** — the workspace is now saved to the browser
+  (IndexedDB) so an accidental reload no longer throws away your work. The
+  live project autosaves continuously (debounced after edits), and the full
+  pack — saved bank slots, drum samples, and patches — is snapshotted when it
+  changes and on tab close. On the next visit, if a saved session exists, a
+  prompt offers to **Restore** it or **Start fresh** from the bundled pack.
+  Degrades gracefully when storage is unavailable (e.g. private browsing).
+
 ## [1.1.0] — 2026-06-13
 
 ### Added

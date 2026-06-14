@@ -562,7 +562,8 @@ body.sidebar-hidden #sidebar { display: none; }
 #app-footer a:hover { text-decoration: underline; }
 
 /* ---------- Welcome overlay ---------- */
-#welcome-overlay {
+#welcome-overlay,
+#restore-overlay {
   position: fixed;
   inset: 0;
   background: rgba(8,8,12,.88);
@@ -571,7 +572,27 @@ body.sidebar-hidden #sidebar { display: none; }
   justify-content: center;
   z-index: 55;
 }
-#welcome-overlay.visible { display: flex; }
+#welcome-overlay.visible,
+#restore-overlay.visible { display: flex; }
+.restore-panel { max-width: 460px; text-align: center; }
+.restore-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 18px;
+}
+.restore-actions .welcome-go { margin: 0; }
+.restore-fresh {
+  background: transparent;
+  color: #b8b8c4;
+  border: 1px solid #3a3a4c;
+  border-radius: 8px;
+  font-size: 13px;
+  padding: 10px 20px;
+  cursor: pointer;
+}
+.restore-fresh:hover { border-color: #55556a; color: #e8e8ee; }
 .welcome-panel {
   position: relative;
   background: #22222c;
