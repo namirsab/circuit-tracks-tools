@@ -6,6 +6,19 @@ Python library that lives in the same repository.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.1] — 2026-06-16
+
+### Fixed
+
+- **Audio engine no longer collapses under heavy playback** — with several
+  tracks, sounds, and effects running, all sound could cut out (and the whole
+  UI slow down) until you stopped and waited. Voice stealing was a no-op for
+  notes already in their release tail, so the polyphony cap was never enforced
+  and voices piled up (100+ on one track) until the audio thread choked and the
+  context clock stalled. Stolen voices are now reclaimed immediately. Synth
+  polyphony is also capped at 6 voices per synth to match the hardware, and
+  out-of-range parameter values can no longer poison the audio graph.
+
 ## [1.2.0] — 2026-06-14
 
 ### Added
