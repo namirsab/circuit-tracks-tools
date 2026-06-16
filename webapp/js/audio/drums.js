@@ -2,7 +2,9 @@
 // pitch/decay/distortion/EQ and per-hit velocity/sample-flip/p-locks.
 import { makeDistortionCurve } from './fx.js';
 
-const clamp127 = (v) => Math.max(0, Math.min(127, v));
+// Guards NaN as well as range: Math.max(0, Math.min(127, NaN)) is NaN, which
+// would silently poison any AudioParam it reaches, so non-finite values snap to 0.
+const clamp127 = (v) => (Number.isFinite(v) ? Math.max(0, Math.min(127, v)) : 0);
 
 export class DrumEngine {
   constructor(engine) {

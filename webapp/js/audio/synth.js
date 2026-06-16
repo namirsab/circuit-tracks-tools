@@ -6,9 +6,11 @@ import { OSC_WAVEFORMS, MACRO_DESTINATIONS, lfoSyncToBeats } from '../constants.
 import { makeDistortionCurve } from './fx.js';
 import { initPatch } from '../patch.js';
 
-const MAX_VOICES = 12;
+const MAX_VOICES = 6; // matches the Circuit Tracks hardware: 6-voice polyphony per synth
 
-const clamp127 = (v) => Math.max(0, Math.min(127, v));
+// Guards NaN as well as range: Math.max(0, Math.min(127, NaN)) is NaN, which
+// would silently poison any AudioParam it reaches, so non-finite values snap to 0.
+const clamp127 = (v) => (Number.isFinite(v) ? Math.max(0, Math.min(127, v)) : 0);
 const midiToHz = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
 function oscType(waveIndex) {
@@ -203,6 +205,37 @@ export class SynthTrack {
     this.macroPositions = patch.macros.map((m) => m.position);
     this.applyPatchFx();
     this.applyLfos();
+    this.updateActiveVoices();
+  }
+
+  // Live-update currently-sounding voices so held notes reflect patch edits in
+  // real time. Time-shaped stages already in flight (envelope attack/decay)
+  // can't be rewound, but the steady-state controls — filter cutoff/resonance,
+  // oscillator/noise levels, fine detune — track edits while a key is held.
+  updateActiveVoices() {
+    if (!this.voices.length) return;
+    const now = this.ctx.currentTime;
+    const cutoff = cutoffHz(this.param('filter_frequency'));
+    const reso = this.param('filter_resonance') / 127;
+    const l1 = this.param('osc1_level') / 127;
+    const l2 = this.param('osc2_level') / 127;
+    const ln = this.param('noise_level') / 127;
+    const sum = Math.max(0.4, l1 + l2 + ln);
+    const osc1Cents = this.param('osc1_cents') - 64;
+    const osc2Cents = this.param('osc2_cents') - 64;
+    for (const voice of this.voices) {
+      if (voice.released) continue;
+      for (const f of voice.filters) {
+        f.frequency.setTargetAtTime(Math.min(20000, cutoff * voice.envBoost), now, 0.02);
+        f.Q.setTargetAtTime(0.5 + reso * 14, now, 0.02);
+      }
+      voice.g1?.gain.setTargetAtTime(l1 / sum, now, 0.02);
+      voice.g2?.gain.setTargetAtTime(l2 / sum, now, 0.02);
+      voice.gn?.gain.setTargetAtTime(ln / sum, now, 0.02);
+      // Intrinsic detune; mod-matrix sources stay summed on top of it.
+      voice.osc1.detune.setTargetAtTime(osc1Cents, now, 0.02);
+      voice.osc2.detune.setTargetAtTime(osc2Cents, now, 0.02);
+    }
   }
 
   // Summed macro contribution for a destination name. Each target ramps from
@@ -551,7 +584,8 @@ export class SynthTrack {
     noise.start(time);
 
     const voice = {
-      note: midiNote, time, osc1, osc2, noise, amp, filters, modConnections, modSources, envSources,
+      note: midiNote, time, osc1, osc2, noise, amp, filters, g1, g2, gn,
+      modConnections, modSources, envSources,
       rel, baseCut, ampEnv, envBoost: 1, released: false,
     };
     this.voices.push(voice);
@@ -605,16 +639,26 @@ export class SynthTrack {
     voice.osc1.onended = () => this.disposeVoice(voice);
   }
 
+  // Steal the oldest voice when over MAX_VOICES. Reclaim it SYNCHRONOUSLY:
+  // remove it from the array and orphan it from the bus right now, rather than
+  // waiting on a scheduled stop + onended. Sequenced notes are marked released
+  // the instant they're scheduled, with osc.stop() set ~8 s out (releaseAt +
+  // long release tail). Trying to reschedule that stop earlier proved
+  // unreliable, so voices piled up (100+) until the render thread choked and
+  // the context clock stalled. disposeVoice() disconnects the voice's output,
+  // so an orphaned subgraph (no path to destination) stops being rendered
+  // immediately — freeing CPU and enforcing the cap regardless of stop timing.
+  // A brief click on a stolen voice is the standard voice-stealing trade-off,
+  // and only happens under heavy polyphony (≥ MAX_VOICES on one track).
   killVoice(voice, time) {
-    if (!voice.released) {
-      voice.released = true;
-      voice.amp.gain.cancelScheduledValues(time);
-      voice.amp.gain.setTargetAtTime(0, time, 0.01);
-      voice.osc1.stop(time + 0.1);
-      voice.osc2.stop(time + 0.1);
-      voice.noise.stop(time + 0.1);
-      voice.osc1.onended = () => this.disposeVoice(voice);
-    }
+    voice.released = true;
+    const t = Math.max(this.ctx.currentTime, voice.time) + 0.001;
+    try {
+      voice.osc1.stop(t);
+      voice.osc2.stop(t);
+      voice.noise.stop(t);
+    } catch { /* not started / already stopped */ }
+    this.disposeVoice(voice);
   }
 
   disposeVoice(voice) {
