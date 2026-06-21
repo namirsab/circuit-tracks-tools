@@ -61,6 +61,37 @@ patch = PatchBuilder.preset_pad(cutoff=80, attack=40, release=90)
 
 See the [API Reference](src/circuit_tracks/API.md) for full library documentation.
 
+## Quick Start: Command Line
+
+A command-line tool, `circuit-tracks`, allows easy shell scripting with the Circuit tracks
+
+```bash
+usage: circuit-tracks [-h] [-m MIDI_NAME] [-r] [-b RESUME_BPM]
+                      {list_directory,receive_ncs_project,send_ncs_project,send_patch_to_slot,request_current_patch,send_current_patch,save_patch_to_slot,send_sample,receive_sample,clear_sample_slot}
+                      ...
+
+positional arguments:
+  {list_directory,receive_ncs_project,send_ncs_project,send_patch_to_slot,request_current_patch,send_current_patch,save_patch_to_slot,send_sample,receive_sample,clear_sample_slot}
+    list_directory
+    receive_ncs_project
+    send_ncs_project
+    send_patch_to_slot
+    request_current_patch
+    send_current_patch
+    save_patch_to_slot
+    send_sample
+    receive_sample
+    clear_sample_slot
+
+options:
+  -h, --help            show this help message and exit
+  -m MIDI_NAME, --midi-name MIDI_NAME
+  -r, --resume          Run a MIDI continue after operation with clock delay.
+                        Useful for blocking operation. Only work with external
+                        clock
+  -b RESUME_BPM, --resume-bpm RESUME_BPM
+```
+
 ## Quick Start: MCP Server
 
 The MCP server runs as a subprocess launched by your AI agent. The easiest setup uses [uvx](https://docs.astral.sh/uv/guides/tools/) (requires [uv](https://docs.astral.sh/uv/getting-started/installation/)):

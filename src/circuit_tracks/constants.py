@@ -676,8 +676,28 @@ FACTORY_DRUM_SAMPLES = {
     63: "Melodic D4",
 }
 
+# Sub-commands (Host → Device)
+_SUBCMD_WRITE_INIT = 0x01
+_SUBCMD_WRITE_DATA = 0x02
+_SUBCMD_WRITE_FINISH = 0x03
+_SUBCMD_SET_FILENAME = 0x07
+_SUBCMD_QUERY_INFO = 0x09
+_SUBCMD_DIR_CONTROL = 0x0B
+_SUBCMD_OPEN_SESSION = 0x40
+_SUBCMD_CLOSE_SESSION = 0x41
+
+# Sub-commands (Device → Host)
+_SUBCMD_ACK = 0x04
+_SUBCMD_FILE_ENTRY = 0x0C
+
+# File management protocol command group
+_CMD_GROUP = 0x03
+
 # --- User-configurable sample map ---
 SAMPLE_MAP_PATH = Path(os.path.expanduser("~/.config/circuit-mcp/drum_samples.json"))
+
+# Common SysEx header for file management protocol
+_SYSEX_HEADER = SYSEX_MANUFACTURER_ID + [SYSEX_PRODUCT_TYPE, SYSEX_PRODUCT_NUMBER, _CMD_GROUP]
 
 
 def load_drum_sample_names() -> dict[int, str]:
@@ -719,3 +739,5 @@ def save_drum_sample_names(samples: dict[int, str]) -> Path:
         existing[str(k)] = v
     SAMPLE_MAP_PATH.write_text(json.dumps({"samples": existing}, indent=2) + "\n")
     return SAMPLE_MAP_PATH
+
+
