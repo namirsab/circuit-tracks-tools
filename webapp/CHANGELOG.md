@@ -6,6 +6,14 @@ Python library that lives in the same repository.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.2] — 2026-06-30
+
+### Added
+
+- **Social share previews** — shared links now render a rich card (Open Graph
+  and Twitter/X tags) with a branded 1200×630 preview image, title, and
+  description instead of a bare URL. The image lives at `og-image.png`.
+
 ## [1.2.1] — 2026-06-16
 
 ### Fixed
