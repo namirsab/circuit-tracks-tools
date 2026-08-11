@@ -105,16 +105,19 @@ and round-trips of all tested factory/user projects are now byte-exact.
   `MCPServer` API), which broke the server import and CI. The server stays on
   the 1.x line until it is migrated to the 2.0 API.
 
-## [Unreleased]
+## [0.3.0] — 2026-08-11
 
 ### Changed
 
+- **Breaking (mcp extra):** the `mcp` optional dependency now requires the MCP
+  Python SDK 2.x (`mcp[cli]>=2,<3`, previously `>=1.9.0,<2`). Reinstall with
+  `pip install -e ".[mcp]" --upgrade` to pick up the new SDK.
 - Migrated the MCP server from `FastMCP` to the MCP Python SDK 2.0 `MCPServer`
-  API and lifted the `mcp` optional dependency pin to `>=2,<3`. The tool
-  decorator API, stdio transport, and pre-handler `SongSchema` validation
-  behave the same on the new API.
+  API. The tool decorator API, stdio transport, and pre-handler `SongSchema`
+  validation behave the same on the new API. Verified against hardware:
+  full song load, sequencer playback, and NCS project export over SysEx.
 
-[Unreleased]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.2.1...HEAD
+[0.3.0]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.1.0...v0.1.1
