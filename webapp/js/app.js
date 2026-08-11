@@ -4,10 +4,11 @@ import { SynthTrack } from './audio/synth.js';
 import { DrumEngine } from './audio/drums.js';
 import { Sequencer } from './sequencer.js';
 import { parseNCS, serializeNCS } from './ncs.js';
-import { decodePatch, parseSyxPatch } from './patch.js';
+import { decodePatch, parseSyxPatch, encodePatch } from './patch.js';
 import { defaultProject, UIState } from './state.js';
 import { buildPanel, buildSidebar } from './ui/panel.js';
 import { Views } from './ui/views.js';
+import { PatchEditor } from './ui/patch-editor.js';
 import { KeyboardInput, buildKeyOverlay } from './keyboard.js';
 import { buildWelcome, bindWelcome } from './welcome.js';
 import { Persistence, showRestorePrompt } from './persistence.js';
@@ -73,6 +74,10 @@ class CircuitApp {
 
     this.views = new Views(this);
     new KeyboardInput(this);
+
+    this.appMode = 'tracks';
+    this.patchEditor = new PatchEditor(this);
+    this.patchEditor.buildDom(document.getElementById('patch-builder'));
 
     this.bindPads();
     this.bindButtons();
@@ -180,6 +185,7 @@ class CircuitApp {
     const sidebar = document.getElementById('sidebar');
     const stackedMQ = window.matchMedia('(max-width: 1099px)');
     const fit = () => {
+      if (this.appMode === 'patch') return; // device hidden; nothing to size
       appEl.style.zoom = 1;
       document.documentElement.style.setProperty('--ui-zoom', 1);
       let scale;
@@ -443,6 +449,7 @@ class CircuitApp {
       this.ui.keyOverlay = visible;
       byId('key-overlay').classList.toggle('visible', visible);
     };
+    byId('btn-patch').addEventListener('click', () => this.setAppMode('patch'));
     byId('btn-keys').addEventListener('click', () => setKeyOverlay(!this.ui.keyOverlay));
     byId('key-overlay-close').addEventListener('click', () => setKeyOverlay(false));
     byId('key-overlay').addEventListener('click', (e) => {
@@ -809,6 +816,54 @@ class CircuitApp {
     this.updateStepPageButton();
     this.views.render();
     this.updateKnobs();
+  }
+
+  // Toggle between the hardware device ('tracks') and the Patch Builder screen.
+  setAppMode(mode) {
+    this.appMode = mode;
+    const patchEl = document.getElementById('patch-builder');
+    const appEl = document.getElementById('app');
+    const isPatch = mode === 'patch';
+    patchEl.classList.toggle('hidden', !isPatch);
+    appEl.classList.toggle('hidden', isPatch);
+    if (isPatch) {
+      // Edit the current synth track if one is selected, else Synth 1.
+      this.patchEditor.load(this.ui.currentTrack < 2 ? this.ui.currentTrack : 0);
+    } else {
+      this.patchEditor.allNotesOff();
+      requestAnimationFrame(() => this.fitDevice?.());
+    }
+  }
+
+  // Single mutation sink for patch edits made in the Patch Builder. Mirrors
+  // loadPatchFromArrayBuffer: re-apply to the engine, regenerate raw for export,
+  // store on the project, and queue autosave.
+  onPatchEdited(synthIdx) {
+    const patch = this.synthTracks[synthIdx].patch;
+    if (!patch) return;
+    patch.raw = encodePatch(patch);
+    this.synthTracks[synthIdx].setPatch(patch);
+    const raw = patch.raw.slice(0, 340);
+    if (synthIdx === 0) this.project.synth1Patch = raw;
+    else if (synthIdx === 1) this.project.synth2Patch = raw;
+    this.markProjectDirty();
+    this.refreshSidebar();
+    this.updateKnobs();
+  }
+
+  // Frame a patch as a .syx SysEx blob (F0 00 20 29 01 64 00 <idx> 00 <340> F7).
+  patchToSyxBlob(patch, idx) {
+    const raw = new Uint8Array(encodePatch(patch)).slice(0, 340);
+    const syx = new Uint8Array([0xf0, 0x00, 0x20, 0x29, 0x01, 0x64, 0x00, idx, 0x00, ...raw, 0xf7]);
+    return new Blob([syx], { type: 'application/octet-stream' });
+  }
+
+  exportPatchSyx(synthIdx) {
+    const patch = this.synthTracks[synthIdx].patch;
+    if (!patch) return;
+    const name = (patch.name || `synth${synthIdx + 1}`).trim() || `synth${synthIdx + 1}`;
+    this.downloadBlob(this.patchToSyxBlob(patch, synthIdx), `${name}.syx`);
+    this.lcdMsg(`Exported ${name}.syx`);
   }
 
   selectTrack(t) {
@@ -1560,11 +1615,9 @@ class CircuitApp {
   exportPatchesSyx() {
     for (const s of [0, 1]) {
       const patch = this.synthTracks[s].patch;
-      if (!patch?.raw) continue;
-      const raw = new Uint8Array(patch.raw).slice(0, 340);
-      const syx = new Uint8Array([0xf0, 0x00, 0x20, 0x29, 0x01, 0x64, 0x00, s, 0x00, ...raw, 0xf7]);
+      if (!patch) continue;
       const name = (patch.name || `synth${s + 1}`).trim() || `synth${s + 1}`;
-      this.downloadBlob(new Blob([syx], { type: 'application/octet-stream' }), `${name}.syx`);
+      this.downloadBlob(this.patchToSyxBlob(patch, s), `${name}.syx`);
     }
     this.lcdMsg('Patches exported as .syx');
   }

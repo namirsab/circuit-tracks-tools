@@ -655,6 +655,215 @@ body.sidebar-hidden #sidebar { display: none; }
 .welcome-disclaimer a { color: var(--brand-accent); text-decoration: none; }
 #app-footer #about-link { margin-left: 6px; }
 
+/* ---------- Patch Builder ---------- */
+.hidden { display: none !important; }
+.keys-btn.patch-btn { color: var(--brand-accent); border-color: #5a4da6; font-weight: 600; }
+.keys-btn.patch-btn:hover { background: rgba(156,139,255,.14); }
+
+#patch-builder.patch-builder {
+  --pb-accent: #f04bf0;
+  position: fixed;
+  inset: 0;
+  background: #15161d;
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  color: #ddd;
+}
+
+.pb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, #2e2e3a, var(--panel-bg));
+  border-bottom: 2px solid var(--panel-edge);
+  flex-wrap: wrap;
+}
+.pb-head-left, .pb-head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pb-title { font-weight: 700; font-size: 15px; color: #e8e8ee; }
+.pb-head .fn-btn { min-height: 30px; padding: 4px 12px; }
+.pb-track-toggle { display: flex; gap: 4px; }
+.pb-track-toggle .fn-btn.active {
+  background: var(--track-color);
+  color: #101014;
+}
+.pb-name {
+  background: var(--lcd-bg);
+  border: 1px solid #2c2c3c;
+  border-radius: 5px;
+  color: var(--lcd-text);
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 13px;
+  padding: 5px 8px;
+  width: 150px;
+}
+.pb-export { background: var(--pb-accent) !important; color: #101014 !important; font-weight: 700; }
+
+.pb-body { flex: 1; overflow-y: auto; padding: 14px 16px 4px; }
+.pb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.pb-card {
+  --cat: #8b7bff;
+  background: #1f1f29;
+  border: 1px solid #2c2c3c;
+  border-top: 3px solid var(--cat);
+  border-radius: 10px;
+  padding: 10px 12px 12px;
+}
+.pb-card-wide { grid-column: 1 / -1; }
+.pb-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--cat);
+  margin-bottom: 10px;
+}
+.cat-voice { --cat: #9a9aa6; }
+.cat-osc { --cat: #2ee6d6; }
+.cat-mix { --cat: #4be88a; }
+.cat-filter { --cat: #ff8c1e; }
+.cat-env { --cat: #f04bf0; }
+.cat-lfo { --cat: #8b7bff; }
+.cat-fx { --cat: #f0e83c; }
+.cat-mod { --cat: #3c64f0; }
+.cat-macro { --cat: #f07878; }
+
+.pb-controls { display: flex; flex-wrap: wrap; gap: 10px 8px; }
+.pb-ctl { display: flex; flex-direction: column; align-items: center; width: 52px; }
+.pb-ctl-wide { width: 100%; align-items: stretch; }
+.pb-ctl-label { font-size: 9px; color: #b0b0bc; margin-top: 4px; text-align: center; line-height: 1.1; }
+.pb-ctl-val { font-size: 9px; color: var(--lcd-text); font-family: 'SFMono-Regular', Menlo, Consolas, monospace; }
+
+.pb-knob {
+  position: relative;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #4a4a56, #26262e 70%);
+  box-shadow: 0 2px 4px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+  cursor: ns-resize;
+  touch-action: none;
+}
+.pb-knob-grip {
+  position: absolute; inset: 5px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(#3a3a44 0deg 9deg, #2c2c34 9deg 18deg);
+}
+.pb-knob-ind { position: absolute; inset: 0; }
+.pb-knob-ind::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 4px;
+  width: 2px; height: 11px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--cat, #fff);
+  box-shadow: 0 0 3px var(--cat, #fff);
+}
+
+.pb-select {
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  border: 1px solid #101014;
+  border-radius: 5px;
+  font-size: 11px;
+  padding: 4px 6px;
+  cursor: pointer;
+  width: 100%;
+}
+
+/* Mod matrix */
+.pb-modmatrix { display: flex; flex-direction: column; gap: 3px; font-size: 11px; }
+.pb-mod-row {
+  display: grid;
+  grid-template-columns: 26px 1fr 1fr 1.4fr 64px;
+  gap: 6px;
+  align-items: center;
+}
+.pb-mod-select { font-size: 10px; padding: 3px 4px; }
+.pb-mod-head { color: #8a8a96; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.pb-mod-idx { color: #8a8a96; text-align: right; }
+.pb-mod-input {
+  background: var(--lcd-bg);
+  border: 1px solid #2c2c3c;
+  border-radius: 4px;
+  color: var(--lcd-text);
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 3px 5px;
+  width: 100%;
+}
+.pb-mod-input:disabled { opacity: .4; }
+
+/* Macros */
+.pb-macros { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.pb-macro { background: #181820; border: 1px solid #2c2c3c; border-radius: 8px; padding: 8px 10px; }
+.pb-macro-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.pb-macro-head .pb-ctl-label { margin-top: 0; font-size: 11px; font-weight: 700; color: #ddd; }
+.pb-macro-targets { display: flex; flex-direction: column; gap: 4px; }
+.pb-macro-row {
+  display: grid;
+  grid-template-columns: 1.6fr 0.8fr 0.8fr 0.8fr;
+  gap: 5px;
+  align-items: center;
+}
+.pb-macro-row .pb-select { font-size: 10px; padding: 3px 4px; }
+.pb-macro-colhead span {
+  color: #8a8a96;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.pb-macro-colhead span:not(:first-child) { text-align: center; }
+
+/* On-screen keyboard */
+.pb-keyboard {
+  border-top: 2px solid var(--panel-edge);
+  background: linear-gradient(180deg, var(--panel-bg), #1a1a22);
+  padding: 8px 16px 12px;
+}
+.pb-kb-ctrls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pb-kb-ctrls .fn-btn { min-height: 26px; padding: 3px 10px; }
+.pb-kb-oct { font-family: 'SFMono-Regular', Menlo, Consolas, monospace; color: var(--lcd-text); font-size: 12px; }
+.pb-hold.active { background: #3cff8c; color: #07320f; font-weight: 700; }
+.pb-keys {
+  position: relative;
+  height: 110px;
+  max-width: 900px;
+}
+.pb-keys-white { display: flex; height: 100%; }
+.pb-keys-black { position: absolute; inset: 0; pointer-events: none; }
+.pb-key {
+  border: 1px solid #101014;
+  border-radius: 0 0 4px 4px;
+  cursor: pointer;
+  touch-action: none;
+}
+.pb-key.white {
+  flex: 1;
+  background: linear-gradient(180deg, #e8e8ee, #c4c4cc);
+}
+.pb-key.white.on { background: linear-gradient(180deg, var(--pb-accent), #c4c4cc); }
+.pb-key.black {
+  position: absolute;
+  top: 0;
+  height: 64%;
+  z-index: 2;
+  pointer-events: auto;
+  background: linear-gradient(180deg, #2a2a32, #0c0c10);
+}
+.pb-key.black.on { background: linear-gradient(180deg, var(--pb-accent), #0c0c10); }
+
+@media (max-width: 1099px) {
+  #patch-builder.patch-builder { position: fixed; }
+}
+
 /* ---------- Stacked layout (tablets & phones) ---------- */
 /* Below 1100px the sidebar moves under the device and the page scrolls
    vertically; fit() in app.js then only matches the device width to the

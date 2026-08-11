@@ -34,6 +34,9 @@ export function buildPanel(root) {
   el('span', 'lcd-bpm', lcd).id = 'lcd-bpm';
   el('span', 'lcd-view', lcd).id = 'lcd-view';
   el('span', 'lcd-msg', lcd).id = 'lcd-msg';
+  const patchBtn = el('button', 'keys-btn patch-btn', brand, '🎛 Patch Builder');
+  patchBtn.id = 'btn-patch';
+  patchBtn.title = 'Open the synth patch builder';
   const keysBtn = el('button', 'keys-btn', brand, '⌨ ?');
   keysBtn.id = 'btn-keys';
   keysBtn.title = 'Keyboard mapping (/)';
