@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-mcp = ["mcp[cli]>=1.9.0,<2"]
+mcp = ["mcp[cli]>=2,<3"]
 dev = ["pytest", "ruff>=0.15", "pre-commit>=4.0"]
 
 [project.urls]
