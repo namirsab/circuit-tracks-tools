@@ -4,7 +4,7 @@
 // (src/circuit_tracks/ncs_transfer.py).
 
 import {
-  wrapSysex, unwrapSysex, isAck, parseFileEntry,
+  wrapSysex, unwrapSysex, ackMatches, parseFileEntry,
   buildOpenSession, buildCloseSession, buildDirHandshake, buildDirListRequest,
   buildWriteInit, buildWriteData, buildWriteFinish, buildSetFilename,
   crc32, fileId, blockAddress,
@@ -159,7 +159,14 @@ export class CircuitConnection {
    * Follows the documented write sequence, waiting for a device ACK after
    * WRITE_INIT, every WRITE_DATA block, and WRITE_FINISH.
    */
-  async sendSample(slot, wavBytes, filename, onProgress = null) {
+  async sendSample(slot, wavBytes, filename, onProgress = null, {
+    // Generous: the device can be slow to ACK while it is still committing
+    // a previous file to flash (seen with back-to-back batch transfers).
+    ackTimeoutMs = 15000,
+    // Writes are addressed, so resending an unacknowledged message is
+    // idempotent — one retry rides out a dropped or very late ACK.
+    retries = 1,
+  } = {}) {
     if (slot < 0 || slot > 63) throw new Error(`Slot must be 0-63, got ${slot}`);
     if (wavBytes.length > MAX_SAMPLE_BYTES) {
       throw new Error(
@@ -172,7 +179,7 @@ export class CircuitConnection {
 
     const numBlocks = Math.ceil(wavBytes.length / BLOCK_SIZE);
     const crc = crc32(wavBytes);
-    const ackTimeout = 5000;
+    const fid = fileId(FILE_TYPE_SAMPLE, slot);
 
     await this._openSessionWithHandshake();
     try {
@@ -180,19 +187,36 @@ export class CircuitConnection {
       this._send(buildDirListRequest(FILE_TYPE_SAMPLE));
       await sleep(500);
 
-      const sendAcked = async (msg, what) => {
-        const ackPromise = this._waitFor(isAck, ackTimeout, `ACK for ${what}`);
-        this._send(msg);
-        await ackPromise;
+      // Wait for the ACK that matches this exact address + file ID, so a
+      // stale ACK from a previous transfer can't be mistaken for it.
+      const sendAcked = async (msg, blockNum, what) => {
+        const addr = blockAddress(blockNum);
+        for (let attempt = 0; ; attempt++) {
+          const ackPromise = this._waitFor(
+            (data) => ackMatches(data, addr, fid),
+            ackTimeoutMs,
+            `ACK for ${what}`,
+          );
+          this._send(msg);
+          try {
+            await ackPromise;
+            return;
+          } catch (err) {
+            if (attempt >= retries) throw err;
+          }
+        }
       };
 
-      await sendAcked(buildWriteInit(FILE_TYPE_SAMPLE, slot, wavBytes.length), 'WRITE_INIT');
+      await sendAcked(
+        buildWriteInit(FILE_TYPE_SAMPLE, slot, wavBytes.length), 0, 'WRITE_INIT',
+      );
 
       let bytesSent = 0;
       for (let block = 1; block <= numBlocks; block++) {
         const chunk = wavBytes.subarray((block - 1) * BLOCK_SIZE, block * BLOCK_SIZE);
         await sendAcked(
           buildWriteData(FILE_TYPE_SAMPLE, slot, block, chunk),
+          block,
           `block ${block}/${numBlocks}`,
         );
         bytesSent += chunk.length;
@@ -201,6 +225,7 @@ export class CircuitConnection {
 
       await sendAcked(
         buildWriteFinish(FILE_TYPE_SAMPLE, slot, numBlocks + 1, crc),
+        numBlocks + 1,
         'WRITE_FINISH',
       );
 

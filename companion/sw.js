@@ -1,6 +1,6 @@
 // App-shell cache so the sampler works offline once visited.
 // (Transfer obviously still needs the Circuit Tracks on USB.)
-const CACHE = 'circuit-sampler-v3';
+const CACHE = 'circuit-sampler-v4';
 const SHELL = [
   '.',
   'index.html',

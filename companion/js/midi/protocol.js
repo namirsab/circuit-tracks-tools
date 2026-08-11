@@ -251,6 +251,20 @@ export function isAck(data) {
 }
 
 /**
+ * True if the message is an ACK for the given block address and file ID.
+ * ACK payload: <8-byte address> <3-byte file_id>. Matching prevents a
+ * stale ACK (e.g. from the previous file in a batch) from being taken as
+ * the acknowledgement of the message just sent.
+ */
+export function ackMatches(data, addr, fid) {
+  if (!isAck(data)) return false;
+  const base = SYSEX_HEADER.length + 1;
+  for (let i = 0; i < 8; i++) if (data[base + i] !== addr[i]) return false;
+  for (let i = 0; i < 3; i++) if (data[base + 8 + i] !== fid[i]) return false;
+  return true;
+}
+
+/**
  * Parse a FILE_ENTRY (0x0C) message.
  * Returns { fileType, slot, filename } or null if not a file entry.
  */

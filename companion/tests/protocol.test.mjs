@@ -10,7 +10,7 @@ import {
   blockAddress, fileId, crc32,
   buildWriteInit, buildWriteData, buildWriteFinish, buildSetFilename,
   buildOpenSession, buildCloseSession, buildDirHandshake, buildDirListRequest,
-  buildWriteSequence, wrapSysex, unwrapSysex, isAck, parseFileEntry,
+  buildWriteSequence, wrapSysex, unwrapSysex, isAck, ackMatches, parseFileEntry,
   FILE_TYPE_SAMPLE, SYSEX_HEADER, SUBCMD_ACK, SUBCMD_FILE_ENTRY, BLOCK_SIZE,
 } from '../js/midi/protocol.js';
 
@@ -114,6 +114,23 @@ test('isAck recognises device ACKs', () => {
   assert.equal(isAck(ack), true);
   assert.equal(isAck(buildOpenSession()), false);
   assert.equal(isAck([...SYSEX_HEADER, SUBCMD_ACK]), false); // too short
+});
+
+test('ackMatches requires the exact block address and file ID', () => {
+  const fid = fileId(FILE_TYPE_SAMPLE, 7);
+  const ackFor = (addr, id) => [...SYSEX_HEADER, SUBCMD_ACK, ...addr, ...id];
+
+  assert.equal(ackMatches(ackFor(blockAddress(15), fid), blockAddress(15), fid), true);
+  // Stale ACK from a different block must not satisfy the waiter
+  assert.equal(ackMatches(ackFor(blockAddress(14), fid), blockAddress(15), fid), false);
+  // ACK for another file (previous sample in a batch) must not match
+  const otherFid = fileId(FILE_TYPE_SAMPLE, 6);
+  assert.equal(ackMatches(ackFor(blockAddress(15), otherFid), blockAddress(15), fid), false);
+  // Page rollover: blocks 15 vs 16 differ in page byte, not offset
+  assert.equal(ackMatches(ackFor(blockAddress(16), fid), blockAddress(16), fid), true);
+  assert.equal(ackMatches(ackFor(blockAddress(32), fid), blockAddress(16), fid), false);
+  // Non-ACK messages never match
+  assert.equal(ackMatches(buildOpenSession(), blockAddress(0), fid), false);
 });
 
 test('parseFileEntry decodes slot and filename', () => {

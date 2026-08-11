@@ -887,6 +887,7 @@ async function sendToSlot(startSlot) {
   $('progress-text').textContent = 'Starting transfer…';
 
   const totalBytes = rendered.reduce((sum, r) => sum + r.wav.length, 0);
+  const settle = (ms) => new Promise((r) => setTimeout(r, ms));
   let doneBytes = 0;
   let sentCount = 0;
   try {
@@ -894,6 +895,12 @@ async function sendToSlot(startSlot) {
       const { record, wav } = rendered[i];
       const slot = startSlot + i;
       const label = count > 1 ? `${i + 1}/${count} “${record.name}”` : `“${record.name}”`;
+      if (i > 0) {
+        // Give the device time to commit the previous file to flash before
+        // opening the next session — streaming immediately can stall it.
+        $('progress-text').textContent = `${label} — letting the device settle…`;
+        await settle(1500);
+      }
       await circuit.sendSample(slot, wav, deviceFilename(slot, record.name), (sent) => {
         $('progress-bar').style.width = `${Math.round(((doneBytes + sent) / totalBytes) * 100)}%`;
         $('progress-text').textContent = `${label} → slot ${slot + 1} — ${fmtBytes(doneBytes + sent)} / ${fmtBytes(totalBytes)}`;
@@ -918,9 +925,16 @@ async function sendToSlot(startSlot) {
     resultBox.hidden = false;
     resultBox.className = 'notice err';
     const doneMsg = sentCount
-      ? ` ${sentCount} of ${count} samples were sent (slots ${startSlot + 1}–${startSlot + sentCount}); the rest were not.`
+      ? ` ${sentCount} of ${count} samples were sent (slots ${startSlot + 1}–${startSlot + sentCount}).`
       : '';
-    resultBox.textContent = `Transfer failed: ${err.message}.${doneMsg} The device may need a power cycle if it stops responding.`;
+    // Keep the unsent samples (including the failed one) queued so a tap
+    // on the next free slot resumes the batch instead of starting over.
+    pendingSend = pendingSend.slice(sentCount);
+    const remainMsg = pendingSend.length && sentCount
+      ? ` The remaining ${pendingSend.length} are still queued — give the device a few seconds, then tap slot ${startSlot + sentCount + 1} to resume.`
+      : ' Give the device a few seconds and tap a slot to retry; power-cycle it if it stops responding.';
+    resultBox.textContent = `Transfer failed: ${err.message}.${doneMsg}${remainMsg}`;
+    renderPendingSend();
   }
 }
 

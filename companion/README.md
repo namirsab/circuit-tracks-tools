@@ -125,6 +125,14 @@ whole batch (a mid-batch failure reports exactly which slots were written).
 After **Save slices**, the app offers to batch-send the slices directly —
 recorded loop → sliced → kick/snare/hat on consecutive slots in two taps.
 
+Transfer robustness (informed by hardware testing): ACKs are matched to the
+exact block address + file ID (a stale ACK from the previous file can't be
+mistaken for the current one), the ACK timeout is 15 s because the device
+ACKs slowly while committing the previous file to flash, each unacknowledged
+write is resent once (addressed writes are idempotent), and batches pause
+1.5 s between files. If a transfer still fails mid-batch, the unsent samples
+stay queued so tapping the next slot resumes instead of starting over.
+
 ## Code layout
 
 ```
