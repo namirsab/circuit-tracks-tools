@@ -44,8 +44,12 @@
 
     <!-- ============ LIBRARY ============ -->
     <section id="view-library" class="view" hidden>
-      <h2>Library</h2>
-      <p id="library-empty" class="hint">No samples yet — record something!</p>
+      <div class="row space-between">
+        <h2>Library</h2>
+        <button id="library-import" class="btn small">Import audio</button>
+      </div>
+      <input id="import-file" type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac,.aac" hidden>
+      <p id="library-empty" class="hint">No samples yet — record something, or import an audio file!</p>
       <ul id="library-list" class="library-list"></ul>
     </section>
 

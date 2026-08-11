@@ -5,7 +5,7 @@ and transfer it into one of the Circuit Tracks' 64 drum sample slots over
 USB MIDI — no server, no build step.
 
 ```
-Record (mic / line-in / USB interface)
+Record (mic / line-in / USB interface / tab audio) — or Import a file
   → Edit (trim, zoom, normalize, gain, fades)
     → Library (IndexedDB, survives reloads)
       → Transfer (Web MIDI SysEx → drum sample slot 0–63)
@@ -32,6 +32,25 @@ works offline.
   `MediaStream` capture path as a real microphone. Lets you exercise the full
   record → edit → export flow with no mic and no permission prompt.
 - `?nomidi=1` — simulates a browser without Web MIDI, to check the fallback UI.
+
+## Sampling sources beyond the microphone
+
+- **Import audio** (Library → *Import audio*, works on every platform incl.
+  iOS): any file the browser can decode (mp3, m4a, wav, ogg, flac). It's mixed
+  down to mono and enters the same edit → transfer pipeline as a recording.
+- **Tab / system audio** (input picker → *Tab / system audio (screen share)*,
+  desktop Chrome/Edge only): captures another tab's audio via
+  `getDisplayMedia` — pick the tab (e.g. the Spotify web player) and enable
+  **“Also share tab audio”** in Chrome's picker, then record as usual.
+- **Internal audio on the phone itself is not possible from a browser.**
+  Neither Android nor iOS exposes system/app audio to web pages, and Spotify
+  additionally opts out of Android's playback-capture API, so even native
+  apps can't record it. Practical phone routes: import a file you have, or
+  sample on the desktop via tab capture.
+
+Heads-up: sampling streamed music may be restricted by the service's terms
+and by copyright — fine for private noodling, but cleared samples are your
+responsibility if you release anything.
 
 ## Platform support and the iOS decision
 

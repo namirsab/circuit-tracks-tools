@@ -3,7 +3,7 @@
 
 import { Recorder } from './audio/recorder.js';
 import {
-  convertToCircuitWav, normalize, applyGain, applyFades, trim,
+  convertToCircuitWav, mixdownToMono, normalize, applyGain, applyFades, trim,
   TARGET_SAMPLE_RATE,
 } from './audio/convert.js';
 import * as store from './store.js';
@@ -112,6 +112,12 @@ async function refreshInputDevices() {
       select.appendChild(opt);
     });
   } catch { /* no device access yet */ }
+  if (Recorder.displayCaptureSupported) {
+    const opt = document.createElement('option');
+    opt.value = '__display';
+    opt.textContent = 'Tab / system audio (screen share)';
+    select.appendChild(opt);
+  }
   if (!select.options.length) {
     const opt = document.createElement('option');
     opt.value = '';
@@ -147,6 +153,13 @@ $('input-select').addEventListener('change', async () => {
   try {
     await recorder.init($('input-select').value || undefined);
     recorderReady = true;
+    recorder.onDisplayEnded = () => {
+      recorderReady = false;
+      $('rec-hint').textContent = 'Screen share ended — pick an input to continue';
+    };
+    $('rec-hint').textContent = recorder.isDisplay
+      ? 'Capturing shared audio — play something, then tap to record'
+      : 'Tap to record';
     startMeterLoop();
   } catch (err) {
     $('rec-hint').textContent = `Input unavailable: ${err.message}`;
@@ -248,6 +261,41 @@ async function renderLibrary() {
     list.appendChild(li);
   }
 }
+
+// Import an audio file (mp3/m4a/wav/…) into the library. decodeAudioData
+// resamples to the context rate; we mix down to mono here so imports flow
+// through the exact same edit/convert pipeline as recordings.
+async function importAudioFile(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  let buffer;
+  try {
+    buffer = await ctx.decodeAudioData(arrayBuffer);
+  } catch {
+    throw new Error(`Couldn't decode "${file.name}" — unsupported audio format`);
+  } finally {
+    ctx.close().catch(() => {});
+  }
+  const channels = [];
+  for (let c = 0; c < buffer.numberOfChannels; c++) channels.push(buffer.getChannelData(c));
+  const mono = mixdownToMono(channels);
+  const name = file.name.replace(/\.[^.]+$/, '').slice(0, 24) || 'Imported';
+  return store.saveSample(name, mono, buffer.sampleRate);
+}
+
+$('library-import').addEventListener('click', () => $('import-file').click());
+$('import-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const id = await importAudioFile(file);
+    toast(`Imported ${file.name}`);
+    openEditor(id);
+  } catch (err) {
+    toast(err.message, 5000);
+  }
+});
 
 /** Apply the non-destructive edit chain to a stored record. */
 function processRecord(record) {

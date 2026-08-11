@@ -6,6 +6,11 @@
 // (oscillator + amplitude LFO through a MediaStreamDestination), which
 // exercises the exact same capture path without needing a real microphone —
 // used for automated testing and demos.
+//
+// Device id '__display' captures tab/system audio via getDisplayMedia
+// (desktop Chrome/Edge: pick a tab and enable "Also share tab audio") —
+// the way to sample e.g. the Spotify web player. Mobile browsers don't
+// expose internal audio at all; there the file-import path is the fallback.
 
 const WORKLET_URL = new URL('./capture-worklet.js', import.meta.url);
 
@@ -19,7 +24,12 @@ export class Recorder {
     this.chunks = [];
     this.recording = false;
     this.fake = false;
+    this.isDisplay = false;
     this._fakeNodes = null;
+  }
+
+  static get displayCaptureSupported() {
+    return !!navigator.mediaDevices?.getDisplayMedia;
   }
 
   get sampleRate() {
@@ -45,6 +55,26 @@ export class Recorder {
     if (deviceId === 'fake') {
       this.fake = true;
       this.stream = this._makeFakeStream();
+    } else if (deviceId === '__display') {
+      this.isDisplay = true;
+      // Video must be requested too; we only use the audio track but keep
+      // the video track alive — stopping it would end the whole capture.
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        systemAudio: 'include',
+      });
+      if (!stream.getAudioTracks().length) {
+        for (const t of stream.getTracks()) t.stop();
+        throw new Error(
+          'No audio in the shared source — pick a tab and enable “Also share tab audio”',
+        );
+      }
+      this.stream = stream;
+      // If the user hits the browser's "Stop sharing" button, tidy up
+      stream.getAudioTracks()[0].addEventListener('ended', () => {
+        if (this.onDisplayEnded) this.onDisplayEnded();
+      });
     } else {
       this.fake = false;
       const constraints = {
@@ -159,6 +189,8 @@ export class Recorder {
 
   async close() {
     this.recording = false;
+    this.fake = false;
+    this.isDisplay = false;
     if (this._fakeNodes) {
       for (const n of this._fakeNodes) {
         try { n.stop(); } catch { /* not started */ }
