@@ -96,7 +96,7 @@ and round-trips of all tested factory/user projects are now byte-exact.
   and the pattern sync-rate table added (stored byte is reversed relative to
   the hardware pad order: `7` = 1/4, `0` = 1/32T).
 
-## [Unreleased]
+## [0.2.1] — 2026-08-11
 
 ### Fixed
 
@@ -105,7 +105,7 @@ and round-trips of all tested factory/user projects are now byte-exact.
   `MCPServer` API), which broke the server import and CI. The server stays on
   the 1.x line until it is migrated to the 2.0 API.
 
-[Unreleased]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.2.0...HEAD
+[0.2.1]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/namirsab/circuit-tracks-tools/releases/tag/v0.1.0
