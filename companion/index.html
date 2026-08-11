@@ -46,9 +46,19 @@
     <section id="view-library" class="view" hidden>
       <div class="row space-between">
         <h2>Library</h2>
-        <button id="library-import" class="btn small">Import audio</button>
+        <div class="row">
+          <button id="library-select-toggle" class="btn small">Select</button>
+          <button id="library-import" class="btn small">Import audio</button>
+        </div>
       </div>
       <input id="import-file" type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac,.aac" hidden>
+      <div id="batch-bar" class="notice" hidden>
+        <p id="batch-count" class="hint">Nothing selected yet — tap samples in the order they should land in slots.</p>
+        <div class="row gap">
+          <button id="batch-send" class="btn primary wide">Send to Circuit</button>
+          <button id="batch-cancel" class="btn wide">Cancel</button>
+        </div>
+      </div>
       <p id="library-empty" class="hint">No samples yet — record something, or import an audio file!</p>
       <ul id="library-list" class="library-list"></ul>
     </section>
@@ -80,7 +90,8 @@
             <h3>Sample slots</h3>
             <button id="slots-refresh" class="btn small">Refresh</button>
           </div>
-          <p class="hint">Tap a slot to send the selected sample into it.
+          <p class="hint">Tap a slot to send into it — with multiple samples
+            queued it's the start slot and they fill consecutive slots.
             Filled slots show their current name.</p>
           <div id="slot-grid" class="slot-grid" role="listbox" aria-label="Sample slots"></div>
         </div>

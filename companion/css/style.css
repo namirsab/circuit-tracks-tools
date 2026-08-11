@@ -16,6 +16,9 @@
 
 * { box-sizing: border-box; }
 
+/* The hidden attribute must always win, even over display:flex/grid rules */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -221,6 +224,28 @@ input[type="range"] {
 .library-item .actions { display: flex; gap: 8px; margin-top: 10px; }
 .library-item .actions .btn { flex: 1; min-height: 42px; font-size: 13px; padding: 0 6px; }
 
+/* multi-select mode */
+.library-item.selectable { cursor: pointer; border: 1px solid var(--panel-2); }
+.library-item.selectable.selected { border-color: var(--accent); }
+.select-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 700;
+  flex: none;
+}
+.library-item.selected .select-badge {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
 /* ---------- transfer ---------- */
 
 .slot-grid {
@@ -322,8 +347,6 @@ input[type="range"] {
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
   z-index: 30;
 }
-
-.modal[hidden], .toast[hidden] { display: none; }
 
 .modal {
   position: fixed;

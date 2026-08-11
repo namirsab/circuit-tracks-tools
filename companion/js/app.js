@@ -229,10 +229,14 @@ $('rec-button').addEventListener('click', async () => {
 
 // ---------------------------------------------------------------- library
 
+let selectMode = false;
+let selectedIds = []; // selection order = slot order when batch-sending
+
 async function renderLibrary() {
   const list = $('library-list');
   const items = await store.listSamples();
   $('library-empty').hidden = items.length > 0;
+  $('library-select-toggle').hidden = items.length < 2;
   list.innerHTML = '';
   for (const item of items) {
     const li = document.createElement('li');
@@ -240,6 +244,7 @@ async function renderLibrary() {
     const date = new Date(item.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' });
     li.innerHTML = `
       <div class="title-row">
+        <span class="select-badge" hidden></span>
         <span class="name"></span>
         <span class="meta">${item.duration.toFixed(2)} s · ${date}</span>
       </div>
@@ -250,18 +255,65 @@ async function renderLibrary() {
         <button class="btn danger act-delete">Delete</button>
       </div>`;
     li.querySelector('.name').textContent = item.name;
-    li.querySelector('.act-edit').addEventListener('click', () => openEditor(item.id));
-    li.querySelector('.act-export').addEventListener('click', () => exportSample(item.id));
-    li.querySelector('.act-send').addEventListener('click', () => beginSend(item.id));
-    li.querySelector('.act-delete').addEventListener('click', async () => {
-      if (await confirmModal(`Delete “${item.name}”? This can’t be undone.`, 'Delete')) {
-        await store.deleteSample(item.id);
-        renderLibrary();
-      }
-    });
+    if (selectMode) {
+      li.classList.add('selectable');
+      li.querySelector('.select-badge').hidden = false;
+      li.querySelector('.actions').hidden = true;
+      const updateBadge = () => {
+        const idx = selectedIds.indexOf(item.id);
+        li.classList.toggle('selected', idx >= 0);
+        li.querySelector('.select-badge').textContent = idx >= 0 ? String(idx + 1) : '';
+      };
+      updateBadge();
+      li.addEventListener('click', () => {
+        const idx = selectedIds.indexOf(item.id);
+        if (idx >= 0) selectedIds.splice(idx, 1);
+        else selectedIds.push(item.id);
+        renderLibrary(); // re-number all badges
+      });
+    } else {
+      li.querySelector('.act-edit').addEventListener('click', () => openEditor(item.id));
+      li.querySelector('.act-export').addEventListener('click', () => exportSample(item.id));
+      li.querySelector('.act-send').addEventListener('click', () => beginSend(item.id));
+      li.querySelector('.act-delete').addEventListener('click', async () => {
+        if (await confirmModal(`Delete “${item.name}”? This can’t be undone.`, 'Delete')) {
+          await store.deleteSample(item.id);
+          renderLibrary();
+        }
+      });
+    }
     list.appendChild(li);
   }
+  updateBatchBar();
 }
+
+function setSelectMode(on) {
+  selectMode = on;
+  selectedIds = [];
+  $('library-select-toggle').textContent = on ? 'Done' : 'Select';
+  $('batch-bar').hidden = !on;
+  renderLibrary();
+}
+
+function updateBatchBar() {
+  if (!selectMode) return;
+  const n = selectedIds.length;
+  $('batch-count').textContent = n
+    ? `${n} selected — they’ll fill ${n} consecutive slots in this order.`
+    : 'Nothing selected yet — tap samples in the order they should land in slots.';
+  $('batch-send').disabled = n === 0 || !midiAvailable;
+  $('batch-send').textContent = midiAvailable
+    ? `Send ${n || ''} to Circuit`.replace('  ', ' ')
+    : 'Transfer unavailable here';
+}
+
+$('library-select-toggle').addEventListener('click', () => setSelectMode(!selectMode));
+$('batch-cancel').addEventListener('click', () => setSelectMode(false));
+$('batch-send').addEventListener('click', () => {
+  const ids = [...selectedIds];
+  setSelectMode(false);
+  beginSendMany(ids);
+});
 
 // Import an audio file (mp3/m4a/wav/…) into the library. decodeAudioData
 // resamples to the context rate; we mix down to mono here so imports flow
@@ -590,16 +642,23 @@ $('slice-save').addEventListener('click', async () => {
   const p = edit.record.params;
   const ranges = sliceRanges(edit.onsets, Math.ceil(p.trimEnd));
   const baseName = ($('editor-name').value.trim() || edit.record.name).slice(0, 20);
+  const ids = [];
   for (let i = 0; i < ranges.length; i++) {
     const { start, end } = ranges[i];
-    await store.saveSample(
+    ids.push(await store.saveSample(
       `${baseName} ${i + 1}`,
       edit.record.samples.slice(start, end),
       edit.record.sampleRate,
-    );
+    ));
   }
-  toast(`Saved ${ranges.length} slices to the library`);
+  toast(`Saved ${ids.length} slices to the library`);
   clearSlices();
+  if (midiAvailable && ids.length > 1) {
+    const ok = await confirmModal(
+      `Send the ${ids.length} slices to consecutive Circuit slots now?`, 'Send',
+    );
+    if (ok) beginSendMany(ids);
+  }
 });
 
 $('audition').addEventListener('click', () => {
@@ -671,7 +730,7 @@ $('editor-delete').addEventListener('click', async () => {
 
 const circuit = midiAvailable ? new CircuitConnection() : null;
 let slotEntries = null; // last directory listing
-let pendingSend = null; // sample id queued for sending
+let pendingSend = []; // sample ids queued for sending, in slot order
 
 function renderTransferView() {
   $('midi-unsupported').hidden = midiAvailable;
@@ -697,18 +756,35 @@ function updateMidiStatus() {
 
 async function renderPendingSend() {
   const box = $('transfer-sample');
-  if (!pendingSend) { box.hidden = true; return; }
-  const record = await store.getSample(pendingSend);
-  if (!record) { pendingSend = null; box.hidden = true; return; }
+  if (!pendingSend.length) { box.hidden = true; return; }
+  const records = [];
+  for (const id of pendingSend) {
+    const record = await store.getSample(id);
+    if (record) records.push(record);
+  }
+  pendingSend = records.map((r) => r.id);
+  if (!records.length) { box.hidden = true; return; }
   box.hidden = false;
   box.innerHTML = '';
   const strong = document.createElement('strong');
-  strong.textContent = record.name;
-  box.append('Ready to send: ', strong, ' — now tap a destination slot below.');
+  if (records.length === 1) {
+    strong.textContent = records[0].name;
+    box.append('Ready to send: ', strong, ' — now tap a destination slot below.');
+  } else {
+    strong.textContent = records.map((r) => r.name).join(', ');
+    box.append(
+      `Ready to send ${records.length} samples: `, strong,
+      ` — tap the START slot; they’ll fill ${records.length} consecutive slots in this order.`,
+    );
+  }
 }
 
 function beginSend(id) {
-  pendingSend = id;
+  beginSendMany([id]);
+}
+
+function beginSendMany(ids) {
+  pendingSend = [...ids];
   showTab('transfer');
   if (circuit && circuit.connected && !slotEntries) refreshSlots();
 }
@@ -756,29 +832,52 @@ function renderSlotGrid() {
     const displayName = name.replace(/^\d+_/, '').replace(/\.wav$/i, '');
     btn.innerHTML = `<span class="slot-num">${slot + 1}</span><span class="slot-name"></span>`;
     btn.querySelector('.slot-name').textContent = name ? displayName : 'empty';
-    btn.addEventListener('click', () => sendToSlot(slot, name));
+    btn.addEventListener('click', () => sendToSlot(slot));
     grid.appendChild(btn);
   }
 }
 
-async function sendToSlot(slot, existingName) {
-  if (!pendingSend) {
-    toast('Pick a sample first: Library → Send');
+function deviceFilename(slot, name) {
+  const safe = name.replace(/[^\x20-\x7e]+/g, '').replace(/[\\/:*?"<>|]+/g, '').trim() || 'Sample';
+  return `${String(slot).padStart(2, '0')}_${safe}.wav`;
+}
+
+async function sendToSlot(startSlot) {
+  if (!pendingSend.length) {
+    toast('Pick samples first: Library → Send (or Select for a batch)');
     return;
   }
-  if (existingName) {
+  const count = pendingSend.length;
+  if (startSlot + count > 64) {
+    toast(`Not enough room: ${count} samples starting at slot ${startSlot + 1} would run past slot 64`);
+    return;
+  }
+
+  // Render everything up front so size problems abort before any transfer
+  const rendered = [];
+  for (const id of pendingSend) {
+    const r = await renderRecordToWav(id);
+    if (r.wav.length > MAX_SAMPLE_BYTES) {
+      toast(`“${r.record.name}” is too long (${r.seconds.toFixed(1)} s) — max ≈ ${(MAX_SAMPLE_BYTES / 96000).toFixed(1)} s`);
+      return;
+    }
+    rendered.push(r);
+  }
+
+  const bySlot = new Map((slotEntries || []).map((e) => [e.slot, e.filename]));
+  const occupied = [];
+  for (let i = 0; i < count; i++) {
+    const name = bySlot.get(startSlot + i);
+    if (name) occupied.push(`${startSlot + i + 1} (“${name}”)`);
+  }
+  if (occupied.length) {
     const ok = await confirmModal(
-      `Slot ${slot + 1} already contains “${existingName}”. Overwrite it?`,
+      count === 1
+        ? `Slot ${occupied[0]} is not empty. Overwrite it?`
+        : `${occupied.length} of the ${count} target slots are not empty: ${occupied.join(', ')}. Overwrite them?`,
     );
     if (!ok) return;
   }
-  const { record, wav, seconds } = await renderRecordToWav(pendingSend);
-  if (wav.length > MAX_SAMPLE_BYTES) {
-    toast(`Sample too long (${seconds.toFixed(1)} s) — max ≈ ${(MAX_SAMPLE_BYTES / 96000).toFixed(1)} s`);
-    return;
-  }
-  const safeName = record.name.replace(/[^\x20-\x7e]+/g, '').replace(/[\\/:*?"<>|]+/g, '').trim() || 'Sample';
-  const deviceFilename = `${String(slot).padStart(2, '0')}_${safeName}.wav`;
 
   const progressWrap = $('transfer-progress');
   const resultBox = $('transfer-result');
@@ -787,26 +886,41 @@ async function sendToSlot(slot, existingName) {
   $('progress-bar').style.width = '0%';
   $('progress-text').textContent = 'Starting transfer…';
 
+  const totalBytes = rendered.reduce((sum, r) => sum + r.wav.length, 0);
+  let doneBytes = 0;
+  let sentCount = 0;
   try {
-    const result = await circuit.sendSample(slot, wav, deviceFilename, (sent, total) => {
-      $('progress-bar').style.width = `${Math.round((sent / total) * 100)}%`;
-      $('progress-text').textContent = `Sending ${fmtBytes(sent)} / ${fmtBytes(total)}`;
-    });
+    for (let i = 0; i < count; i++) {
+      const { record, wav } = rendered[i];
+      const slot = startSlot + i;
+      const label = count > 1 ? `${i + 1}/${count} “${record.name}”` : `“${record.name}”`;
+      await circuit.sendSample(slot, wav, deviceFilename(slot, record.name), (sent) => {
+        $('progress-bar').style.width = `${Math.round(((doneBytes + sent) / totalBytes) * 100)}%`;
+        $('progress-text').textContent = `${label} → slot ${slot + 1} — ${fmtBytes(doneBytes + sent)} / ${fmtBytes(totalBytes)}`;
+      });
+      doneBytes += wav.length;
+      sentCount += 1;
+    }
     progressWrap.hidden = true;
     resultBox.hidden = false;
     resultBox.className = 'notice ok';
     resultBox.innerHTML = '';
     const strong = document.createElement('strong');
-    strong.textContent = `Sent “${record.name}” to slot ${slot + 1}`;
-    resultBox.append(strong, ` — ${fmtBytes(result.bytesSent)} in ${result.blocks} blocks, CRC ${result.crc32}, saved as ${result.filename}.`);
-    pendingSend = null;
+    strong.textContent = count === 1
+      ? `Sent “${rendered[0].record.name}” to slot ${startSlot + 1}`
+      : `Sent ${count} samples to slots ${startSlot + 1}–${startSlot + count}`;
+    resultBox.append(strong, ` — ${fmtBytes(totalBytes)} total.`);
+    pendingSend = [];
     renderPendingSend();
     await refreshSlots();
   } catch (err) {
     progressWrap.hidden = true;
     resultBox.hidden = false;
     resultBox.className = 'notice err';
-    resultBox.textContent = `Transfer failed: ${err.message}. The device may need a power cycle if it stops responding.`;
+    const doneMsg = sentCount
+      ? ` ${sentCount} of ${count} samples were sent (slots ${startSlot + 1}–${startSlot + sentCount}); the rest were not.`
+      : '';
+    resultBox.textContent = `Transfer failed: ${err.message}.${doneMsg} The device may need a power cycle if it stops responding.`;
   }
 }
 

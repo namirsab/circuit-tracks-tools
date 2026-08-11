@@ -114,6 +114,17 @@ Implements the reverse-engineered Novation Components file protocol
   write message;
 - overwriting a non-empty slot requires explicit in-app confirmation.
 
+### Batch transfer to consecutive slots
+
+Library → **Select** enters multi-select mode: tap samples in the order they
+should land (numbered badges), then **Send N to Circuit** and tap the *start*
+slot — the samples fill N consecutive slots in that order. Everything is
+rendered and size-checked before the first byte is sent, occupied target
+slots are listed in one confirmation, and a single progress bar tracks the
+whole batch (a mid-batch failure reports exactly which slots were written).
+After **Save slices**, the app offers to batch-send the slices directly —
+recorded loop → sliced → kick/snare/hat on consecutive slots in two taps.
+
 ## Code layout
 
 ```
