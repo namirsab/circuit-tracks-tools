@@ -7,6 +7,7 @@ USB MIDI — no server, no build step.
 ```
 Record (mic / line-in / USB interface / tab audio) — or Import a file
   → Edit (trim, zoom, normalize, gain, fades)
+  → Slice (transient detection → one sample per hit)
     → Library (IndexedDB, survives reloads)
       → Transfer (Web MIDI SysEx → drum sample slot 0–63)
       → …or Export .wav (works everywhere, incl. iOS)
@@ -51,6 +52,18 @@ works offline.
 Heads-up: sampling streamed music may be restricted by the service's terms
 and by copyright — fine for private noodling, but cleared samples are your
 responsibility if you release anything.
+
+## Slicing (one recording → many samples)
+
+In the editor, **Detect slices** runs transient detection
+(`js/audio/slice.js`: RMS-envelope energy flux with peak-picking, an
+adaptive threshold, a minimum-gap merge for flams, and an
+envelope-valley walk-back so cuts land just before each attack). Markers
+appear on the waveform; the sensitivity slider re-runs detection live, a tap
+between two markers auditions that slice, and **Save N slices** writes each
+onset-to-onset region to the library as its own sample — e.g. a recorded
+drum loop becomes kick/snare/hat samples for separate slots. Detection
+respects the current trim region.
 
 ## Platform support and the iOS decision
 

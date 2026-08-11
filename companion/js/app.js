@@ -6,6 +6,7 @@ import {
   convertToCircuitWav, mixdownToMono, normalize, applyGain, applyFades, trim,
   TARGET_SAMPLE_RATE,
 } from './audio/convert.js';
+import { detectTransients, sliceRanges } from './audio/slice.js';
 import * as store from './store.js';
 import { CircuitConnection, midiSupported, MAX_SAMPLE_BYTES } from './midi/transfer.js';
 
@@ -335,6 +336,7 @@ const edit = {
   viewStart: 0,
   viewEnd: 0,
   playing: null, // { ctx, source }
+  onsets: null, // absolute sample indices of detected slice starts
 };
 
 async function openEditor(id) {
@@ -342,6 +344,7 @@ async function openEditor(id) {
   edit.record = await store.getSample(id);
   edit.viewStart = 0;
   edit.viewEnd = edit.record.samples.length;
+  clearSlices();
   for (const el of Object.values(views)) el.hidden = true;
   $('view-editor').hidden = false;
   $('editor-name').value = edit.record.name;
@@ -412,6 +415,18 @@ function drawEditor() {
   if (xs > 0) ctx2d.fillRect(0, 0, Math.max(0, xs), h);
   if (xe < w) ctx2d.fillRect(Math.min(w, xe), 0, w - xe, h);
 
+  // slice markers
+  if (edit.onsets) {
+    ctx2d.fillStyle = '#fbbf24';
+    ctx2d.font = `${11 * dpr}px sans-serif`;
+    edit.onsets.forEach((onset, i) => {
+      const x = xOf(onset);
+      if (x < 0 || x > w) return;
+      ctx2d.fillRect(x - 0.75 * dpr, 0, 1.5 * dpr, h);
+      ctx2d.fillText(String(i + 1), x + 3 * dpr, 12 * dpr);
+    });
+  }
+
   // trim handles
   for (const [x, kind] of [[xs, 'start'], [xe, 'end']]) {
     if (x < -20 || x > w + 20) continue;
@@ -431,6 +446,7 @@ function drawEditor() {
   let drag = null; // 'start' | 'end' | 'pan'
   let panStartX = 0;
   let panStartView = 0;
+  let moved = false;
 
   const sampleAt = (clientX) => {
     const rect = canvas.getBoundingClientRect();
@@ -441,6 +457,7 @@ function drawEditor() {
   canvas.addEventListener('pointerdown', (e) => {
     if (!edit.record) return;
     canvas.setPointerCapture(e.pointerId);
+    moved = false;
     const rect = canvas.getBoundingClientRect();
     const span = edit.viewEnd - edit.viewStart;
     const xOf = (s) => ((s - edit.viewStart) / span) * rect.width;
@@ -458,6 +475,7 @@ function drawEditor() {
 
   canvas.addEventListener('pointermove', (e) => {
     if (!drag || !edit.record) return;
+    if (Math.abs(e.clientX - panStartX) > 6 || drag !== 'pan') moved = true;
     const p = edit.record.params;
     const total = edit.record.samples.length;
     if (drag === 'start') {
@@ -475,9 +493,17 @@ function drawEditor() {
     drawEditor();
   });
 
-  const endDrag = () => { drag = null; };
-  canvas.addEventListener('pointerup', endDrag);
-  canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('pointerup', (e) => {
+    // A tap (no drag) between slice markers auditions that slice
+    if (drag === 'pan' && !moved && edit.onsets && edit.onsets.length) {
+      const pos = sampleAt(e.clientX);
+      const ranges = sliceRanges(edit.onsets, Math.ceil(edit.record.params.trimEnd));
+      const hit = ranges.find((r) => pos >= r.start && pos < r.end);
+      if (hit) playSamples(edit.record.samples.slice(hit.start, hit.end), edit.record.sampleRate);
+    }
+    drag = null;
+  });
+  canvas.addEventListener('pointercancel', () => { drag = null; });
 })();
 
 function zoom(factor) {
@@ -503,6 +529,78 @@ function stopAudition() {
     $('audition').innerHTML = '&#x25b6; Play';
   }
 }
+
+function playSamples(samples, sampleRate) {
+  stopAudition();
+  if (!samples.length) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const buffer = ctx.createBuffer(1, samples.length, sampleRate);
+  buffer.getChannelData(0).set(samples);
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+  source.onended = stopAudition;
+  source.start();
+  edit.playing = { ctx, source };
+}
+
+// --- slicing ---
+
+function sliceThreshold() {
+  // Slider 5..60 (right = more slices) → detection threshold 0.60..0.05
+  return (65 - parseInt($('slice-sens').value, 10)) / 100;
+}
+
+function runSliceDetection() {
+  const p = edit.record.params;
+  const region = edit.record.samples.subarray(
+    Math.floor(p.trimStart), Math.ceil(p.trimEnd),
+  );
+  const onsets = detectTransients(region, edit.record.sampleRate, {
+    threshold: sliceThreshold(),
+  });
+  edit.onsets = onsets.map((o) => o + Math.floor(p.trimStart));
+  const n = edit.onsets.length;
+  $('slice-count').textContent = n ? `— ${n} found` : '— none found';
+  $('slice-save').textContent = `Save ${n} slice${n === 1 ? '' : 's'}`;
+  $('slice-save').hidden = n === 0;
+  $('slice-clear').hidden = false;
+  $('slice-sens-wrap').hidden = false;
+  $('slice-detect').textContent = 'Re-detect';
+  drawEditor();
+}
+
+function clearSlices() {
+  edit.onsets = null;
+  $('slice-count').textContent = '';
+  $('slice-save').hidden = true;
+  $('slice-clear').hidden = true;
+  $('slice-sens-wrap').hidden = true;
+  $('slice-detect').textContent = 'Detect slices';
+  if (edit.record) drawEditor();
+}
+
+$('slice-detect').addEventListener('click', runSliceDetection);
+$('slice-clear').addEventListener('click', clearSlices);
+$('slice-sens').addEventListener('input', () => {
+  if (edit.onsets) runSliceDetection();
+});
+
+$('slice-save').addEventListener('click', async () => {
+  const p = edit.record.params;
+  const ranges = sliceRanges(edit.onsets, Math.ceil(p.trimEnd));
+  const baseName = ($('editor-name').value.trim() || edit.record.name).slice(0, 20);
+  for (let i = 0; i < ranges.length; i++) {
+    const { start, end } = ranges[i];
+    await store.saveSample(
+      `${baseName} ${i + 1}`,
+      edit.record.samples.slice(start, end),
+      edit.record.sampleRate,
+    );
+  }
+  toast(`Saved ${ranges.length} slices to the library`);
+  clearSlices();
+});
 
 $('audition').addEventListener('click', () => {
   if (edit.playing) { stopAudition(); return; }

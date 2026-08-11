@@ -137,6 +137,20 @@
         </div>
       </div>
 
+      <div class="field slice-section">
+        <label>Slicing <span id="slice-count"></span></label>
+        <div class="row gap">
+          <button id="slice-detect" class="btn wide">Detect slices</button>
+          <button id="slice-save" class="btn primary wide" hidden>Save slices</button>
+          <button id="slice-clear" class="btn icon-btn" hidden aria-label="Clear slices">&#x2715;</button>
+        </div>
+        <div id="slice-sens-wrap" class="field" hidden>
+          <label for="slice-sens">Sensitivity (more slices &#x2192;)</label>
+          <input id="slice-sens" type="range" min="5" max="60" step="1" value="30">
+          <p class="hint">Tap between markers to audition a slice.</p>
+        </div>
+      </div>
+
       <p id="edit-stats" class="hint stats"></p>
 
       <div class="row gap editor-actions">

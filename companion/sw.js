@@ -1,6 +1,6 @@
 // App-shell cache so the sampler works offline once visited.
 // (Transfer obviously still needs the Circuit Tracks on USB.)
-const CACHE = 'circuit-sampler-v1';
+const CACHE = 'circuit-sampler-v2';
 const SHELL = [
   '.',
   'index.html',
@@ -10,6 +10,7 @@ const SHELL = [
   'js/audio/recorder.js',
   'js/audio/capture-worklet.js',
   'js/audio/convert.js',
+  'js/audio/slice.js',
   'js/midi/protocol.js',
   'js/midi/transfer.js',
   'manifest.webmanifest',
