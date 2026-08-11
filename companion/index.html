@@ -7,13 +7,16 @@
   <meta name="description" content="Record, edit and transfer drum samples to your Novation Circuit Tracks">
   <title>Circuit Sampler</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="app-header">
-    <h1>Circuit Sampler</h1>
+    <div class="brand">
+      <img src="favicon.svg" class="logo" alt="" width="30" height="30">
+      <h1>Circuit Sampler</h1>
+    </div>
     <span id="midi-badge" class="badge" hidden></span>
   </header>
 
@@ -170,6 +173,13 @@
         <button id="editor-delete" class="btn danger">Delete</button>
       </div>
     </section>
+    <footer class="app-footer"
+      title="Not affiliated with, endorsed, or sponsored by Novation or Focusrite plc. Circuit Tracks is a trademark of its owner; the sample-transfer protocol was independently reverse-engineered. You are responsible for the rights to any audio you record, import, or transfer.">
+      <b>Circuit Sampler</b> by <a href="https://namirsab.dev" target="_blank" rel="noopener">namirsab.dev</a>
+      — an unofficial, non-commercial fan project, not affiliated with
+      Novation or Focusrite. You are responsible for the rights to the
+      audio you sample.
+    </footer>
   </main>
 
   <nav class="tabbar">

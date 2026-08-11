@@ -1,50 +1,51 @@
 #!/usr/bin/env python3
-"""Generate the PWA icons (pure Python, no Pillow): dark rounded square
-with a teal waveform glyph, at 192x192 and 512x512."""
+"""Generate the PWA icons (pure Python, no Pillow), matching favicon.svg:
+dark rounded square with a teal waveform glyph, at 192x192 and 512x512."""
 
 import struct
 import zlib
 from pathlib import Path
 
-BG = (15, 17, 21, 255)  # --bg
-PANEL = (25, 29, 36, 255)  # --panel
-ACCENT = (45, 212, 191, 255)  # --accent teal
+BG = (20, 24, 31, 255)  # #14181f, same as favicon.svg
 
-# Symmetric bar heights (fraction of half-height) forming a waveform glyph
-BARS = [0.18, 0.42, 0.30, 0.72, 0.95, 0.55, 0.80, 0.38, 0.60, 0.25, 0.45, 0.15]
+# (center offset fraction of width, half-height fraction, RGB) per bar,
+# mirroring the favicon.svg bar layout and teal shades
+BARS = [
+    (12.5 / 64, 6 / 64, (0x14, 0x9E, 0x8F)),
+    (19.5 / 64, 14 / 64, (0x14, 0xB8, 0xA6)),
+    (26.5 / 64, 22 / 64, (0x1F, 0xCD, 0xB9)),
+    (33.5 / 64, 27 / 64, (0x2D, 0xD4, 0xBF)),
+    (40.5 / 64, 17 / 64, (0x56, 0xE0, 0xCF)),
+    (47.5 / 64, 10 / 64, (0x7C, 0xE9, 0xDC)),
+    (54.5 / 64, 5 / 64, (0xA5, 0xF0, 0xE6)),
+]
+BAR_WIDTH = 5 / 64
 
 
 def make_icon(size: int) -> bytes:
-    px = [[BG] * size for _ in range(size)]
+    transparent = (0, 0, 0, 0)
+    px = [[transparent] * size for _ in range(size)]
 
-    # Rounded-rect panel inset
-    inset = size // 16
-    radius = size // 6
-    lo, hi = inset, size - inset
-    for y in range(lo, hi):
-        for x in range(lo, hi):
-            # rounded corner check
-            cx = max(lo + radius - x, x - (hi - 1 - radius), 0)
-            cy = max(lo + radius - y, y - (hi - 1 - radius), 0)
+    # Rounded square background (full-bleed, like the favicon)
+    radius = round(size * 14 / 64)
+    hi = size - 1
+    for y in range(size):
+        for x in range(size):
+            cx = max(radius - x, x - (hi - radius), 0)
+            cy = max(radius - y, y - (hi - radius), 0)
             if cx * cx + cy * cy <= radius * radius:
-                px[y][x] = PANEL
+                px[y][x] = BG
 
-    # Waveform bars
-    n = len(BARS)
-    span = hi - lo
-    bar_w = max(2, int(span * 0.045))
-    gap = (span - n * bar_w) // (n + 1)
+    # Waveform bars, vertically centered
     mid = size // 2
-    half = int(span * 0.36)
-    x = lo + gap
-    for h in BARS:
-        bh = max(2, int(half * h))
-        for yy in range(mid - bh, mid + bh):
-            for xx in range(x, min(x + bar_w, hi)):
-                px[yy][xx] = ACCENT
-        x += bar_w + gap
+    bar_w = max(2, round(size * BAR_WIDTH))
+    for center_frac, half_frac, rgb in BARS:
+        x0 = round(size * center_frac) - bar_w // 2
+        half = max(2, round(size * half_frac))
+        for yy in range(mid - half, mid + half):
+            for xx in range(x0, min(x0 + bar_w, size)):
+                px[yy][xx] = (*rgb, 255)
 
-    # Encode PNG
     raw = b"".join(b"\x00" + b"".join(struct.pack("4B", *p) for p in row) for row in px)
 
     def chunk(tag: bytes, data: bytes) -> bytes:

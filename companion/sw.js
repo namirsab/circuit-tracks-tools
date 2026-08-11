@@ -1,6 +1,6 @@
 // App-shell cache so the sampler works offline once visited.
 // (Transfer obviously still needs the Circuit Tracks on USB.)
-const CACHE = 'circuit-sampler-v4';
+const CACHE = 'circuit-sampler-v5';
 const SHELL = [
   '.',
   'index.html',
@@ -14,6 +14,7 @@ const SHELL = [
   'js/midi/protocol.js',
   'js/midi/transfer.js',
   'manifest.webmanifest',
+  'favicon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',
 ];
