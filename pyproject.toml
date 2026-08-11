@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "circuit-tracks-tools"
-version = "0.2.1"
+version = "0.3.0"
 description = "Python library and MCP server for controlling Novation Circuit Tracks via MIDI"
 license = "MIT"
 readme = "README.md"
@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-mcp = ["mcp[cli]>=1.9.0,<2"]
+mcp = ["mcp[cli]>=2,<3"]
 dev = ["pytest", "ruff>=0.15", "pre-commit>=4.0"]
 
 [project.urls]

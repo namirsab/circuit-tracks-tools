@@ -3,7 +3,7 @@
 import asyncio
 import os
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from circuit_tracks.constants import (
     DRUM_CC,
@@ -65,7 +65,7 @@ def _get_song_schema() -> dict:
     return _get_song_schema._cache
 
 
-mcp = FastMCP(
+mcp = MCPServer(
     "Circuit Tracks",
     instructions="""\
 Control a Novation Circuit Tracks synthesizer via MIDI.
@@ -1654,7 +1654,7 @@ def load_song(song: SongSchema) -> dict:
         load_song_to_sequencer,
     )
 
-    # SongSchema is already validated by FastMCP, convert to internal dataclass
+    # SongSchema is already validated by MCPServer, convert to internal dataclass
     song_data = _schema_to_song_data(song)
     _quantize_song_notes(song_data)
     _current_song = song_data
