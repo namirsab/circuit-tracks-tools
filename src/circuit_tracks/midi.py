@@ -100,6 +100,10 @@ class MidiConnection:
         """Send a single MIDI timing clock pulse."""
         self.send(mido.Message("clock"))
 
+    def send_song_position(self, position: int) -> None:
+        """Send a MIDI Song Position (SPP)."""
+        self.send(mido.Message("songpos", pos=position))
+
     def all_notes_off(self, channel: int) -> None:
         """Send All Notes Off (CC 123) on a channel."""
         self.control_change(channel, 123, 0)

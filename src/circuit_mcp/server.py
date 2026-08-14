@@ -49,6 +49,11 @@ from circuit_tracks.song_schema import (
     SynthPreset,
     TrackName,
 )
+from circuit_tracks.samples import (
+    send_sample,
+    receive_sample,
+    clear_sample_slot,
+)
 
 _midi = MidiConnection()
 _engine = SequencerEngine(_midi)
@@ -1776,6 +1781,65 @@ def read_project(slot: int = 0) -> dict:
         "raw_size": len(ncs_bytes),
     }
     return result
+
+
+@mcp.tool()
+def receive_sample_file(pack: int, slot: int) -> dict:
+    """Send an .wav file (or any audio format) to the Circuit Tracks via SysEx.
+
+    Downloads the samplefile from the device as WAV.
+
+    Args:
+        pack: Target pack slot on the device (0-31).
+        slot: Target slot slot on the device (0-63).
+    """
+    return receive_sample(
+        _midi,
+        pack=pack,
+        slot=slot,
+    )
+
+
+@mcp.tool()
+def send_sample_file(file_path: str, pack: int, slot: int, filename: str = "") -> dict:
+    """Send an .wav file (or any audio format) to the Circuit Tracks via SysEx.
+
+    Transfers an audio sample to the device using the Novation Components
+    file management protocol. The device must be connected and will show
+    transfer progress.
+
+    Args:
+        file_path: Path to the .ncs project file.
+        pack: Target pack slot on the device (0-31).
+        slot: Target slot slot on the device (0-63).
+        filename: Filename to set on device. If empty, auto-generated from slot
+    """
+    with open(file_path, "rb") as f:
+        sample_data = f.read()
+
+    return send_ncs_project(
+        _midi,
+        sample_data,
+        pack=pack,
+        slot=slot,
+        filename=filename if filename else None,
+    )
+
+
+@mcp.tool()
+def empty_sample_slot(file_path: str, pack: int, slot: int, filename: str = "") -> dict:
+    """Clear a sample slot on Novation Circuit Tracks.
+
+    Args:
+        pack: Target pack slot on the device (0-31).
+        slot: Target slot slot on the device (0-63).
+    """
+    return clear_sample_slot(
+        _midi,
+        pack=pack,
+        slot=slot,
+        filename=filename if filename else None,
+    )
 
 
 def main():

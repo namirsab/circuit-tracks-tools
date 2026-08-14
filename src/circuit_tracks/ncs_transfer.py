@@ -18,25 +18,26 @@ from circuit_tracks.constants import (
     SYSEX_MANUFACTURER_ID,
     SYSEX_PRODUCT_NUMBER,
     SYSEX_PRODUCT_TYPE,
+    _SUBCMD_WRITE_INIT,
+    _SUBCMD_WRITE_DATA,
+    _SUBCMD_WRITE_FINISH,
+    _SUBCMD_SET_FILENAME,
+    _SUBCMD_QUERY_INFO,
+    _SUBCMD_DIR_CONTROL,
+    _SUBCMD_OPEN_SESSION,
+    _SUBCMD_CLOSE_SESSION,
+    _SUBCMD_ACK,
+    _SUBCMD_FILE_ENTRY,
+    _SYSEX_HEADER,
+)
+from circuit_tracks.midi_protocol import (
+    encode_msb_interleave,
+    decode_msb_interleave,
+    int_to_nibbles,
+    block_address,
+    _drain_input,
 )
 from circuit_tracks.midi import MidiConnection
-
-# File management protocol command group
-_CMD_GROUP = 0x03
-
-# Sub-commands (Host → Device)
-_SUBCMD_WRITE_INIT = 0x01
-_SUBCMD_WRITE_DATA = 0x02
-_SUBCMD_WRITE_FINISH = 0x03
-_SUBCMD_SET_FILENAME = 0x07
-_SUBCMD_QUERY_INFO = 0x09
-_SUBCMD_DIR_CONTROL = 0x0B
-_SUBCMD_OPEN_SESSION = 0x40
-_SUBCMD_CLOSE_SESSION = 0x41
-
-# Sub-commands (Device → Host)
-_SUBCMD_ACK = 0x04
-_SUBCMD_FILE_ENTRY = 0x0C
 
 # File type for projects
 _FILE_TYPE_PROJECT = 0x03
@@ -47,57 +48,8 @@ _PATCH_SIZE = 340
 # Data block size (raw bytes per WRITE_DATA message)
 _BLOCK_SIZE = 8192
 
-# Common SysEx header for file management protocol
-_SYSEX_HEADER = SYSEX_MANUFACTURER_ID + [SYSEX_PRODUCT_TYPE, SYSEX_PRODUCT_NUMBER, _CMD_GROUP]
-
 # NCS file size
 NCS_FILE_SIZE = 160780
-
-
-def encode_msb_interleave(data: bytes) -> list[int]:
-    """Encode 8-bit data into 7-bit MIDI-safe bytes using MSB interleave.
-
-    For every 7 data bytes, produces 8 output bytes: one MSB header byte
-    followed by the 7 data bytes with their MSBs cleared. The MSB header
-    stores the MSBs: bit 0 = MSB of byte 0, bit 1 = MSB of byte 1, etc.
-    """
-    result: list[int] = []
-    i = 0
-    while i < len(data):
-        group = data[i : i + 7]
-        msb_header = 0
-        for j, byte in enumerate(group):
-            if byte & 0x80:
-                msb_header |= 1 << j
-        result.append(msb_header)
-        for byte in group:
-            result.append(byte & 0x7F)
-        i += 7
-    return result
-
-
-def decode_msb_interleave(encoded: list[int]) -> bytes:
-    """Decode MSB-interleaved 7-bit MIDI data back to 8-bit bytes."""
-    result = bytearray()
-    i = 0
-    while i < len(encoded):
-        msb_header = encoded[i]
-        i += 1
-        for j in range(7):
-            if i >= len(encoded):
-                break
-            msb = (msb_header >> j) & 1
-            result.append(encoded[i] | (msb << 7))
-            i += 1
-    return bytes(result)
-
-
-def int_to_nibbles(value: int, count: int) -> list[int]:
-    """Encode an integer as a sequence of hex nibbles, MSN first."""
-    nibbles = []
-    for i in range(count - 1, -1, -1):
-        nibbles.append((value >> (4 * i)) & 0x0F)
-    return nibbles
 
 
 def nibbles_to_int(nibbles: list[int]) -> int:
@@ -106,17 +58,6 @@ def nibbles_to_int(nibbles: list[int]) -> int:
     for n in nibbles:
         value = (value << 4) | (n & 0x0F)
     return value
-
-
-def block_address(block_num: int) -> list[int]:
-    """Convert a sequential block number to an 8-byte address.
-
-    Uses (page, offset) encoding with 16 offsets per page:
-    block 0 → (0, 0), block 15 → (0, 15), block 16 → (1, 0), etc.
-    """
-    page = block_num >> 4  # block_num // 16
-    offset = block_num & 0x0F  # block_num % 16
-    return [0, 0, 0, 0, 0, 0, page, offset]
 
 
 def file_id(slot: int) -> list[int]:
@@ -160,13 +101,6 @@ def _wait_for_ack(
             ):
                 return True
     return False
-
-
-def _drain_input(midi: MidiConnection) -> None:
-    """Drain any pending input messages."""
-    if midi.has_input:
-        while midi._input_port.poll() is not None:
-            pass
 
 
 def list_directory(

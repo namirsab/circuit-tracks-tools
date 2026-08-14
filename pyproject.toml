@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "mido[ports-rtmidi]>=1.3.3",
     "pydantic>=2.0",
+    "pydub>=0.25.1",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +40,7 @@ Changelog = "https://github.com/namirsab/circuit-tracks-tools/blob/main/CHANGELO
 
 [project.scripts]
 circuit-tracks-mcp = "circuit_mcp.server:main"
+circuit-tracks = "circuit_tracks.console:main"
 
 [tool.ruff]
 src = ["src", "tests"]
@@ -60,3 +62,4 @@ packages = ["src/circuit_tracks", "src/circuit_mcp"]
 
 [tool.hatch.build.targets.editable]
 packages = ["src/circuit_tracks", "src/circuit_mcp"]
+
