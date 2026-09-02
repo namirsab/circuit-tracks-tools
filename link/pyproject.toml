@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "webtracks-link"
+version = "0.1.0"
+description = "Agent Link relay: gives a Web Tracks browser tab a Streamable HTTP MCP endpoint so remote MCP clients can compose on it."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Namir Sayed-Ahmad Baraza" }]
+dependencies = [
+    "starlette>=0.47",
+    "uvicorn>=0.30",
+    "websockets>=13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx", "mcp>=2,<3"]
+
+[project.scripts]
+webtracks-link = "webtracks_link.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["webtracks_link"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
