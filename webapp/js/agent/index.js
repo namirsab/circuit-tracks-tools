@@ -49,6 +49,9 @@ export async function initAgent(app) {
   };
   window.webtracks = webtracks;
   bindAgentPanel(webtracks, app);
+  // A reload of a connected tab resumes its session (same MCP URL), so the
+  // client on the other end never notices.
+  if (link.storedSession()) link.connect();
 
   exposeWebMCP(registry).then((status) => {
     webtracks.webmcp = status;

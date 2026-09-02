@@ -73,7 +73,7 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
     },
     {
       name: 'load_song',
-      description: 'Load a complete song (patterns, sounds, FX, mixer, song order) into the project, replacing it. The song format is the hardware server\'s: see get_parameter_reference("song_format"). CRITICAL: all patterns share one length (16 or 32); include "sounds" for both synths; synth p-locks use the step/track "macros" key, drum automation the track "params" key; mod matrix names are space separated ("filter frequency"); gate max 16. Pattern names map to slots 1-8 and the "song" list to scenes. Then start_sequencer to listen and export_song_to_project to save.',
+      description: 'Load a complete song (patterns, sounds, FX, mixer, song order) into the project, replacing it. The song format is the hardware server\'s: see get_parameter_reference("song_format"). CRITICAL: all patterns share one length (16 or 32); include "sounds" for both synths; synth p-locks use the step/track "macros" key, drum automation the track "params" key; mod matrix names are space separated ("filter frequency") while macro targets use snake_case parameter names ("filter_frequency"); gate max 16. Pattern names map to slots 1-8 and the "song" list to scenes. Then start_sequencer to listen and export_song_to_project to save.',
       inputSchema: withDefs(obj({ song: parts.song }, ['song'])),
       execute: undoable('load_song', ({ song }) => api.loadSong(song)),
     },
@@ -237,7 +237,7 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
     },
     {
       name: 'create_synth_patch',
-      description: 'Build a synth patch from scratch (or from a preset: pad, bass, lead, pluck) and put it on Synth 1 or 2. Call get_parameter_reference("patch"), then ("mod_matrix"), then ("macros") first. params are snake_case patch parameters 0-127; mod_matrix entries use SPACE-separated names ({"source1": "LFO 1+/-", "dest": "filter frequency", "depth": 30}, depth -64..63); macros are keyed "1"-"8" with targets [{"dest": "filter frequency", "start": 0, "end": 127, "depth": 63}]. Macros ADD to base values: set base values low for params a macro should sweep up.',
+      description: 'Build a synth patch from scratch (or from a preset: pad, bass, lead, pluck) and put it on Synth 1 or 2. Call get_parameter_reference("patch"), then ("mod_matrix"), then ("macros") first. params are snake_case patch parameters 0-127. mod_matrix entries use SPACE-separated source/dest names ({"source1": "LFO 1+/-", "dest": "filter frequency", "depth": 30}, depth -64..63). macros are keyed "1"-"8" and their targets use snake_case PARAMETER names, not mod matrix names: {"5": {"targets": [{"dest": "filter_frequency", "start": 0, "end": 127, "depth": 63}]}}. Macros ADD to base values: set base values low for params a macro should sweep up.',
       inputSchema: withDefs(obj({
         synth: SYNTH,
         name: str('Patch name (up to 16 chars).', { maxLength: 16 }),
