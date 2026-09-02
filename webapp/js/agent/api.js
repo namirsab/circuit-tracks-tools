@@ -1,0 +1,495 @@
+// Headless command API over CircuitApp: everything an agent may do, callable
+// without DOM events, keeping the audio engine, the project model and the UI
+// (pads, knobs, LCD, sidebar) in sync so the human watches the agent work.
+// Tool descriptors in tools.js are thin wrappers over these methods.
+import { PARAM_OFFSETS } from '../patch.js';
+import {
+  MACRO_DESTINATIONS, MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS,
+  SCALE_ROOTS, SCALE_TYPES, REVERB_TYPES,
+} from '../constants.js';
+
+// Track order matches the webapp model: S1, S2, M1, M2, D1..D4.
+export const TRACK_NAMES = ['synth1', 'synth2', 'midi1', 'midi2', 'drum1', 'drum2', 'drum3', 'drum4'];
+export const SYNTH_LIKE = TRACK_NAMES.slice(0, 4);
+export const DRUM_NOTE_TO_INDEX = { 60: 0, 62: 1, 64: 2, 65: 3 };
+export const CHANNEL_TO_TRACK = { 0: 0, 1: 1, 2: 2, 3: 3, 9: 4 };
+
+export function trackId(name) {
+  const i = TRACK_NAMES.indexOf(String(name).toLowerCase());
+  if (i < 0) throw new Error(`Unknown track "${name}". Use one of: ${TRACK_NAMES.join(', ')}`);
+  return i;
+}
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v))));
+const clamp127 = (v) => clamp(v, 0, 127);
+
+const DRUM_PARAM_NAMES = ['level', 'pitch', 'decay', 'distortion', 'eq', 'pan', 'sample', 'patch_select', 'reverb_send', 'delay_send'];
+
+export const PROJECT_PARAM_HELP = [
+  'reverb_<track>_send / delay_<track>_send (track: synth1, synth2, midi1, midi2, drum1-4)',
+  '<track>_level / <track>_pan',
+  'master_filter_frequency (0-63 low-pass, 64 off, 65-127 high-pass), master_filter_resonance',
+  'reverb_type (0-5), reverb_decay, reverb_damping, reverb_preset (0-7)',
+  'delay_time, delay_time_sync (0-35), delay_feedback, delay_width, delay_lr_ratio (0-12), delay_slew_rate, delay_preset (0-15)',
+  'fx_bypass (0/1)',
+  'sidechain_<synth1|synth2|midi1|midi2>_preset (1-7 activates, 0 off), _source (0-3 = drum1-4, 4 = off), _attack, _hold, _decay, _depth',
+];
+
+function suggestName(name, candidates) {
+  const lower = name.toLowerCase();
+  const hit = candidates.find((c) => c.toLowerCase() === lower)
+    ?? candidates.find((c) => c.includes(lower) || lower.includes(c));
+  return hit ? ` Did you mean "${hit}"?` : '';
+}
+
+export class AgentApi {
+  constructor(app) {
+    this.app = app;
+    this.history = []; // project snapshots for undo
+    this.maxHistory = 12;
+    this.patternNames = new Map(); // song pattern name -> slot index (set by load_song)
+  }
+
+  get project() { return this.app.project; }
+  get seq() { return this.app.seq; }
+  get ui() { return this.app.ui; }
+  get engine() { return this.app.engine; }
+
+  // ---------- audio ----------
+  async ensureAudio() {
+    const ctx = this.engine.ctx;
+    if (ctx.state !== 'running') {
+      // resume() only settles after a user gesture in Chrome; do not hang on it.
+      await Promise.race([this.engine.resume(), new Promise((r) => setTimeout(r, 400))]);
+    }
+    if (ctx.state !== 'running') {
+      throw new Error('Audio is locked: browsers need one click or key press on the Web Tracks page before it may play sound. Ask the user to click anywhere on the page, then retry.');
+    }
+    await this.app.samplesReady;
+  }
+
+  // ---------- status ----------
+  status() {
+    const p = this.project;
+    const tracks = TRACK_NAMES.map((track, t) => {
+      const ts = this.seq.playing ? this.seq.trackState[t] : null;
+      const chain = p.patternChains[t] ?? { start: 0, end: 0 };
+      const current = ts ? ts.patIdx : this.ui.currentPattern[t];
+      const pat = p.patterns[t][current];
+      return {
+        track,
+        muted: !!this.ui.mutes[t],
+        pattern: current + 1,
+        length: (pat?.settings.playbackEnd ?? 15) + 1,
+        step: ts ? ts.step + 1 : null,
+        chain: chain.start || chain.end ? { start: chain.start + 1, end: chain.end + 1 } : null,
+      };
+    });
+    const sc = p.sceneChain ?? { start: 0, end: 0 };
+    return {
+      playing: this.seq.playing,
+      bpm: this.seq.bpm,
+      swing: this.seq.swing,
+      audio: this.engine.ctx.state,
+      project: {
+        name: p.name,
+        slot: this.ui.currentProjectIdx,
+        scale: `${SCALE_ROOTS[p.scaleRoot] ?? '?'} ${SCALE_TYPES[p.scaleType]?.name ?? '?'}`,
+      },
+      tracks,
+      scene_chain: sc.start || sc.end ? { start: sc.start + 1, end: sc.end + 1 } : null,
+      active_scene: this.seq.sceneState?.current != null && this.seq.sceneState.current >= 0 ? this.seq.sceneState.current + 1 : null,
+      synth_patches: [0, 1].map((s) => this.app.synthTracks[s].patch?.name ?? 'Initial Patch'),
+      drums: [0, 1, 2, 3].map((d) => {
+        const cfg = this.app.drums.tracks[d].config;
+        return { drum: d + 1, sample: cfg.patchSelect, name: this.app.drums.sampleName(cfg.patchSelect) };
+      }),
+      pattern_names: Object.fromEntries([...this.patternNames].map(([n, i]) => [n, i + 1])),
+    };
+  }
+
+  // ---------- transport ----------
+  async play({ resume = false } = {}) {
+    await this.ensureAudio();
+    if (this.seq.playing) return 'Sequencer already running';
+    this.seq.start(resume);
+    return resume ? 'Sequencer resumed' : 'Sequencer started';
+  }
+
+  stop() {
+    if (!this.seq.playing) return 'Sequencer already stopped';
+    this.seq.stop();
+    this.app.pendingProject = null;
+    return 'Sequencer stopped';
+  }
+
+  setBpm(bpm) {
+    this.seq.setBpm(bpm);
+    if (this.ui.view === 'tempo') this.app.views.render();
+    this.app.refreshSidebar();
+    this.app.markProjectDirty();
+    return this.seq.bpm;
+  }
+
+  setSwing(swing) {
+    this.seq.setSwing(swing);
+    if (this.ui.view === 'tempo') this.app.views.render();
+    this.app.refreshSidebar();
+    this.app.markProjectDirty();
+    return this.seq.swing;
+  }
+
+  mute(track, muted = true) {
+    const t = trackId(track);
+    this.ui.mutes[t] = !!muted;
+    this.engine.tracks[t].setMuted(!!muted);
+    this.app.views.render();
+    return `${TRACK_NAMES[t]} ${muted ? 'muted' : 'unmuted'}`;
+  }
+
+  // ---------- patterns / scenes ----------
+  selectPattern(track, pattern, { immediate = false } = {}) {
+    const t = trackId(track);
+    const idx = clamp(pattern, 1, 8) - 1;
+    this.ui.currentPattern[t] = idx;
+    this.project.patternChains[t] = { start: 0, end: 0 };
+    if (immediate) this.seq.switchPatternNow(t, idx);
+    this.app.markProjectDirty();
+    this.app.views.render();
+    return `${TRACK_NAMES[t]} pattern ${idx + 1}${this.seq.playing ? (immediate ? ' (switched now)' : ' (queued for the end of the current pattern)') : ''}`;
+  }
+
+  selectNamedPattern(name) {
+    if (!this.patternNames.size) throw new Error('No named patterns are loaded. Call load_song first, or omit the pattern to play the current selection.');
+    if (!this.patternNames.has(name)) {
+      throw new Error(`Unknown pattern "${name}". Loaded patterns: ${[...this.patternNames.keys()].join(', ')}`);
+    }
+    const idx = this.patternNames.get(name);
+    for (let t = 0; t < 8; t++) {
+      this.ui.currentPattern[t] = idx;
+      this.project.patternChains[t] = { start: 0, end: 0 };
+    }
+    this.project.sceneChain = { start: 0, end: 0 };
+    this.seq.sceneState = null;
+    this.app.views.render();
+    return idx;
+  }
+
+  // ---------- synth ----------
+  synthTrack(synth) {
+    const s = Number(synth);
+    if (s !== 1 && s !== 2) throw new Error('synth must be 1 or 2');
+    return this.app.synthTracks[s - 1];
+  }
+
+  setSynthParams(synth, params) {
+    const st = this.synthTrack(synth);
+    const patch = st.patch;
+    const applied = {};
+    for (const [name, raw] of Object.entries(params)) {
+      const knob = /^macro_knob([1-8])$/.exec(name);
+      if (knob) {
+        st.setMacro(Number(knob[1]) - 1, clamp127(raw));
+        applied[name] = clamp127(raw);
+        continue;
+      }
+      if (name === 'name') {
+        this.renamePatch(patch, String(raw));
+        applied.name = patch.name;
+        continue;
+      }
+      if (!(name in PARAM_OFFSETS)) {
+        throw new Error(`Unknown synth parameter "${name}".${suggestName(name, Object.keys(PARAM_OFFSETS))} Call get_parameter_reference("synth") for the list.`);
+      }
+      const v = clamp127(raw);
+      patch.params[name] = v;
+      patch.raw[PARAM_OFFSETS[name]] = v;
+      const mod = /^mod(\d+)_(source1|source2|depth|destination)$/.exec(name);
+      if (mod && patch.modMatrix[Number(mod[1]) - 1]) patch.modMatrix[Number(mod[1]) - 1][mod[2]] = v;
+      applied[name] = v;
+    }
+    st.applyPatchFx();
+    st.applyLfos();
+    st.updateActiveVoices();
+    this.afterPatchChange(synth);
+    return applied;
+  }
+
+  renamePatch(patch, name) {
+    const clean = name.slice(0, 16);
+    patch.name = clean.trim();
+    for (let i = 0; i < 16; i++) patch.raw[i] = i < clean.length ? clean.charCodeAt(i) & 0x7f : 0x20;
+  }
+
+  afterPatchChange(synth) {
+    this.app.markProjectDirty();
+    this.app.refreshSidebar();
+    if (this.ui.currentTrack === synth - 1) this.app.updateKnobs();
+  }
+
+  setMacro(synth, macro, value) {
+    const st = this.synthTrack(synth);
+    const idx = clamp(macro, 1, 8) - 1;
+    st.setMacro(idx, clamp127(value));
+    this.app.markProjectDirty();
+    if (this.ui.currentTrack === synth - 1) this.app.updateKnobs();
+    return { synth: Number(synth), macro: idx + 1, value: clamp127(value) };
+  }
+
+  getMacros() {
+    const out = {};
+    for (const s of [1, 2]) {
+      const st = this.app.synthTracks[s - 1];
+      out[`synth${s}`] = {
+        patch: st.patch?.name ?? 'Initial Patch',
+        macros: st.patch.macros.map((m, k) => ({
+          macro: k + 1,
+          position: st.macroPositions[k],
+          targets: m.targets.map((t) => ({
+            param: MACRO_DESTINATIONS[t.destination] ?? `dest_${t.destination}`,
+            start: t.start, end: t.end, depth: t.depth,
+          })),
+        })),
+      };
+    }
+    return out;
+  }
+
+  getSynthPatch(synth) {
+    const st = this.synthTrack(synth);
+    const p = st.patch;
+    const params = {};
+    for (const [k, v] of Object.entries(p.params)) if (!/^mod\d+_/.test(k)) params[k] = v;
+    const modMatrix = p.modMatrix
+      .map((m, i) => ({ slot: i + 1, ...m }))
+      .filter((m) => m.depth !== 64 && m.depth !== 0 && (m.source1 || m.source2 || m.destination))
+      .map((m) => ({
+        slot: m.slot,
+        source1: MOD_MATRIX_SOURCES[m.source1] ?? m.source1,
+        source2: MOD_MATRIX_SOURCES[m.source2] ?? m.source2,
+        destination: MOD_MATRIX_DESTINATIONS[m.destination] ?? m.destination,
+        depth: m.depth - 64,
+      }));
+    return {
+      synth: Number(synth),
+      name: p.name,
+      bank_index: this.ui.patchIndex[synth - 1],
+      params,
+      mod_matrix: modMatrix,
+      macros: this.getMacros()[`synth${synth}`].macros,
+    };
+  }
+
+  // ---------- drums ----------
+  drumIndex(drum) {
+    const d = Number(drum);
+    if (!(d >= 1 && d <= 4)) throw new Error('drum must be 1-4');
+    return d - 1;
+  }
+
+  setDrumParams(drum, params) {
+    const d = this.drumIndex(drum);
+    const t = 4 + d;
+    const cfg = {};
+    const applied = {};
+    for (const [name, raw] of Object.entries(params)) {
+      switch (name) {
+        case 'level': case 'pitch': case 'decay': case 'distortion': case 'eq': case 'pan':
+          cfg[name] = clamp127(raw); break;
+        case 'sample': case 'patch_select':
+          cfg.patchSelect = clamp(raw, 0, 63); break;
+        case 'reverb_send': this.app.setTrackSend(t, 'reverb', clamp127(raw)); break;
+        case 'delay_send': this.app.setTrackSend(t, 'delay', clamp127(raw)); break;
+        default:
+          throw new Error(`Unknown drum parameter "${name}".${suggestName(name, DRUM_PARAM_NAMES)} Available: ${DRUM_PARAM_NAMES.join(', ')}`);
+      }
+      applied[name] = name === 'sample' || name === 'patch_select' ? cfg.patchSelect : clamp127(raw);
+    }
+    if (Object.keys(cfg).length) {
+      this.app.drums.applyConfig(d, cfg);
+      Object.assign(this.project.drumConfigs[d], cfg);
+    }
+    this.app.markProjectDirty();
+    this.app.refreshSidebar();
+    if (this.ui.currentTrack === t) this.app.updateKnobs();
+    this.app.views.render();
+    if (cfg.patchSelect !== undefined) applied.sample_name = this.app.drums.sampleName(cfg.patchSelect);
+    return applied;
+  }
+
+  listDrumSamples(page = null) {
+    const names = this.app.drums.names;
+    const rows = [];
+    for (let i = 0; i < 64; i++) {
+      if (page && Math.floor(i / 16) !== page - 1) continue;
+      rows.push({ index: i, page: Math.floor(i / 16) + 1, name: names[i] || `sample_${i}` });
+    }
+    return { pack: this.app.packName, samples: rows };
+  }
+
+  // ---------- project-level ----------
+  setProjectParams(params) {
+    const fx = this.project.fx;
+    const applied = {};
+    const notes = [];
+    let reverbDirty = false;
+    let delayDirty = false;
+    const scDirty = new Set();
+    for (const [name, raw] of Object.entries(params)) {
+      const v = clamp127(raw);
+      let m;
+      if ((m = /^(reverb|delay)_(synth1|synth2|midi1|midi2|drum[1-4])_send$/.exec(name))) {
+        this.app.setTrackSend(trackId(m[2]), m[1], v);
+      } else if ((m = /^(synth1|synth2|midi1|midi2|drum[1-4])_(level|pan)$/.exec(name))) {
+        if (m[2] === 'level') this.app.setTrackLevel(trackId(m[1]), v);
+        else this.app.setTrackPan(trackId(m[1]), v);
+      } else if (name === 'master_filter_frequency') {
+        this.app.setMasterFilter(v);
+      } else if (name === 'master_filter_resonance') {
+        notes.push('master_filter_resonance is accepted but has no audible effect in Web Tracks');
+      } else if (name === 'reverb_type') {
+        fx.reverbType = clamp(raw, 0, 5); reverbDirty = true;
+        notes.push(`reverb_type ${fx.reverbType} (${REVERB_TYPES[fx.reverbType] ?? '?'}) is stored for export; the web reverb has one algorithm`);
+      } else if (name === 'reverb_decay') { fx.reverbDecay = v; reverbDirty = true; }
+      else if (name === 'reverb_damping') { fx.reverbDamping = v; reverbDirty = true; }
+      else if (name === 'reverb_preset') { this.project.reverbPreset = clamp(raw, 0, 7); this.app.applyReverbPreset(this.project.reverbPreset); }
+      else if (name === 'delay_preset') { this.project.delayPreset = clamp(raw, 0, 15); this.app.applyDelayPreset(this.project.delayPreset); }
+      else if (name === 'fx_bypass') { fx.fxBypass = Number(raw) !== 0 && raw !== false; this.engine.setFxBypass(fx.fxBypass); }
+      else if (name === 'delay_time') { fx.delayTime = v; delayDirty = true; }
+      else if (name === 'delay_time_sync') { fx.delaySync = clamp(raw, 0, 35); delayDirty = true; }
+      else if (name === 'delay_feedback') { fx.delayFeedback = v; delayDirty = true; }
+      else if (name === 'delay_width') { fx.delayWidth = v; delayDirty = true; }
+      else if (name === 'delay_lr_ratio') { fx.delayLrRatio = clamp(raw, 0, 12); delayDirty = true; }
+      else if (name === 'delay_slew_rate') { fx.delaySlew = v; delayDirty = true; }
+      else if ((m = /^sidechain_(synth1|synth2|midi1|midi2)_(preset|source|attack|hold|decay|depth)$/.exec(name))) {
+        const i = trackId(m[1]);
+        const sc = this.project.sidechain[i];
+        if (m[2] === 'preset') sc.preset = clamp(raw, 0, 7);
+        else if (m[2] === 'source') sc.source = clamp(raw, 0, 4);
+        else sc[m[2]] = v;
+        scDirty.add(i);
+      } else {
+        throw new Error(`Unknown project parameter "${name}". Available:\n- ${PROJECT_PARAM_HELP.join('\n- ')}`);
+      }
+      applied[name] = raw;
+    }
+    if (reverbDirty) this.engine.reverb.setParams(fx.reverbDecay, fx.reverbDamping);
+    if (delayDirty) this.app.applyDelayParams();
+    for (const i of scDirty) {
+      const sc = this.project.sidechain[i];
+      // Explicit attack/hold/decay/depth win over the preset table in the engine
+      // (the project keeps the preset index for hardware export).
+      this.engine.configureSidechain(i, { ...sc, preset: sc.preset ? 99 : 0 });
+      if (sc.preset === 0 && sc.source <= 3) notes.push(`${TRACK_NAMES[i]} sidechain stays off until sidechain_${TRACK_NAMES[i]}_preset is 1-7`);
+    }
+    this.app.markProjectDirty();
+    this.app.refreshSidebar();
+    this.app.updateKnobs();
+    this.app.views.render();
+    return notes.length ? { applied, notes } : { applied };
+  }
+
+  // ---------- audition ----------
+  async playNotes({ channel = null, track = null, notes, velocity = 100, duration_ms = 500 }) {
+    await this.ensureAudio();
+    let t = track != null ? trackId(track) : CHANNEL_TO_TRACK[channel];
+    if (t == null) throw new Error('Give a track name (synth1, synth2, midi1, midi2, drum1-4) or a channel: 0 = synth1, 1 = synth2, 2 = midi1, 3 = midi2, 9 = drums');
+    const now = this.engine.now();
+    const vel = clamp127(velocity);
+    const played = [];
+    if (t >= 4) {
+      for (const n of notes) {
+        const d = track != null ? t - 4 : DRUM_NOTE_TO_INDEX[n];
+        if (d == null) continue;
+        this.app.drums.play(d, now, vel);
+        this.seq.visualEvents.push({ type: 'drumhit', time: now, trackId: 4 + d, sample: this.app.drums.tracks[d].config.patchSelect });
+        played.push(`drum${d + 1}`);
+      }
+      if (!played.length) throw new Error('Drum notes are 60, 62, 64, 65 for drum 1-4 (or pass track: "drum1")');
+      return `Hit ${played.join(', ')}`;
+    }
+    const dur = Math.max(0.03, duration_ms / 1000);
+    for (const n of notes) {
+      const midi = clamp127(n);
+      this.app.synthTracks[t].noteOn(now, midi, vel, dur);
+      this.seq.visualEvents.push({ type: 'note', time: now, trackId: t, midi, dur });
+      played.push(midi);
+    }
+    return `Playing ${played.join(', ')} on ${TRACK_NAMES[t]} for ${duration_ms} ms`;
+  }
+
+  async playDrum(drum, velocity = 100) {
+    const d = this.drumIndex(drum);
+    await this.ensureAudio();
+    const now = this.engine.now();
+    this.app.drums.play(d, now, clamp127(velocity));
+    this.seq.visualEvents.push({ type: 'drumhit', time: now, trackId: 4 + d, sample: this.app.drums.tracks[d].config.patchSelect });
+    return `Drum ${d + 1} (${this.app.drums.sampleName(this.app.drums.tracks[d].config.patchSelect)})`;
+  }
+
+  // ---------- banks ----------
+  listPatches() {
+    return { pack: this.app.packName, patches: this.app.patchBank.map((p, i) => ({ index: i, name: p.name })) };
+  }
+
+  async selectPatch(synth, index) {
+    this.synthTrack(synth);
+    const entry = this.app.patchBank[index];
+    if (!entry) throw new Error(`No patch ${index}; the loaded pack has ${this.app.patchBank.length} patches (0-${this.app.patchBank.length - 1}). Call list_patches.`);
+    await this.app.loadPatchFromBank(synth - 1, index);
+    return { synth: Number(synth), index, name: entry.name };
+  }
+
+  listProjects() {
+    return {
+      pack: this.app.packName,
+      current_slot: this.ui.currentProjectIdx,
+      projects: this.app.projectBank.map((e, slot) => (e ? { slot, name: e.name } : null)).filter(Boolean),
+    };
+  }
+
+  selectProject(slot, { queued = false } = {}) {
+    const idx = clamp(slot, 0, 63);
+    const name = this.app.projectBank[idx]?.name ?? 'Init project';
+    if (queued && this.seq.playing) {
+      this.app.selectProjectFromBank(idx);
+      return `Queued "${name}" (slot ${idx}) for the end of the current pattern`;
+    }
+    this.app.loadProjectFromBank(idx);
+    return `Loaded "${name}" (slot ${idx})`;
+  }
+
+  async saveToSlot(slot = -1, name = '') {
+    let idx = Number(slot);
+    if (idx < 0) idx = this.ui.currentProjectIdx ?? this.app.projectBank.findIndex((e) => !e);
+    if (idx < 0) idx = 0;
+    const saved = await this.app.saveToSlot(idx, name || null);
+    return { slot: idx, name: saved };
+  }
+
+  async downloadProject() {
+    await this.app.exportNcs();
+    return `Downloading ${(this.project.name || 'project').trim()}.ncs`;
+  }
+
+  // ---------- undo ----------
+  async snapshot(label) {
+    try {
+      const bytes = await this.app.buildProjectBytes();
+      this.history.push({ label, bytes, slot: this.ui.currentProjectIdx, time: Date.now() });
+      if (this.history.length > this.maxHistory) this.history.shift();
+    } catch (err) {
+      console.warn('agent snapshot failed:', err);
+    }
+  }
+
+  async undo() {
+    const h = this.history.pop();
+    if (!h) throw new Error('Nothing to undo');
+    const buf = h.bytes.buffer.slice(h.bytes.byteOffset, h.bytes.byteOffset + h.bytes.byteLength);
+    this.app.loadProjectFromArrayBuffer(buf, 'previous state');
+    this.ui.currentProjectIdx = h.slot;
+    this.app.views.render();
+    return `Undid "${h.label}"; ${this.history.length} earlier state(s) remain`;
+  }
+}

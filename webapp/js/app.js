@@ -13,6 +13,7 @@ import { buildWelcome, bindWelcome } from './welcome.js';
 import { Persistence, showRestorePrompt } from './persistence.js';
 import { readZip, writeZip } from './zip.js';
 import { ncsToMidi } from './scales.js';
+import { initAgent } from './agent/index.js';
 import {
   TRACKS, TRACK_COLORS, SEND_ORDER, SCALE_TYPES, SCALE_ROOTS,
   REVERB_PRESETS, DELAY_PRESETS, REVERB_TYPES,
@@ -150,6 +151,9 @@ class CircuitApp {
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
+
+    // Agent tools (window.webtracks + WebMCP) over the headless API.
+    this.agent = initAgent(this);
   }
 
   trackKind(t) { return TRACKS[t].kind; }
@@ -870,22 +874,9 @@ class CircuitApp {
     };
 
     attachKnob(document.getElementById('knob-volume'),
-      () => this.masterVolumeValue,
-      (v) => {
-        this.masterVolumeValue = v;
-        this.engine.setMasterVolume(v);
-        this.lcdMsg(`Master volume: ${v}`);
-      });
-
+      () => this.masterVolumeValue, (v) => this.setMasterVolume(v));
     attachKnob(document.getElementById('knob-filter'),
-      () => this.masterFilterValue,
-      (v) => {
-        this.masterFilterValue = v;
-        this.engine.setMasterFilter(v);
-        this.updateFilterLed();
-        const desc = v < 64 ? `LP ${v}` : v === 64 ? 'OFF' : `HP ${v}`;
-        this.lcdMsg(`Master filter: ${desc}`);
-      });
+      () => this.masterFilterValue, (v) => this.setMasterFilter(v));
 
     this.macroKnobs.forEach((knob, i) => {
       attachKnob(knob, () => this.knobValue(i), (v) => this.knobChanged(i, v));
@@ -894,6 +885,22 @@ class CircuitApp {
     this.rotateKnob(document.getElementById('knob-volume'), this.masterVolumeValue);
     this.rotateKnob(document.getElementById('knob-filter'), this.masterFilterValue);
     this.updateFilterLed();
+  }
+
+  setMasterVolume(v) {
+    this.masterVolumeValue = v;
+    this.engine.setMasterVolume(v);
+    this.rotateKnob(document.getElementById('knob-volume'), v);
+    this.lcdMsg(`Master volume: ${v}`);
+  }
+
+  setMasterFilter(v) {
+    this.masterFilterValue = v;
+    this.engine.setMasterFilter(v);
+    this.rotateKnob(document.getElementById('knob-filter'), v);
+    this.updateFilterLed();
+    const desc = v < 64 ? `LP ${v}` : v === 64 ? 'OFF' : `HP ${v}`;
+    this.lcdMsg(`Master filter: ${desc}`);
   }
 
   // Master Filter LED: pale at the centre detent, blue either side with
@@ -1533,20 +1540,31 @@ class CircuitApp {
     try {
       let slot = this.ui.currentProjectIdx ?? this.projectBank.findIndex((e) => !e);
       if (slot < 0) slot = 0;
-      const bytes = await this.buildProjectBytes();
-      this.projectBank[slot] = {
-        name: (this.project.name || 'Project').trim() || `Project ${slot + 1}`,
-        buf: bytes.slice().buffer,
-        color: this.project.color ?? 0,
-      };
-      this.ui.currentProjectIdx = slot;
-      this._slotsDirty = true;
+      await this.saveToSlot(slot);
       this.lcdMsg(`Saved to slot ${slot + 1}`);
-      this.snapshotPack();
     } catch (err) {
       this.lcdMsg(`Save failed: ${err.message}`);
     }
     this.exitSaveMode();
+  }
+
+  // Write the live project into a bank slot (the hardware "Save" target).
+  // Shared by the Save button and the agent's export_song_to_project.
+  async saveToSlot(slot, name = null) {
+    if (name != null) this.project.name = name;
+    const bytes = await this.buildProjectBytes();
+    this.projectBank[slot] = {
+      name: (this.project.name || 'Project').trim() || `Project ${slot + 1}`,
+      buf: bytes.slice().buffer,
+      color: this.project.color ?? 0,
+    };
+    this.ui.currentProjectIdx = slot;
+    this._slotsDirty = true;
+    this.snapshotPack();
+    this.updateLcd();
+    this.refreshSidebar();
+    this.views.render();
+    return this.projectBank[slot].name;
   }
 
   exitSaveMode() {

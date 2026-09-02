@@ -156,6 +156,26 @@ export const MACRO_DESTINATIONS = {
 };
 for (let i = 51; i <= 70; i++) MACRO_DESTINATIONS[i] = `mod${i - 50}_depth`;
 
+// Mod matrix source index -> name (Programmer's Reference Guide v3). Sparse:
+// only these indices are valid sources.
+export const MOD_MATRIX_SOURCES = {
+  0: 'direct', 4: 'velocity', 5: 'keyboard',
+  6: 'LFO 1+', 7: 'LFO 1+/-', 8: 'LFO 2+', 9: 'LFO 2+/-',
+  10: 'env amp', 11: 'env filter', 12: 'env 3',
+};
+
+// Mod matrix destination index -> name.
+export const MOD_MATRIX_DESTINATIONS = {
+  0: 'osc 1 & 2 pitch', 1: 'osc 1 pitch', 2: 'osc 2 pitch',
+  3: 'osc 1 v-sync', 4: 'osc 2 v-sync',
+  5: 'osc 1 pulse width / index', 6: 'osc 2 pulse width / index',
+  7: 'osc 1 level', 8: 'osc 2 level', 9: 'noise level',
+  10: 'ring modulation 1*2 level', 11: 'filter drive amount',
+  12: 'filter frequency', 13: 'filter resonance',
+  14: 'LFO 1 rate', 15: 'LFO 2 rate',
+  16: 'amp envelope decay', 17: 'filter envelope decay',
+};
+
 // Sidechain preset index (1-7) -> fixed attack/hold/decay/depth.
 export const SIDECHAIN_PRESETS = {
   1: { attack: 5, hold: 50, decay: 80, depth: 80 },
