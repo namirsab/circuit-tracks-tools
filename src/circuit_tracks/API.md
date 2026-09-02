@@ -677,3 +677,72 @@ The song format supports per-step parameter locks at both step and track level.
 ```
 
 **Position format**: Integer keys = step index (fills all micro-ticks). Float keys = micro-step resolution (e.g. `"2.5"` = step 2, halfway). For a 16-step pattern, each step has 12 sub-positions (192 total = 6 lanes x 32).
+
+---
+
+## Transcribe (`circuit_tracks.transcribe`)
+
+Monophonic audio (singing, humming, whistling) to sequencer steps. Pure numpy; requires the `audio` extra.
+
+### Data Types
+
+```python
+@dataclass
+class NoteEvent:        # a detected note in seconds
+    start_s: float; end_s: float; midi: float; confidence: float; level_db: float
+    note -> int         # rounded MIDI note
+    duration_s -> float
+
+@dataclass
+class QuantizedNote:    # a note snapped to the 16th-note grid
+    step: int; note: int; gate: float; velocity: int; confidence: float; start_s: float; duration_s: float
+    name -> str         # e.g. "C4"
+    to_step() -> dict   # {"note", "gate", "velocity"} for SequencerEngine / set_track
+
+@dataclass
+class Transcription:
+    bpm: float; bars: int; steps_per_bar: int; notes: list[QuantizedNote]; events: list[NoteEvent]
+    peak_db: float; scale: str; warnings: list[str]
+    steps() -> dict[str, dict]                       # {"0": {...}, "4": {...}} for set_track
+    patterns(pattern_length=32) -> list[dict]        # steps split into pattern-sized chunks
+    summary() -> str                                 # "8 notes over 2 bar(s) at 120 BPM: C4 D4 ..."
+    to_dict(pattern_length=32) -> dict               # the MCP tool result
+```
+
+### Functions
+
+```python
+def transcribe(audio: np.ndarray, sr: int, bpm: float, bars: int | None = None,
+               steps_per_bar: int = 16, offset_s: float = 0.0, latency_s: float = 0.0,
+               transpose: int = 0, scale_root: str | None = None,
+               scale_type: str | None = None) -> Transcription
+```
+End-to-end: analyze, segment, quantize. `offset_s` skips a count-in; `bars` defaults to the audio length.
+
+```python
+def analyze(audio, sr, fmin=60.0, fmax=1200.0, hop_s=0.010, win_s=0.040, threshold=0.15,
+            silence_db=-30.0, floor_db=-60.0, min_confidence=0.6) -> FrameAnalysis
+def segment_notes(fa: FrameAnalysis, min_note_s=0.06, pitch_tolerance=0.75,
+                  split_frames=3, onset_db=6.0, onset_lag=3) -> list[NoteEvent]
+def quantize_notes(events, bpm, bars, steps_per_bar=16, latency_s=0.0, transpose=0,
+                   scale_root=None, scale_type=None, gate_resolution=0.5) -> list[QuantizedNote]
+def yin_pitch(frame, sr, fmin=60.0, fmax=1200.0, threshold=0.15, win=None) -> tuple[float, float]
+```
+The pipeline stages. `yin_pitch` returns `(f0_hz, confidence)` for one frame.
+
+```python
+def synthesize_melody(notes: list[tuple[int | None, float]], sr=22050, vibrato_hz=5.5,
+                      vibrato_semitones=0.25, gap_s=0.04, noise=0.002, seed=0) -> np.ndarray
+```
+Render a "sung" test melody: `notes` are `(midi_or_None_for_rest, duration_s)` pairs.
+
+## Audio I/O (`circuit_tracks.audio_io`)
+
+Lazy-imports `sounddevice` / `soundfile`; raises `RuntimeError` with an install hint if the `audio` extra is missing.
+
+```python
+def record(seconds: float, samplerate: int | None = None, device: int | None = None) -> tuple[np.ndarray, int]
+def load_audio(path: str) -> tuple[np.ndarray, int]     # mono float32
+def save_audio(path: str, audio: np.ndarray, sr: int) -> None   # 16-bit PCM
+def list_input_devices() -> list[dict]                  # index, name, channels, samplerate, default
+```
