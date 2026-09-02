@@ -1,6 +1,6 @@
 // AudioEngine: master chain, per-track channel strips, FX buses, sidechain.
 import { ReverbBus, DelayBus } from './fx.js';
-import { TRACKS, SIDECHAIN_PRESETS } from '../constants.js';
+import { TRACKS } from '../constants.js';
 
 class TrackChannel {
   constructor(ctx, engine) {
@@ -147,12 +147,15 @@ export class AudioEngine {
 
   configureSidechain(trackId, cfg) {
     // trackId 0-3 (S1,S2,M1,M2). cfg: {preset, source, attack, hold, decay, depth}
+    // The curve values are taken as given: the project model already holds
+    // the preset's curve (the FX view and the agent copy SIDECHAIN_PRESETS in
+    // when a preset is picked), so explicit overrides survive a reload.
     if (!cfg || cfg.preset === 0 || cfg.source >= 4) {
       this.sidechain[trackId] = null;
       return;
     }
-    const preset = SIDECHAIN_PRESETS[cfg.preset] ?? cfg;
-    this.sidechain[trackId] = { source: cfg.source, ...preset };
+    const { source, attack, hold, decay, depth } = cfg;
+    this.sidechain[trackId] = { source, attack, hold, decay, depth };
   }
 
   // Called by the drum engine whenever drum track (0-3) triggers at `time`.

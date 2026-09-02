@@ -76,29 +76,30 @@ class Session:
         self.id = sid
         self.secret = secret
         self.ws: WebSocket | None = None
-        self.online = False
         self.client: Any = None
         self.created = time.time()
         self.calls = 0
         self._next_id = 0
         self._pending: dict[int, asyncio.Future] = {}
 
+    @property
+    def online(self) -> bool:
+        return self.ws is not None
+
     def attach(self, ws: WebSocket) -> None:
         self.ws = ws
-        self.online = True
 
     def detach(self, ws: WebSocket) -> None:
         if self.ws is not ws:
             return
         self.ws = None
-        self.online = False
         for fut in self._pending.values():
             if not fut.done():
                 fut.set_exception(TabGone())
         self._pending.clear()
 
     async def request(self, method: str, params: dict, timeout: float) -> Any:
-        if not self.online or self.ws is None:
+        if self.ws is None:
             raise TabGone()
         self._next_id += 1
         rid = self._next_id
@@ -158,27 +159,26 @@ class Relay:
 
     # ----- sessions -----
     def open_session(self, resume: Any) -> Session | None:
+        """The session for a tab's hello: a resumed one (same id + secret), the
+        tab's previous id re-created after the relay forgot it, or a fresh one."""
+        sid = secret = ""
         if isinstance(resume, dict):
             sid = str(resume.get("session", ""))
             secret = str(resume.get("secret", ""))
-            if SESSION_ID_RE.match(sid) and SECRET_RE.match(secret):
-                existing = self.sessions.get(sid)
-                if existing is None:
-                    if len(self.sessions) >= self.max_sessions:
-                        return None
-                    session = Session(sid, secret)
-                    self.sessions[sid] = session
-                    return session
-                if secrets.compare_digest(existing.secret, secret):
-                    return existing
-                # The id belongs to someone else: hand out a fresh session.
+            if not (SESSION_ID_RE.match(sid) and SECRET_RE.match(secret)):
+                sid = secret = ""
+        existing = self.sessions.get(sid) if sid else None
+        if existing is not None:
+            if secrets.compare_digest(existing.secret, secret):
+                return existing
+            sid = secret = ""  # the id belongs to someone else: hand out a fresh session
         if len(self.sessions) >= self.max_sessions:
             return None
-        while True:
-            sid = secrets.token_urlsafe(6)
-            if sid not in self.sessions:
-                break
-        session = Session(sid, secrets.token_urlsafe(24))
+        while not sid:
+            candidate = secrets.token_urlsafe(6)
+            if candidate not in self.sessions:
+                sid, secret = candidate, secrets.token_urlsafe(24)
+        session = Session(sid, secret)
         self.sessions[sid] = session
         return session
 

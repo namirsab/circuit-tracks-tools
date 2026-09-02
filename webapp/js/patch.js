@@ -95,69 +95,10 @@ export function parseSyxPatch(arrayBuffer) {
   return decodePatch(patchBytes);
 }
 
-const clamp127 = (v) => Math.max(0, Math.min(127, Math.round(v ?? 0)));
-
-// Update a single named parameter on a decoded patch (keeps params consistent;
-// raw is regenerated lazily via encodePatch on save/export).
-export function writeParam(patch, name, value) {
-  if (!(name in PARAM_OFFSETS)) return;
-  patch.params[name] = clamp127(value);
-}
-
-// Serialize a decoded patch object back into 340 raw bytes — the inverse of
-// decodePatch. modMatrix is authoritative for bytes 124-203 (it is written
-// after the params loop, which also covers the mod*_* offsets), and the macro
-// block mirrors the decode convention (depth stored as byte−64, unused target
-// = 0,0,127,64).
-export function encodePatch(patch) {
-  const bytes = new Uint8Array(PATCH_SIZE);
-
-  // Name (0-15), space-padded ASCII.
-  const name = (patch.name || '').slice(0, 16);
-  for (let i = 0; i < 16; i++) {
-    bytes[i] = i < name.length ? (name.charCodeAt(i) & 0x7f) : 0x20;
-  }
-  bytes[16] = clamp127(patch.category ?? 0);
-  bytes[17] = clamp127(patch.genre ?? 0);
-
-  // Every named parameter.
-  for (const [k, off] of Object.entries(PARAM_OFFSETS)) {
-    bytes[off] = clamp127(patch.params[k]);
-  }
-
-  // Mod matrix: 20 × 4 bytes at offset 124 (overrides the mod*_* params above).
-  const matrix = patch.modMatrix ?? [];
-  for (let s = 0; s < 20; s++) {
-    const base = 124 + s * 4;
-    const slot = matrix[s] ?? { source1: 0, source2: 0, depth: 0, destination: 0 };
-    bytes[base] = clamp127(slot.source1);
-    bytes[base + 1] = clamp127(slot.source2);
-    bytes[base + 2] = clamp127(slot.depth);
-    bytes[base + 3] = clamp127(slot.destination);
-  }
-
-  // Macros: 8 × 17 bytes at offset 204 — position + 4 targets × (dest, start,
-  // end, depth+64). Active targets fill the low slots; the rest are unused.
-  const macros = patch.macros ?? [];
-  for (let k = 0; k < 8; k++) {
-    const base = 204 + k * 17;
-    const macro = macros[k] ?? { position: 0, targets: [] };
-    bytes[base] = clamp127(macro.position);
-    for (let tIdx = 0; tIdx < 4; tIdx++) {
-      const off = base + 1 + tIdx * 4;
-      const t = macro.targets?.[tIdx];
-      if (t) {
-        bytes[off] = clamp127(t.destination);
-        bytes[off + 1] = clamp127(t.start);
-        bytes[off + 2] = clamp127(t.end);
-        bytes[off + 3] = clamp127((t.depth ?? 0) + 64);
-      } else {
-        bytes[off] = 0; bytes[off + 1] = 0; bytes[off + 2] = 127; bytes[off + 3] = 64;
-      }
-    }
-  }
-
-  return bytes;
+// Wrap 340 patch bytes as a Circuit Tracks .syx message for synth 0/1:
+// F0 00 20 29 01 64 <cmd 0> <synth> 00 <340 bytes> F7 (the inverse of parseSyxPatch).
+export function encodeSyxPatch(raw, synthIdx) {
+  return new Uint8Array([0xf0, 0x00, 0x20, 0x29, 0x01, 0x64, 0x00, synthIdx, 0x00, ...raw.subarray(0, PATCH_SIZE), 0xf7]);
 }
 
 export function initPatch() {

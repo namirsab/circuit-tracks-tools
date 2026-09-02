@@ -22,52 +22,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from circuit_mcp.server import get_parameter_reference  # noqa: E402
+from circuit_mcp.server import _SECTION_DESCRIPTIONS, get_parameter_reference  # noqa: E402
 from circuit_tracks.ncs_parser import parse_ncs_from_bytes  # noqa: E402
-from circuit_tracks.patch import _PARAM_OFFSETS  # noqa: E402
-from circuit_tracks.patch_builder import (  # noqa: E402
-    PatchBuilder,
-    preset_bass,
-    preset_lead,
-    preset_pad,
-    preset_pluck,
+from circuit_tracks.song import (  # noqa: E402
+    _build_patch_bytes,
+    _song_data_to_dict,
+    ncs_to_song,
+    parse_song,
+    song_to_ncs,
 )
-from circuit_tracks.song import _song_data_to_dict, ncs_to_song, parse_song, song_to_ncs  # noqa: E402
-from circuit_tracks.song_schema import SynthSoundConfig, get_song_json_schema  # noqa: E402
+from circuit_tracks.song_schema import get_song_json_schema  # noqa: E402
 
-SECTIONS = [
-    "synth",
-    "patch",
-    "drums",
-    "project",
-    "lookup_tables",
-    "mod_matrix",
-    "macros",
-    "song_format",
-    "best_practices",
-]
-
-_PRESET_BUILDERS = {"pad": preset_pad, "bass": preset_bass, "lead": preset_lead, "pluck": preset_pluck}
+SECTIONS = list(_SECTION_DESCRIPTIONS)
 
 
 def build_patch_bytes(config: dict) -> bytes:
-    """340 patch bytes for a SynthSoundConfig, exactly as the MCP
-    create_synth_patch tool builds them (preset/init template, raw params,
-    cleared mod matrix + entries with signed depth, macros)."""
-    model = SynthSoundConfig.model_validate(config)
-    name = model.name or (model.preset if model.preset else "Init")
-    builder = _PRESET_BUILDERS[model.preset.lower()](name) if model.preset else PatchBuilder(name)
-    for param, value in (model.params or {}).items():
-        if param in _PARAM_OFFSETS:
-            builder._bytes[_PARAM_OFFSETS[param]] = max(0, min(127, int(value)))
-    if model.mod_matrix:
-        builder.clear_mods()
-        for entry in model.mod_matrix:
-            depth = entry.depth + 64 if -64 <= entry.depth <= 63 else entry.depth
-            builder.add_mod(source=entry.source1, destination=entry.dest, depth=depth, source2=entry.source2)
-    for num, cfg in (model.macros or {}).items():
-        builder.set_macro(int(num), [t.model_dump() for t in cfg.targets], position=cfg.position)
-    return builder.build()
+    """340 patch bytes for a SynthSoundConfig, through the same path the
+    song export takes (parse_song -> _build_patch_bytes), so the vectors pin
+    what hardware exports actually get."""
+    song = parse_song({"sounds": {"synth1": config}, "patterns": {"p": {"tracks": {"drum1": {"steps": {"0": {}}}}}}})
+    return _build_patch_bytes(song.sounds["synth1"])
 
 
 # Golden patch configs: each becomes webapp/tests/vectors/patches/<case>.json.

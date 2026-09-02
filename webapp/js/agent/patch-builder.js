@@ -4,48 +4,22 @@
 // ({ preset, name, params, mod_matrix, macros }) it produces the same 340
 // bytes as Python; webapp/tests/vectors/patches/*.json are the golden vectors.
 //
-// The name tables below are the Python spellings from circuit_tracks/
-// constants.py, which are the contract for mod_matrix / macro names in songs
-// (constants.js spells the mod-depth macro destinations "modN_depth"; both
-// are accepted here, the Python form is emitted on read-back).
+// The name tables are constants.js's (hardware-verified). Mod-depth macro
+// destinations 51-70 are spelled the Python way ("mod_matrix_N_depth"), the
+// contract for macro names in songs; constants.js's "modN_depth" is accepted
+// too, and the Python form is emitted on read-back.
 import { PARAM_OFFSETS, PATCH_SIZE, decodePatch } from '../patch.js';
+import {
+  MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS, MACRO_DESTINATIONS as UI_MACRO_DESTINATIONS,
+} from '../constants.js';
+import { suggest } from './schema.js';
 
 export const PRESETS = ['pad', 'bass', 'lead', 'pluck'];
 
-export const MOD_SOURCES = {
-  0: 'direct', 4: 'velocity', 5: 'keyboard',
-  6: 'LFO 1+', 7: 'LFO 1+/-', 8: 'LFO 2+', 9: 'LFO 2+/-',
-  10: 'env amp', 11: 'env filter', 12: 'env 3',
-};
-
-export const MOD_DESTINATIONS = {
-  0: 'osc 1 & 2 pitch', 1: 'osc 1 pitch', 2: 'osc 2 pitch',
-  3: 'osc 1 v-sync', 4: 'osc 2 v-sync',
-  5: 'osc 1 pulse width / index', 6: 'osc 2 pulse width / index',
-  7: 'osc 1 level', 8: 'osc 2 level', 9: 'noise level',
-  10: 'ring modulation 1*2 level', 11: 'filter drive amount',
-  12: 'filter frequency', 13: 'filter resonance',
-  14: 'LFO 1 rate', 15: 'LFO 2 rate',
-  16: 'amp envelope decay', 17: 'filter envelope decay',
-};
-
-export const MACRO_DESTINATIONS = {
-  0: 'pre_fx_level', 1: 'portamento_rate', 2: 'post_fx_level',
-  3: 'osc1_wave_interpolate', 4: 'osc1_pulse_width_index', 5: 'osc1_virtual_sync_depth',
-  6: 'osc1_density', 7: 'osc1_density_detune', 8: 'osc1_semitones', 9: 'osc1_cents',
-  10: 'osc2_wave_interpolate', 11: 'osc2_pulse_width_index', 12: 'osc2_virtual_sync_depth',
-  13: 'osc2_density', 14: 'osc2_density_detune', 15: 'osc2_semitones', 16: 'osc2_cents',
-  17: 'osc1_level', 18: 'osc2_level', 19: 'ring_mod_level', 20: 'noise_level',
-  21: 'filter_frequency', 22: 'filter_resonance', 23: 'drive', 24: 'filter_tracking',
-  25: 'env2_to_filter_freq', 26: 'env1_attack', 27: 'env1_decay', 28: 'env1_sustain',
-  29: 'env1_release', 30: 'env2_attack', 31: 'env2_decay', 32: 'env2_sustain',
-  33: 'env2_release', 34: 'env3_delay', 35: 'env3_attack', 36: 'env3_decay',
-  37: 'env3_sustain', 38: 'env3_release', 39: 'lfo1_rate', 40: 'lfo1_delay',
-  41: 'lfo1_slew_rate', 42: 'lfo2_rate', 43: 'lfo2_delay', 44: 'lfo2_slew_rate',
-  45: 'distortion_level', 46: 'chorus_level', 47: 'chorus_rate', 48: 'chorus_feedback',
-  49: 'chorus_mod_depth', 50: 'chorus_delay',
-};
-for (let i = 51; i <= 70; i++) MACRO_DESTINATIONS[i] = `mod_matrix_${i - 50}_depth`;
+export const MOD_SOURCES = MOD_MATRIX_SOURCES;
+export const MOD_DESTINATIONS = MOD_MATRIX_DESTINATIONS;
+export const MACRO_DESTINATIONS = Object.fromEntries(Object.entries(UI_MACRO_DESTINATIONS)
+  .map(([k, v]) => [k, Number(k) > 50 ? `mod_matrix_${Number(k) - 50}_depth` : v]));
 
 const lowerKeyed = (table) => Object.fromEntries(Object.entries(table).map(([k, v]) => [v.toLowerCase(), Number(k)]));
 const MOD_SOURCE_BY_NAME = lowerKeyed(MOD_SOURCES);
@@ -79,18 +53,19 @@ const INIT_VALUES = [
   [117, 100], [118, 1], [119, 20], [121, 74], [122, 64], [123, 64], // dist/chorus
 ];
 
+// Empty mod slot: no sources, depth 64 (= none), destination 0.
+const resetModSlot = (b, addr) => { b[addr] = 0; b[addr + 1] = 0; b[addr + 2] = 64; b[addr + 3] = 0; };
+// Unused macro target: destination 0, full 0-127 range, depth 64 (= none).
+const resetMacroTarget = (b, tb) => { b[tb] = 0; b[tb + 1] = 0; b[tb + 2] = 127; b[tb + 3] = 64; };
+
 function initBytes() {
   const b = new Uint8Array(PATCH_SIZE);
   b.set([0x49, 0x6e, 0x69, 0x74]); // "Init"
   b.fill(0x20, 4, NAME_LEN);
   for (const [addr, v] of INIT_VALUES) b[addr] = v;
-  for (let s = 0; s < MOD_MATRIX_SLOTS; s++) b[MOD_MATRIX_START + s * 4 + 2] = 64; // depth = none
+  for (let s = 0; s < MOD_MATRIX_SLOTS; s++) resetModSlot(b, MOD_MATRIX_START + s * 4);
   for (let k = 0; k < MACRO_COUNT; k++) {
-    const kb = MACRO_START + k * MACRO_SIZE;
-    for (let t = 0; t < MACRO_TARGETS; t++) {
-      b[kb + 1 + t * 4 + 2] = 127; // end position
-      b[kb + 1 + t * 4 + 3] = 64; // depth = none
-    }
+    for (let t = 0; t < MACRO_TARGETS; t++) resetMacroTarget(b, MACRO_START + k * MACRO_SIZE + 1 + t * 4);
   }
   return b;
 }
@@ -100,25 +75,18 @@ const isInt = (v) => typeof v === 'number' && Number.isInteger(v);
 const list = (table) => Object.values(table).map((n) => `"${n}"`).join(', ');
 const normaliseModName = (s) => String(s).toLowerCase().replace(/_/g, ' ');
 
-export function resolveModSource(s) {
-  if (isInt(s)) {
-    if (s < 0 || s > 127) throw new Error(`Mod source index ${s} out of range (0-127)`);
-    return s;
+function resolveNamed(value, table, byName, what) {
+  if (isInt(value)) {
+    if (value < 0 || value > 127) throw new Error(`${what} index ${value} out of range (0-127)`);
+    return value;
   }
-  const idx = MOD_SOURCE_BY_NAME[normaliseModName(s)];
-  if (idx === undefined) throw new Error(`Unknown mod source ${JSON.stringify(s)}. Valid: ${list(MOD_SOURCES)}`);
+  const idx = byName[normaliseModName(value)];
+  if (idx === undefined) throw new Error(`Unknown ${what} ${JSON.stringify(value)}. Valid: ${list(table)}`);
   return idx;
 }
 
-export function resolveModDestination(d) {
-  if (isInt(d)) {
-    if (d < 0 || d > 127) throw new Error(`Mod destination index ${d} out of range (0-127)`);
-    return d;
-  }
-  const idx = MOD_DEST_BY_NAME[normaliseModName(d)];
-  if (idx === undefined) throw new Error(`Unknown mod destination ${JSON.stringify(d)}. Valid: ${list(MOD_DESTINATIONS)}`);
-  return idx;
-}
+export const resolveModSource = (s) => resolveNamed(s, MOD_SOURCES, MOD_SOURCE_BY_NAME, 'mod source');
+export const resolveModDestination = (d) => resolveNamed(d, MOD_DESTINATIONS, MOD_DEST_BY_NAME, 'mod destination');
 
 export function resolveMacroDestination(d) {
   if (isInt(d)) {
@@ -281,13 +249,7 @@ export class PatchBuilder {
   }
 
   clearMods() {
-    for (let s = 0; s < MOD_MATRIX_SLOTS; s++) {
-      const addr = MOD_MATRIX_START + s * 4;
-      this.bytes[addr] = 0;
-      this.bytes[addr + 1] = 0;
-      this.bytes[addr + 2] = 64;
-      this.bytes[addr + 3] = 0;
-    }
+    for (let s = 0; s < MOD_MATRIX_SLOTS; s++) resetModSlot(this.bytes, MOD_MATRIX_START + s * 4);
     this.modSlotCursor = 0;
     return this;
   }
@@ -319,10 +281,7 @@ export class PatchBuilder {
         this.bytes[tb + 2] = clamp(t.end ?? 127);
         this.bytes[tb + 3] = clamp(t.depth ?? 127);
       } else {
-        this.bytes[tb] = 0;
-        this.bytes[tb + 1] = 0;
-        this.bytes[tb + 2] = 127;
-        this.bytes[tb + 3] = 64;
+        resetMacroTarget(this.bytes, tb);
       }
     }
     return this;
@@ -333,12 +292,9 @@ export class PatchBuilder {
 
 // Standard knob layout: 1 Oscillator, 2 Osc Mod, 3 Amp Env, 4 Filter Env,
 // 5 Filter Freq, 6 Resonance, 7 Modulation, 8 FX.
-function stdMacros(builder, oscWave = 2) {
-  const knob1 = oscWave >= 14
-    ? [{ dest: 'osc1_wave_interpolate', start: 0, end: 127 }, { dest: 'osc2_wave_interpolate', start: 0, end: 127 }]
-    : [{ dest: 'osc1_pulse_width_index', start: 0, end: 127 }, { dest: 'osc2_pulse_width_index', start: 0, end: 127 }];
+function stdMacros(builder) {
   return builder
-    .setMacro(1, knob1)
+    .setMacro(1, [{ dest: 'osc1_pulse_width_index', start: 0, end: 127 }, { dest: 'osc2_pulse_width_index', start: 0, end: 127 }])
     .setMacro(2, [{ dest: 'osc1_density', start: 0, end: 80 }, { dest: 'osc1_density_detune', start: 0, end: 60 }])
     .setMacro(3, [{ dest: 'env1_attack', start: 0, end: 127 }, { dest: 'env1_release', start: 0, end: 127 }])
     .setMacro(4, [{ dest: 'env2_attack', start: 0, end: 100 }, { dest: 'env2_decay', start: 0, end: 127 }])
@@ -360,7 +316,7 @@ export const PRESET_BUILDERS = {
     .envFilter({ attack: 30, decay: 80, sustain: 50, release: 70 })
     .chorus({ level: 0, rate: 30, feedback: 60, mod_depth: 70 })
     .addMod('LFO 1+', 'filter frequency', 75)
-    .lfo(1, { waveform: 0, rate: 40 }), 2),
+    .lfo(1, { waveform: 0, rate: 40 })),
   // Mono bass: saw, LP24 with resonance, fast envelope, sub osc.
   bass: (name = 'Bass') => stdMacros(new PatchBuilder(name)
     .voice({ polyphony: 0, octave: 62 })
@@ -369,7 +325,7 @@ export const PRESET_BUILDERS = {
     .mixer({ osc1_level: 110, osc2_level: 80 })
     .filter({ frequency: 50, resonance: 10, filter_type: 1, env2_to_freq: 90 })
     .envAmp({ attack: 0, decay: 70, sustain: 100, release: 20 })
-    .envFilter({ attack: 0, decay: 60, sustain: 20, release: 20 }), 2),
+    .envFilter({ attack: 0, decay: 60, sustain: 20, release: 20 })),
   // Mono lead: bright, portamento, distortion, LFO vibrato.
   lead: (name = 'Lead') => stdMacros(new PatchBuilder(name)
     .voice({ polyphony: 0, portamento: 30 })
@@ -381,7 +337,7 @@ export const PRESET_BUILDERS = {
     .envFilter({ attack: 2, decay: 70, sustain: 40, release: 30 })
     .distortion({ level: 40, type: 0 })
     .addMod('LFO 1+/-', 'osc 1 & 2 pitch', 67)
-    .lfo(1, { waveform: 0, rate: 75, delay: 40 }), 2),
+    .lfo(1, { waveform: 0, rate: 75, delay: 40 })),
   // Pluck: fast attack, short decay, filter envelope sweep.
   pluck: (name = 'Pluck') => stdMacros(new PatchBuilder(name)
     .voice({ polyphony: 2 })
@@ -390,23 +346,19 @@ export const PRESET_BUILDERS = {
     .mixer({ osc1_level: 100, osc2_level: 70 })
     .filter({ frequency: 40, resonance: 15, filter_type: 1, env2_to_freq: 100 })
     .envAmp({ attack: 0, decay: 80, sustain: 0, release: 40 })
-    .envFilter({ attack: 0, decay: 60, sustain: 0, release: 30 }), 2),
+    .envFilter({ attack: 0, decay: 60, sustain: 0, release: 30 })),
 };
 
-function suggestParam(name) {
-  const lower = name.toLowerCase();
-  const names = Object.keys(PARAM_OFFSETS);
-  const hit = names.find((n) => n === lower) ?? names.find((n) => n.startsWith(lower) || lower.startsWith(n));
+const paramHint = (name) => {
+  const hit = suggest(name, Object.keys(PARAM_OFFSETS));
   return hit ? ` Did you mean "${hit}"?` : '';
-}
+};
 
-// Build the 340 patch bytes for a SynthSoundConfig. Steps mirror the Python
-// tool: preset (or init) template, then raw params, then a cleared mod matrix
-// filled from mod_matrix (signed depth -64..63 -> byte), then macros.
-// Deviations from Python, both deliberate: unknown param names raise instead
-// of being ignored silently, and mod_matrix honours source1 (song.py's
-// _build_patch_bytes reads a "source" key that the schema never produces, so
-// hardware exports currently get source "direct" for every slot).
+// Build the 340 patch bytes for a SynthSoundConfig. Steps mirror song.py's
+// _build_patch_bytes: preset (or init) template, then raw params, then a
+// cleared mod matrix filled from mod_matrix (signed depth -64..63 -> byte),
+// then macros. One deliberate deviation: unknown param names raise instead of
+// being ignored silently.
 export function buildPatchBytes(config = {}) {
   const { preset = null, name = null, params = null, mod_matrix: modMatrix = null, macros = null } = config;
   let builder;
@@ -420,7 +372,7 @@ export function buildPatchBytes(config = {}) {
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (!(key in PARAM_OFFSETS)) {
-        throw new Error(`Unknown synth parameter ${JSON.stringify(key)}.${suggestParam(key)} Call get_parameter_reference("patch") for the list.`);
+        throw new Error(`Unknown synth parameter ${JSON.stringify(key)}.${paramHint(key)} Call get_parameter_reference("patch") for the list.`);
       }
       builder.bytes[PARAM_OFFSETS[key]] = clamp(value);
     }

@@ -29,9 +29,13 @@ export async function initAgent(app) {
   const registry = new ToolRegistry();
   registry.registerAll(createTools(api, { loadJson, songSchema }));
 
+  // The ring buffer keeps a slim record per call (results can be a whole
+  // project); the event carries the full args and result to listeners.
   const log = [];
   registry.on((event) => {
-    log.push({ ...event, at: Date.now() });
+    const { type, id, name, args, ok, ms, result } = event;
+    const text = result?.content?.[0]?.text;
+    log.push({ type, id, name, args, ok, ms, at: Date.now(), ...(text ? { text: text.slice(0, 500) } : {}) });
     if (log.length > LOG_LIMIT) log.shift();
     window.dispatchEvent(new CustomEvent('webtracks:tool', { detail: event }));
   });

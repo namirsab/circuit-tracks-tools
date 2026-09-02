@@ -6,18 +6,17 @@ import { PARAM_OFFSETS, decodePatch } from '../patch.js';
 import { parseNCS } from '../ncs.js';
 import { emptyPattern } from '../state.js';
 import {
-  compileSong, projectToSong, patternSlotToSong, slotIsEmpty,
-  validateTrackConfig, trackConfigToPattern, TRACK_INDEX,
+  compileSong, projectToSong, patternSlotToSong, slotIsEmpty, replacePatternSlot,
+  validateTrackConfig, trackConfigToPattern, TRACK_INDEX, TRACK_NAMES, FX_FIELDS,
 } from './song-compiler.js';
 import { buildPatchBytes } from './patch-builder.js';
+import { suggest } from './schema.js';
 import {
   MACRO_DESTINATIONS, MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS,
   SCALE_ROOTS, SCALE_TYPES, REVERB_TYPES, SIDECHAIN_PRESETS,
 } from '../constants.js';
 
-// Track order matches the webapp model: S1, S2, M1, M2, D1..D4.
-export const TRACK_NAMES = ['synth1', 'synth2', 'midi1', 'midi2', 'drum1', 'drum2', 'drum3', 'drum4'];
-export const SYNTH_LIKE = TRACK_NAMES.slice(0, 4);
+export { TRACK_NAMES };
 export const DRUM_NOTE_TO_INDEX = { 60: 0, 62: 1, 64: 2, 65: 3 };
 export const CHANNEL_TO_TRACK = { 0: 0, 1: 1, 2: 2, 3: 3, 9: 4 };
 
@@ -32,6 +31,14 @@ const clamp127 = (v) => clamp(v, 0, 127);
 
 const DRUM_PARAM_NAMES = ['level', 'pitch', 'decay', 'distortion', 'eq', 'pan', 'sample', 'patch_select', 'reverb_send', 'delay_send'];
 
+// set_project_params names of the reverb/delay fields (song-format key
+// within FX_FIELDS); reverb_type is handled separately for its note.
+const PROJECT_FX_PARAMS = {
+  reverb_decay: ['reverb', 'decay'], reverb_damping: ['reverb', 'damping'],
+  delay_time: ['delay', 'time'], delay_time_sync: ['delay', 'sync'], delay_feedback: ['delay', 'feedback'],
+  delay_width: ['delay', 'width'], delay_lr_ratio: ['delay', 'lr_ratio'], delay_slew_rate: ['delay', 'slew'],
+};
+
 export const PROJECT_PARAM_HELP = [
   'reverb_<track>_send / delay_<track>_send (track: synth1, synth2, midi1, midi2, drum1-4)',
   '<track>_level / <track>_pan',
@@ -43,9 +50,7 @@ export const PROJECT_PARAM_HELP = [
 ];
 
 function suggestName(name, candidates) {
-  const lower = name.toLowerCase();
-  const hit = candidates.find((c) => c.toLowerCase() === lower)
-    ?? candidates.find((c) => c.includes(lower) || lower.includes(c));
+  const hit = suggest(name, candidates);
   return hit ? ` Did you mean "${hit}"?` : '';
 }
 
@@ -112,8 +117,13 @@ export class AgentApi {
         const cfg = this.app.drums.tracks[d].config;
         return { drum: d + 1, sample: cfg.patchSelect, name: this.app.drums.sampleName(cfg.patchSelect) };
       }),
-      pattern_names: Object.fromEntries([...this.patternNames].map(([n, i]) => [n, i + 1])),
+      pattern_names: this.namedSlots(),
     };
+  }
+
+  // Pattern name -> 1-based slot, as tools report it.
+  namedSlots() {
+    return Object.fromEntries([...this.patternNames].map(([n, i]) => [n, i + 1]));
   }
 
   // ---------- transport ----------
@@ -173,14 +183,19 @@ export class AgentApi {
       throw new Error(`Unknown pattern "${name}". Loaded patterns: ${[...this.patternNames.keys()].join(', ')}`);
     }
     const idx = this.patternNames.get(name);
-    for (let t = 0; t < 8; t++) {
-      this.ui.currentPattern[t] = idx;
-      this.project.patternChains[t] = { start: 0, end: 0 };
-    }
+    this.selectSlotOnAllTracks(idx);
     this.project.sceneChain = { start: 0, end: 0 };
     this.seq.sceneState = null;
     this.app.views.render();
     return idx;
+  }
+
+  // Select one slot on every track and drop the per-track pattern chains.
+  selectSlotOnAllTracks(slot) {
+    for (let t = 0; t < 8; t++) {
+      this.ui.currentPattern[t] = slot;
+      this.project.patternChains[t] = { start: 0, end: 0 };
+    }
   }
 
   // ---------- synth ----------
@@ -244,21 +259,23 @@ export class AgentApi {
     return { synth: Number(synth), macro: idx + 1, value: clamp127(value) };
   }
 
+  // Macro layout of one synth: knob positions and named targets.
+  macrosOf(synth) {
+    const st = this.synthTrack(synth);
+    return st.patch.macros.map((m, k) => ({
+      macro: k + 1,
+      position: st.macroPositions[k],
+      targets: m.targets.map((t) => ({
+        param: MACRO_DESTINATIONS[t.destination] ?? `dest_${t.destination}`,
+        start: t.start, end: t.end, depth: t.depth,
+      })),
+    }));
+  }
+
   getMacros() {
     const out = {};
     for (const s of [1, 2]) {
-      const st = this.app.synthTracks[s - 1];
-      out[`synth${s}`] = {
-        patch: st.patch?.name ?? 'Initial Patch',
-        macros: st.patch.macros.map((m, k) => ({
-          macro: k + 1,
-          position: st.macroPositions[k],
-          targets: m.targets.map((t) => ({
-            param: MACRO_DESTINATIONS[t.destination] ?? `dest_${t.destination}`,
-            start: t.start, end: t.end, depth: t.depth,
-          })),
-        })),
-      };
+      out[`synth${s}`] = { patch: this.app.synthTracks[s - 1].patch?.name ?? 'Initial Patch', macros: this.macrosOf(s) };
     }
     return out;
   }
@@ -284,7 +301,7 @@ export class AgentApi {
       bank_index: this.ui.patchIndex[synth - 1],
       params,
       mod_matrix: modMatrix,
-      macros: this.getMacros()[`synth${synth}`].macros,
+      macros: this.macrosOf(synth),
     };
   }
 
@@ -358,17 +375,14 @@ export class AgentApi {
       } else if (name === 'reverb_type') {
         fx.reverbType = clamp(raw, 0, 5); reverbDirty = true;
         notes.push(`reverb_type ${fx.reverbType} (${REVERB_TYPES[fx.reverbType] ?? '?'}) is stored for export; the web reverb has one algorithm`);
-      } else if (name === 'reverb_decay') { fx.reverbDecay = v; reverbDirty = true; }
-      else if (name === 'reverb_damping') { fx.reverbDamping = v; reverbDirty = true; }
-      else if (name === 'reverb_preset') { this.project.reverbPreset = clamp(raw, 0, 7); this.app.applyReverbPreset(this.project.reverbPreset); }
+      } else if (name in PROJECT_FX_PARAMS) {
+        const [group, key] = PROJECT_FX_PARAMS[name];
+        const [field, max] = FX_FIELDS[group][key];
+        fx[field] = clamp(raw, 0, max);
+        if (group === 'reverb') reverbDirty = true; else delayDirty = true;
+      } else if (name === 'reverb_preset') { this.project.reverbPreset = clamp(raw, 0, 7); this.app.applyReverbPreset(this.project.reverbPreset); }
       else if (name === 'delay_preset') { this.project.delayPreset = clamp(raw, 0, 15); this.app.applyDelayPreset(this.project.delayPreset); }
-      else if (name === 'fx_bypass') { fx.fxBypass = Number(raw) !== 0 && raw !== false; this.engine.setFxBypass(fx.fxBypass); }
-      else if (name === 'delay_time') { fx.delayTime = v; delayDirty = true; }
-      else if (name === 'delay_time_sync') { fx.delaySync = clamp(raw, 0, 35); delayDirty = true; }
-      else if (name === 'delay_feedback') { fx.delayFeedback = v; delayDirty = true; }
-      else if (name === 'delay_width') { fx.delayWidth = v; delayDirty = true; }
-      else if (name === 'delay_lr_ratio') { fx.delayLrRatio = clamp(raw, 0, 12); delayDirty = true; }
-      else if (name === 'delay_slew_rate') { fx.delaySlew = v; delayDirty = true; }
+      else if (name === 'fx_bypass') { fx.fxBypass = Number(raw) !== 0; this.engine.setFxBypass(fx.fxBypass); }
       else if ((m = /^sidechain_(synth1|synth2|midi1|midi2)_(preset|source|attack|hold|decay|depth)$/.exec(name))) {
         const i = trackId(m[1]);
         const upd = scUpdates.get(i) ?? {};
@@ -383,10 +397,10 @@ export class AgentApi {
     if (delayDirty) this.app.applyDelayParams();
     for (const [i, upd] of scUpdates) {
       const sc = this.project.sidechain[i];
-      // Like the FX view: picking a preset loads its curve, then explicit
-      // attack/hold/decay/depth in the same call override it. The engine gets
-      // the resolved values (preset 99 = "use these numbers"); the project
-      // keeps the preset index for hardware export.
+      // Like the FX view: picking a preset loads its curve into the model,
+      // then explicit attack/hold/decay/depth in the same call override it.
+      // The engine plays the model's values; the preset index is kept for
+      // hardware export.
       const { preset, ...fields } = upd;
       if (preset !== undefined) {
         sc.preset = preset;
@@ -394,7 +408,7 @@ export class AgentApi {
       }
       Object.assign(sc, fields);
       if (sc.source > 3 && sc.preset > 0 && fields.source === undefined) sc.source = 0;
-      this.engine.configureSidechain(i, { ...sc, preset: sc.preset ? 99 : 0 });
+      this.engine.configureSidechain(i, sc);
       if (sc.preset === 0 && sc.source <= 3) notes.push(`${TRACK_NAMES[i]} sidechain stays off until sidechain_${TRACK_NAMES[i]}_preset is 1-7`);
     }
     this.app.markProjectDirty();
@@ -490,9 +504,9 @@ export class AgentApi {
   // ---------- song format ----------
   async loadSong(song) {
     // The blank template as base gives hardware parity (template patches when
-    // "sounds" is absent, the same unmodelled bytes the Python export uses).
-    const base = parseNCS(await this.app.emptyTemplate());
-    const { project, patternNames, warnings } = compileSong(song, { baseProject: base });
+    // "sounds" is absent, the same unmodelled bytes the Python export uses);
+    // compileSong clones it, so the cached parse stays pristine.
+    const { project, patternNames, warnings } = compileSong(song, { baseProject: await this.app.emptyProject() });
     this.app.projectRawBytes = null;
     this.app.applyProject(project);
     this.ui.currentProjectIdx = null;
@@ -503,7 +517,7 @@ export class AgentApi {
     return {
       loaded: project.name,
       bpm: project.tempo,
-      patterns: Object.fromEntries([...patternNames].map(([n, i]) => [n, i + 1])),
+      patterns: this.namedSlots(),
       song_order: this.songOrder,
       warnings,
       next: `start_sequencer${names.length > 1 && !this.songOrder.length ? ` (pattern: one of ${names.join(', ')})` : ''} to listen; export_song_to_project to save`,
@@ -544,7 +558,7 @@ export class AgentApi {
     const slot = this.allocateSlot(name);
     const inUse = this.patternLengthInUse(slot);
     if (inUse != null && inUse !== length) {
-      throw new Error(`All patterns in a project must share one length: the existing patterns use ${inUse} steps but length is ${length}. Use length ${length === inUse ? length : inUse}.`);
+      throw new Error(`All patterns in a project must share one length: the existing patterns use ${inUse} steps but length is ${length}. Use length ${inUse}.`);
     }
     const warnings = [];
     const opts = { scaleRoot: this.project.scaleRoot, scaleType: this.project.scaleType, warnings };
@@ -555,17 +569,10 @@ export class AgentApi {
     }
     for (const track of TRACK_NAMES) {
       const t = TRACK_INDEX[track];
-      const pat = built[track] ?? emptyPattern(t >= 4 ? 'drum' : 'synth');
-      pat.settings.playbackEnd = length - 1;
-      this.project.patterns[t][slot] = pat;
+      replacePatternSlot(this.project, t, slot, built[track] ?? emptyPattern(t >= 4 ? 'drum' : 'synth'), length);
     }
     this.patternNames.set(name, slot);
-    if (!this.seq.playing) {
-      for (let t = 0; t < 8; t++) {
-        this.ui.currentPattern[t] = slot;
-        this.project.patternChains[t] = { start: 0, end: 0 };
-      }
-    }
+    if (!this.seq.playing) this.selectSlotOnAllTracks(slot);
     this.ui.stepPage = 0;
     this.app.updateStepPageButton();
     this.app.markProjectDirty();
@@ -583,9 +590,10 @@ export class AgentApi {
       : { ...existing, steps: { ...(existing.steps ?? {}), ...steps } };
     validateTrackConfig(track, cfg, length, track);
     const warnings = [];
-    this.project.patterns[t][slot] = trackConfigToPattern(track, cfg, length, {
+    const compiled = trackConfigToPattern(track, cfg, length, {
       scaleRoot: this.project.scaleRoot, scaleType: this.project.scaleType, warnings, where: track,
     });
+    replacePatternSlot(this.project, t, slot, compiled, length);
     this.app.markProjectDirty();
     this.app.views.render();
     return { pattern: patternName, track, steps: Object.keys(cfg.steps ?? {}).length, length, warnings };
@@ -670,34 +678,30 @@ export class AgentApi {
       synth: Number(synth),
       name: patch.name,
       preset: preset ?? null,
-      macros: this.getMacros()[`synth${synth}`].macros.filter((m) => m.targets.length),
+      macros: this.macrosOf(synth).filter((m) => m.targets.length),
     };
   }
 
   savePatchToBank(synth, slot) {
-    const st = this.synthTrack(synth);
-    const raw = new Uint8Array(st.patch.raw).slice(0, 340);
+    this.synthTrack(synth);
     const idx = clamp(slot, 0, 127);
     if (idx > this.app.patchBank.length) throw new Error(`Slot ${idx} is beyond the bank (${this.app.patchBank.length} patches); use 0-${this.app.patchBank.length}`);
-    const syx = new Uint8Array([0xf0, 0x00, 0x20, 0x29, 0x01, 0x64, 0x00, synth - 1, 0x00, ...raw, 0xf7]);
-    const old = this.app.patchBank[idx];
-    if (old?.url) URL.revokeObjectURL(old.url);
-    this.app.patchBank[idx] = { name: st.patch.name || `Patch ${idx}`, bytes: syx.buffer, url: URL.createObjectURL(new Blob([syx])) };
-    this.ui.patchIndex[synth - 1] = idx;
-    this.app._slotsDirty = true;
-    this.app.snapshotPack();
+    const { entry, replaced } = this.app.storePatchInBank(synth - 1, idx);
     this.app.views.render();
-    return { synth: Number(synth), slot: idx, name: this.app.patchBank[idx].name, replaced: old?.name ?? null };
+    return { synth: Number(synth), slot: idx, name: entry.name, replaced };
   }
 
   // ---------- undo ----------
+  // Returns true when a snapshot was pushed (so a failed call can drop it).
   async snapshot(label) {
     try {
       const bytes = await this.app.buildProjectBytes();
       this.history.push({ label, bytes, slot: this.ui.currentProjectIdx, time: Date.now() });
       if (this.history.length > this.maxHistory) this.history.shift();
+      return true;
     } catch (err) {
       console.warn('agent snapshot failed:', err);
+      return false;
     }
   }
 

@@ -29,7 +29,6 @@ export class AgentLink extends EventTarget {
     this.state = 'off'; // off | connecting | connected | reconnecting | error
     this.error = null;
     this.mcpUrl = null;
-    this.session = null;
     this.ws = null;
     this.wanted = false;
     this.attempt = 0;
@@ -52,20 +51,22 @@ export class AgentLink extends EventTarget {
 
   disconnect() {
     this.wanted = false;
-    clearTimeout(this.timer);
-    this.timer = null;
-    const ws = this.ws;
-    this.ws = null;
-    if (ws) { try { ws.close(1000, 'disconnected by user'); } catch { /* already closed */ } }
+    this.closeSocket(1000, 'disconnected by user');
     this.setState('off', { mcpUrl: null, error: null });
   }
 
   reconnectNow() {
+    this.closeSocket();
+    this.open();
+  }
+
+  // Drop the current socket (its close handler sees it superseded) and any retry.
+  closeSocket(code, reason) {
     clearTimeout(this.timer);
+    this.timer = null;
     const ws = this.ws;
     this.ws = null;
-    if (ws) { try { ws.close(); } catch { /* ignore */ } }
-    this.open();
+    if (ws) { try { ws.close(code, reason); } catch { /* already closed */ } }
   }
 
   open() {
@@ -112,7 +113,6 @@ export class AgentLink extends EventTarget {
     try { msg = JSON.parse(data); } catch { return; }
     if (msg.type === 'hello') {
       this.attempt = 0;
-      this.session = msg.session;
       storage.set('sessionStorage', SESSION_KEY, JSON.stringify({ session: msg.session, secret: msg.secret, url: this.url }));
       this.setState('connected', { mcpUrl: msg.mcp_url, error: null });
       return;

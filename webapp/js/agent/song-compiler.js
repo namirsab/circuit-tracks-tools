@@ -11,8 +11,15 @@
 // schema cannot express (track kind vs. config shape, equal pattern lengths,
 // the 8-pattern limit, song order references, step key format).
 import { defaultProject, emptyPattern } from '../state.js';
-import { PARAM_OFFSETS } from '../patch.js';
-import { REVERB_PRESETS, DELAY_PRESETS, SIDECHAIN_PRESETS } from '../constants.js';
+import { PARAM_OFFSETS, decodePatch } from '../patch.js';
+import {
+  DRUM_AUTOMATION_PARAMS, MIXER_AUTOMATION_PARAMS, DRUM_AUTOMATION_REGION_SIZE, LANE_POSITIONS,
+} from '../ncs.js';
+import { quantizeToScale, ncsToMidi } from '../scales.js';
+import {
+  REVERB_PRESETS, DELAY_PRESETS, REVERB_PRESET_NAMES, DELAY_PRESET_NAMES, SIDECHAIN_PRESETS,
+  SCALE_ROOTS,
+} from '../constants.js';
 import {
   buildPatchBytes, MOD_SOURCES, MOD_DESTINATIONS, MACRO_DESTINATIONS,
 } from './patch-builder.js';
@@ -20,14 +27,12 @@ import {
 export const STEPS_PER_PATTERN = 32;
 export const SLOTS = 8;
 const NOTES_PER_STEP = 6;
-const LANE_POSITIONS = 192; // 6 micro ticks × 32 steps per automation lane
-const DRUM_AUTOMATION_REGION = 1520; // 8 lanes would need 1536: the pan lane is cut short
 const NO_SAMPLE_FLIP = 0xff;
 const ENGINE_PARAM_MAX_OFFSET = 123; // params above this are mod matrix slots
 
 // Track name -> webapp track id (S1, S2, M1, M2, D1..D4).
 export const TRACK_INDEX = { synth1: 0, synth2: 1, midi1: 2, midi2: 3, drum1: 4, drum2: 5, drum3: 6, drum4: 7 };
-const TRACK_NAMES = Object.keys(TRACK_INDEX);
+export const TRACK_NAMES = Object.keys(TRACK_INDEX);
 const SYNTH_TRACKS = new Set(['synth1', 'synth2', 'midi1', 'midi2']);
 const DRUM_TRACKS = new Set(['drum1', 'drum2', 'drum3', 'drum4']);
 // NCS send-array order (differs from track id order).
@@ -43,8 +48,8 @@ const SYNTH_STEP_KEYS = ['note', 'notes', 'velocity', 'gate', 'tie', 'enabled', 
 const DRUM_STEP_KEYS = ['velocity', 'enabled', 'probability', 'sample', 'micro_step'];
 const SYNTH_TRACK_KEYS = ['steps', 'macros', 'mixer'];
 const DRUM_TRACK_KEYS = ['steps', 'params'];
-const MIXER_LANES = ['reverb_send', 'delay_send', 'level', 'pan'];
-const DRUM_LANES = ['pitch', 'decay', 'distortion', 'eq', 'reverb_send', 'delay_send', 'level', 'pan'];
+const MIXER_LANES = Object.values(MIXER_AUTOMATION_PARAMS);
+const DRUM_LANES = DRUM_AUTOMATION_PARAMS;
 const SYNTH_SOUND_KEYS = ['preset', 'name', 'params', 'mod_matrix', 'macros'];
 const DRUM_SOUND_KEYS = ['sample', 'level', 'pitch', 'decay', 'distortion', 'eq', 'pan'];
 
@@ -52,8 +57,6 @@ export const SCALE_ROOT_INDEX = {
   C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6,
   G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11,
 };
-const SCALE_ROOT_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-
 // Python spellings ("ukranian dorian" included); "minor" aliases 0.
 export const SCALE_TYPE_INDEX = {
   'natural minor': 0, minor: 0, major: 1, dorian: 2, phrygian: 3, mixolydian: 4,
@@ -64,31 +67,18 @@ export const SCALE_TYPE_INDEX = {
 const SCALE_TYPE_NAMES = Object.entries(SCALE_TYPE_INDEX).filter(([k]) => k !== 'minor')
   .reduce((acc, [k, v]) => { acc[v] = k; return acc; }, []);
 
-// Interval table from song.py. Note: constants.js lists Bebop Dorian as
-// [0,3,4,5,7,9,10] (no major second); the hardware path uses the 8-note
-// scale below, so exports follow Python here.
-const SCALE_INTERVALS = [
-  [0, 2, 3, 5, 7, 8, 10], [0, 2, 4, 5, 7, 9, 11], [0, 2, 3, 5, 7, 9, 10], [0, 1, 3, 5, 7, 8, 10],
-  [0, 2, 4, 5, 7, 9, 10], [0, 2, 3, 5, 7, 9, 11], [0, 2, 3, 5, 7, 8, 11], [0, 2, 3, 4, 5, 7, 9, 10],
-  [0, 3, 5, 6, 7, 10], [0, 3, 5, 7, 10], [0, 2, 3, 6, 7, 8, 11], [0, 2, 3, 6, 7, 9, 10],
-  [0, 1, 4, 6, 7, 9, 11], [0, 1, 3, 6, 7, 8, 11], [0, 2, 4, 6, 8, 10],
-  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-];
-
-// UI names of the factory FX presets (Python has no name table yet, so names
-// are a Web Tracks extra; indices behave exactly like Python).
-const REVERB_PRESET_NAMES = [
-  'Small Chamber', 'Small Room 1', 'Small Room 2', 'Large Room',
-  'Hall', 'Large Hall', 'Hall – long reflection', 'Large Hall – long refl.',
-];
-const DELAY_PRESET_NAMES = [
-  'Slapback Fast', 'Slapback Slow', '32nd Triplets', '32nd', '16th Triplets',
-  '16th', '16th Ping Pong', '16th Ping Pong Swung', '8th Triplets',
-  '8th dotted Ping Pong', '8th', '8th Ping Pong', '8th Ping Pong Swung',
-  '4th Triplets', '4th dotted PP Swung', '4th Triplets PP Wide',
-];
-const REVERB_RANGES = { type: 5, decay: 127, damping: 127 };
-const DELAY_RANGES = { time: 127, sync: 35, feedback: 127, width: 127, lr_ratio: 12, slew: 127 };
+// Song fx.reverb / fx.delay keys -> [project.fx field, maximum]. Shared with
+// set_project_params, which addresses the same fields by CC-style names.
+export const FX_FIELDS = {
+  reverb: { type: ['reverbType', 5], decay: ['reverbDecay', 127], damping: ['reverbDamping', 127] },
+  delay: {
+    time: ['delayTime', 127], sync: ['delaySync', 35], feedback: ['delayFeedback', 127],
+    width: ['delayWidth', 127], lr_ratio: ['delayLrRatio', 12], slew: ['delaySlew', 127],
+  },
+};
+const fxRanges = (group) => Object.fromEntries(Object.entries(FX_FIELDS[group]).map(([k, [, max]]) => [k, max]));
+const REVERB_RANGES = fxRanges('reverb');
+const DELAY_RANGES = fxRanges('delay');
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const toInt = (v) => Math.trunc(Number(v));
@@ -104,30 +94,11 @@ export function roundHalfEven(x) {
 }
 
 const round3 = (x) => Math.round(x * 1000) / 1000;
+const nonEmpty = (o) => (Object.keys(o).length ? o : undefined);
+const compact = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
-// Exact port of song.quantize_to_scale: nearest scale note, ties round up,
-// candidates limited to 0-127. Root shifts the interval set (scales.js
-// quantizeToScale is the root-0 special case).
-export function quantizeToScaleRoot(note, root, scaleType) {
-  if (scaleType === 15) return note;
-  const intervals = SCALE_INTERVALS[scaleType];
-  if (!intervals) return note;
-  let best = note;
-  let bestDist = 128;
-  const oct = Math.floor(note / 12);
-  for (let octave = oct - 1; octave <= oct + 1; octave++) {
-    for (const interval of intervals) {
-      const candidate = octave * 12 + root + interval;
-      if (candidate < 0 || candidate > 127) continue;
-      const dist = Math.abs(candidate - note);
-      if (dist < bestDist || (dist === bestDist && candidate > best)) {
-        bestDist = dist;
-        best = candidate;
-      }
-    }
-  }
-  return best;
-}
+// song.quantize_to_scale: the playback quantiser with the root folded in.
+export const quantizeToScaleRoot = (note, root, scaleType) => quantizeToScale(note, scaleType, root);
 
 // Song note -> stored NCS note: quantise to the scale (root-aware, as
 // parse_song does in place), then store relative to C (+12), as the device
@@ -138,9 +109,8 @@ export function songNoteToNcs(note, scaleRoot, scaleType) {
   return clamp(cRelative + 12, 0, 127);
 }
 
-export function ncsNoteToSong(ncsNote, scaleRoot, scaleType) {
-  return quantizeToScaleRoot(ncsNote, 0, scaleType) - 12 + scaleRoot;
-}
+// Stored NCS note -> sounding MIDI note: exactly what the sequencer plays.
+export const ncsNoteToSong = ncsToMidi;
 
 function cloneValue(v) {
   if (v instanceof Uint8Array) return v.slice();
@@ -283,7 +253,7 @@ class LaneWriter {
   limit(key) {
     if (!this.drum) return LANE_POSITIONS;
     const slot = DRUM_LANES.indexOf(key);
-    return Math.min(LANE_POSITIONS, DRUM_AUTOMATION_REGION - slot * LANE_POSITIONS);
+    return Math.min(LANE_POSITIONS, DRUM_AUTOMATION_REGION_SIZE - slot * LANE_POSITIONS);
   }
 
   set(key, position, value) {
@@ -447,15 +417,11 @@ function applyFx(project, fxIn, warnings) {
   for (const [track, v] of Object.entries(fx.reverb_sends ?? {})) project.fx.reverbSends[SEND_INDEX[track]] = clamp(toInt(v), 0, 127);
   for (const [track, v] of Object.entries(fx.delay_sends ?? {})) project.fx.delaySends[SEND_INDEX[track]] = clamp(toInt(v), 0, 127);
 
-  if ('type' in reverb) project.fx.reverbType = toInt(reverb.type);
-  if ('decay' in reverb) project.fx.reverbDecay = toInt(reverb.decay);
-  if ('damping' in reverb) project.fx.reverbDamping = toInt(reverb.damping);
-  if ('time' in delay) project.fx.delayTime = toInt(delay.time);
-  if ('sync' in delay) project.fx.delaySync = toInt(delay.sync);
-  if ('feedback' in delay) project.fx.delayFeedback = toInt(delay.feedback);
-  if ('width' in delay) project.fx.delayWidth = toInt(delay.width);
-  if ('lr_ratio' in delay) project.fx.delayLrRatio = toInt(delay.lr_ratio);
-  if ('slew' in delay) project.fx.delaySlew = toInt(delay.slew);
+  for (const [group, values] of [['reverb', reverb], ['delay', delay]]) {
+    for (const [key, [field]] of Object.entries(FX_FIELDS[group])) {
+      if (key in values) project.fx[field] = toInt(values[key]);
+    }
+  }
 
   for (const [track, scIn] of Object.entries(fx.sidechain ?? {})) {
     const sc = stripNull(scIn);
@@ -479,6 +445,18 @@ function asciiName(name, warnings) {
   }
   if (out !== String(name)) warnings.push(`name: non-ASCII characters replaced with "?" (the hardware stores ASCII names)`);
   return out;
+}
+
+// Put a compiled pattern into a slot, keeping what the song format does not
+// model: the pattern settings (sync rate, direction, start) and the raw
+// header bytes of the pattern that was there. Shared by compileSong and the
+// set_pattern / set_track tools so all three agree.
+export function replacePatternSlot(project, trackId, slot, compiled, length) {
+  const existing = project.patterns[trackId][slot];
+  compiled.settings = { ...existing.settings, playbackEnd: length - 1 };
+  if (existing.rawHeader) compiled.rawHeader = existing.rawHeader;
+  project.patterns[trackId][slot] = compiled;
+  return compiled;
 }
 
 // Compile a song into a project. baseProject supplies everything the song
@@ -529,10 +507,7 @@ export function compileSong(song, { baseProject = null } = {}) {
         drumSample: song.sounds?.[trackName]?.sample ?? null,
         where: `patterns.${name}.tracks.${trackName}`,
       });
-      const existing = project.patterns[t][slot];
-      compiled.settings = { ...existing.settings, playbackEnd: length - 1 };
-      if (existing.rawHeader) compiled.rawHeader = existing.rawHeader;
-      project.patterns[t][slot] = compiled;
+      replacePatternSlot(project, t, slot, compiled, length);
     }
   }
 
@@ -574,10 +549,6 @@ export function compileSong(song, { baseProject = null } = {}) {
   }
 
   return { project, patternNames: slots, warnings };
-}
-
-export function songPatchBytes(soundConfig) {
-  return buildPatchBytes(soundConfig);
 }
 
 // ---------- read-back (ncs_to_song / _song_data_to_dict) ----------
@@ -627,12 +598,8 @@ function readSynthTrack(pattern, scaleRoot, scaleType) {
   });
   const macros = readLanes(pattern, [1, 2, 3, 4, 5, 6, 7, 8].map((m) => `macro${m}`), (k) => k.slice(5));
   const mixer = readLanes(pattern, MIXER_LANES);
-  if (!Object.keys(steps).length && !Object.keys(macros).length && !Object.keys(mixer).length) return null;
-  const result = {};
-  if (Object.keys(steps).length) result.steps = steps;
-  if (Object.keys(macros).length) result.macros = macros;
-  if (Object.keys(mixer).length) result.mixer = mixer;
-  return result;
+  const result = compact({ steps: nonEmpty(steps), macros: nonEmpty(macros), mixer: nonEmpty(mixer) });
+  return Object.keys(result).length ? result : null;
 }
 
 function readDrumTrack(pattern) {
@@ -644,11 +611,8 @@ function readDrumTrack(pattern) {
     steps[String(i)] = d;
   });
   const params = readLanes(pattern, DRUM_LANES);
-  if (!Object.keys(steps).length && !Object.keys(params).length) return null;
-  const result = {};
-  if (Object.keys(steps).length) result.steps = steps;
-  if (Object.keys(params).length) result.params = params;
-  return result;
+  const result = compact({ steps: nonEmpty(steps), params: nonEmpty(params) });
+  return Object.keys(result).length ? result : null;
 }
 
 // One pattern slot (0-7) in song form: { length, tracks } across all tracks
@@ -680,27 +644,24 @@ export function slotIsEmpty(project, slot) {
 // (signed depth), macro targets with raw depth.
 export function patchBytesToSound(bytes) {
   if (!bytes || bytes.length < 340) return null;
-  let name = '';
-  for (let i = 0; i < 16; i++) if (bytes[i] >= 32 && bytes[i] <= 126) name += String.fromCharCode(bytes[i]);
-  name = name.trim();
+  const patch = decodePatch(bytes);
   const params = {};
   for (const [param, offset] of Object.entries(PARAM_OFFSETS)) {
-    if (offset > ENGINE_PARAM_MAX_OFFSET) continue;
-    params[param] = bytes[offset];
+    if (offset <= ENGINE_PARAM_MAX_OFFSET) params[param] = patch.params[param];
   }
   const modMatrix = [];
-  for (let i = 0; i < 20; i++) {
-    const addr = 124 + i * 4;
-    const [source, source2, rawDepth, dest] = [bytes[addr], bytes[addr + 1], bytes[addr + 2], bytes[addr + 3]];
-    if (rawDepth === 64 && source === 0 && dest === 0) continue;
+  for (const { source1, source2, depth: rawDepth, destination } of patch.modMatrix) {
+    if (rawDepth === 64 && source1 === 0 && destination === 0) continue;
     const entry = {
-      source: MOD_SOURCES[source] ?? source,
-      dest: MOD_DESTINATIONS[dest] ?? dest,
+      source: MOD_SOURCES[source1] ?? source1,
+      dest: MOD_DESTINATIONS[destination] ?? destination,
       depth: rawDepth - 64,
     };
     if (source2 !== 0) entry.source2 = MOD_SOURCES[source2] ?? source2;
     modMatrix.push(entry);
   }
+  // Macro targets are read raw: decodePatch drops depth-0 targets, Python
+  // keeps everything but the exact unused tuple.
   const macros = {};
   for (let m = 0; m < 8; m++) {
     const base = 204 + m * 17;
@@ -718,7 +679,7 @@ export function patchBytesToSound(bytes) {
     }
   }
   const sound = {};
-  if (name) sound.name = name;
+  if (patch.name) sound.name = patch.name;
   sound.params = params;
   if (modMatrix.length) sound.mod_matrix = modMatrix;
   if (Object.keys(macros).length) sound.macros = macros;
@@ -736,7 +697,7 @@ export function projectToSong(project, { patternNames = null } = {}) {
     bpm: project.tempo ?? 120,
     swing: project.swing ?? 50,
     color: project.color ?? 8,
-    scale: { root: SCALE_ROOT_NAMES[scaleRoot] ?? 'C', type: SCALE_TYPE_NAMES[scaleType] ?? 'chromatic' },
+    scale: { root: SCALE_ROOTS[scaleRoot] ?? 'C', type: SCALE_TYPE_NAMES[scaleType] ?? 'chromatic' },
   };
   const nameOf = new Map();
   if (patternNames) for (const [name, slot] of patternNames) nameOf.set(slot, name);
@@ -764,13 +725,8 @@ export function projectToSong(project, { patternNames = null } = {}) {
   if (Object.keys(sounds).length) song.sounds = sounds;
 
   const pfx = project.fx ?? {};
-  const fx = {
-    reverb: { type: pfx.reverbType, decay: pfx.reverbDecay, damping: pfx.reverbDamping },
-    delay: {
-      time: pfx.delayTime, sync: pfx.delaySync, feedback: pfx.delayFeedback,
-      width: pfx.delayWidth, lr_ratio: pfx.delayLrRatio, slew: pfx.delaySlew,
-    },
-  };
+  const fxGroup = (group) => Object.fromEntries(Object.entries(FX_FIELDS[group]).map(([k, [field]]) => [k, pfx[field]]));
+  const fx = { reverb: fxGroup('reverb'), delay: fxGroup('delay') };
   const reverbSends = {};
   const delaySends = {};
   SEND_NAMES.forEach((track, idx) => {
@@ -811,10 +767,6 @@ export function projectToSong(project, { patternNames = null } = {}) {
     const end = project.sceneChain?.end ?? 0;
     for (let i = start; i <= end && i < (project.scenes?.length ?? 0); i++) {
       const slot = project.scenes[i].trackChains?.[0]?.end ?? 0;
-      if (slotNames.has(slot)) order.push(slotNames.get(slot));
-    }
-    if (!order.length && slotNames.has(0) && start === 0 && end === 0) {
-      const slot = project.scenes?.[0]?.trackChains?.[0]?.end ?? 0;
       if (slotNames.has(slot)) order.push(slotNames.get(slot));
     }
   }

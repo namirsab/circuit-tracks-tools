@@ -21,6 +21,12 @@ const params127 = (description) => ({
 const TRACK = { type: 'string', enum: TRACK_NAMES, description: 'Track name.' };
 const SYNTH = int(1, 2, 'Synth number: 1 or 2.');
 const DRUM = int(1, 4, 'Drum track: 1-4.');
+const BPM = num(40, 240, 'Tempo in BPM.');
+const VELOCITY = int(1, 127, 'Velocity (default 100).');
+const SYNTH_PARAMS = {
+  type: 'object', minProperties: 1, description: 'param_name -> value 0-127 ("name" -> string).',
+  additionalProperties: { anyOf: [{ type: 'integer', minimum: 0, maximum: 127 }, { type: 'string', maxLength: 16 }] },
+};
 const READ_ONLY = { readOnlyHint: true };
 
 const REFERENCE_SECTIONS = ['synth', 'patch', 'drums', 'project', 'lookup_tables', 'mod_matrix', 'macros', 'song_format', 'best_practices'];
@@ -35,14 +41,21 @@ const WEB_TRACKS_NOTES = [
 
 // Tool schemas that embed parts of the song schema keep its $defs at the
 // root so "#/$defs/..." references resolve. Without the schema (fetch failed,
-// tests) the compiler's own checks still produce path-qualified errors.
+// tests) the compiler's own checks still produce path-qualified errors. A
+// $def the generated schema no longer has is a build error, not a fallback.
 function songSchemaParts(songSchema) {
   if (!songSchema) return { defs: null, song: { type: 'object', description: 'Song in the load_song format (see get_parameter_reference("song_format")).' }, ref: () => ({ type: 'object' }) };
   const { $defs: defs = {}, ...song } = songSchema;
-  return { defs, song, ref: (name) => (name in defs ? { $ref: `#/$defs/${name}` } : { type: 'object' }) };
+  const ref = (name) => {
+    if (!(name in defs)) throw new Error(`song schema has no $defs.${name}; re-run scripts/generate_agent_data.py`);
+    return { $ref: `#/$defs/${name}` };
+  };
+  return { defs, song, ref };
 }
 
-export function createTools(api, { loadJson = defaultLoadJson, songSchema = null } = {}) {
+// loadJson(url) fetches data/parameter-reference.json on first use.
+export function createTools(api, { loadJson, songSchema = null } = {}) {
+  if (typeof loadJson !== 'function') throw new Error('createTools needs a loadJson(url) function');
   let referencePromise = null;
   const reference = () => (referencePromise ??= loadJson('data/parameter-reference.json'));
   const parts = songSchemaParts(songSchema);
@@ -51,13 +64,24 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
   const stepUnion = { anyOf: [parts.ref('SynthStepConfig'), parts.ref('DrumStepConfig')] };
   const namesList = { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 16, description: 'Pattern names from load_song / set_pattern, in playback order.' };
 
-  // Wrap a mutating tool so its previous project state can be undone.
-  const undoable = (label, fn) => async (args) => {
-    await api.snapshot(label);
-    return fn(args);
-  };
+  // Tools flagged `undo: true` snapshot the project first so `undo` can
+  // restore it; a call that fails drops its snapshot again. Live tweaks
+  // (tempo, macros, mutes, sends, params) are not snapshotted: restoring a
+  // snapshot reloads the project, which interrupts playback.
+  const undoable = (tool) => ({
+    ...tool,
+    async execute(args) {
+      const pushed = await api.snapshot(tool.name);
+      try {
+        return await tool.execute(args);
+      } catch (err) {
+        if (pushed) api.history.pop();
+        throw err;
+      }
+    },
+  });
 
-  return [
+  const tools = [
     {
       name: 'get_parameter_reference',
       description: 'Reference for synth, drum, project and patch parameters, lookup tables, mod matrix, macros and the song format. Call with no section for the section list and best practices; call with a section before using complex tools so parameter names are exact. Sections: synth, patch, drums, project, lookup_tables, mod_matrix, macros, song_format, best_practices.',
@@ -75,7 +99,8 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
       name: 'load_song',
       description: 'Load a complete song (patterns, sounds, FX, mixer, song order) into the project, replacing it. The song format is the hardware server\'s: see get_parameter_reference("song_format"). CRITICAL: all patterns share one length (16 or 32); include "sounds" for both synths; synth p-locks use the step/track "macros" key, drum automation the track "params" key; mod matrix names are space separated ("filter frequency") while macro targets use snake_case parameter names ("filter_frequency"); gate max 16. Pattern names map to slots 1-8 and the "song" list to scenes. Then start_sequencer to listen and export_song_to_project to save.',
       inputSchema: withDefs(obj({ song: parts.song }, ['song'])),
-      execute: undoable('load_song', ({ song }) => api.loadSong(song)),
+      undo: true,
+      execute: ({ song }) => api.loadSong(song),
     },
     {
       name: 'read_project',
@@ -92,7 +117,8 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
         tracks: { type: 'object', minProperties: 1, propertyNames: { enum: TRACK_NAMES }, additionalProperties: trackUnion, description: 'track name -> track config.' },
         length: int(1, 32, 'Pattern length in steps (default 16).'),
       }, ['name', 'tracks'])),
-      execute: undoable('set_pattern', ({ name, tracks, length = 16 }) => api.setPattern(name, tracks, length)),
+      undo: true,
+      execute: ({ name, tracks, length = 16 }) => api.setPattern(name, tracks, length),
     },
     {
       name: 'set_track',
@@ -103,7 +129,8 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
         steps: { type: 'object', additionalProperties: stepUnion, description: 'step index (as string) -> step config; absent steps are rests.' },
         clear_existing: bool('true (default) replaces all steps of the track; false merges into them.', true),
       }, ['pattern_name', 'track', 'steps'])),
-      execute: undoable('set_track', ({ pattern_name, track, steps, clear_existing = true }) => api.setTrack(pattern_name, track, steps, clear_existing)),
+      undo: true,
+      execute: ({ pattern_name, track, steps, clear_existing = true }) => api.setTrack(pattern_name, track, steps, clear_existing),
     },
     {
       name: 'get_pattern',
@@ -123,12 +150,14 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
       name: 'clear_pattern',
       description: 'Clear every track of a named pattern (the name keeps its slot).',
       inputSchema: obj({ name: str('Pattern name.') }, ['name']),
-      execute: undoable('clear_pattern', ({ name }) => api.clearNamedPattern(name)),
+      undo: true,
+      execute: ({ name }) => api.clearNamedPattern(name),
     },
     {
       name: 'set_song',
       description: 'Set the song order: a list of pattern names becomes scenes 1..n and a scene chain that loops as a whole (like the hardware). While playing it takes over at the end of the current Drum 1 pattern. Example: ["intro", "verse", "verse", "chorus"].',
       inputSchema: obj({ patterns: namesList }, ['patterns']),
+      undo: true,
       execute: ({ patterns }) => api.setSongOrder(patterns),
     },
     {
@@ -155,7 +184,7 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
       description: 'Start playback. Optionally select a named pattern (from load_song) on every track first and/or set the tempo. Loops the current pattern selection or scene chain until stop_sequencer.',
       inputSchema: obj({
         pattern: str('Pattern name from load_song to select on all tracks before starting. Omit to play the current selection.'),
-        bpm: num(40, 240, 'Tempo in BPM.'),
+        bpm: BPM,
       }),
       async execute({ pattern, bpm }) {
         if (pattern) api.selectNamedPattern(pattern);
@@ -175,7 +204,7 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
       description: 'Transport control: "start" plays from the top, "continue" resumes from where playback last stopped, "stop" stops. Optional bpm sets the tempo first.',
       inputSchema: obj({
         action: str('One of start, stop, continue.', { enum: ['start', 'stop', 'continue'] }),
-        bpm: num(40, 240, 'Tempo in BPM.'),
+        bpm: BPM,
       }, ['action']),
       async execute({ action, bpm }) {
         if (bpm !== undefined) api.setBpm(bpm);
@@ -186,7 +215,7 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
     {
       name: 'set_bpm',
       description: 'Set the tempo (40-240 BPM). Works while playing.',
-      inputSchema: obj({ bpm: num(40, 240, 'Tempo in BPM.') }, ['bpm']),
+      inputSchema: obj({ bpm: BPM }, ['bpm']),
       execute: ({ bpm }) => `Tempo ${api.setBpm(bpm)} BPM`,
     },
     {
@@ -214,25 +243,14 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
     {
       name: 'set_synth_params',
       description: 'Set one or more parameters of the live patch on Synth 1 or 2 (also affects sounding notes). Keys are snake_case patch parameter names from get_parameter_reference("synth") or ("patch"), e.g. {"filter_frequency": 80, "osc1_wave": 2}. Also accepts macro_knob1-8 (knob positions) and "name" (patch name, string).',
-      inputSchema: obj({
-        synth: SYNTH,
-        params: {
-          type: 'object', minProperties: 1, description: 'param_name -> value 0-127 ("name" -> string).',
-          additionalProperties: { anyOf: [{ type: 'integer', minimum: 0, maximum: 127 }, { type: 'string', maxLength: 16 }] },
-        },
-      }, ['synth', 'params']),
+      inputSchema: obj({ synth: SYNTH, params: SYNTH_PARAMS }, ['synth', 'params']),
       execute: ({ synth, params }) => ({ synth, applied: api.setSynthParams(synth, params) }),
     },
     {
       name: 'edit_synth_patch',
       description: 'Edit the current patch on Synth 1 or 2: same as set_synth_params (all 340-byte patch parameters incl. mod matrix slots modN_source1/source2/depth/destination and "name"). Kept for parity with the hardware server.',
-      inputSchema: obj({
-        synth: SYNTH,
-        params: {
-          type: 'object', minProperties: 1, description: 'param_name -> value 0-127 ("name" -> string).',
-          additionalProperties: { anyOf: [{ type: 'integer', minimum: 0, maximum: 127 }, { type: 'string', maxLength: 16 }] },
-        },
-      }, ['synth', 'params']),
+      inputSchema: obj({ synth: SYNTH, params: SYNTH_PARAMS }, ['synth', 'params']),
+      undo: true,
       execute: ({ synth, params }) => ({ synth, applied: api.setSynthParams(synth, params), patch: api.getSynthPatch(synth).name }),
     },
     {
@@ -246,7 +264,8 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
         macros: { type: 'object', propertyNames: { enum: ['1', '2', '3', '4', '5', '6', '7', '8'] }, additionalProperties: parts.ref('MacroConfig') },
         preset: str('Base preset.', { enum: ['pad', 'bass', 'lead', 'pluck'] }),
       }, ['synth', 'name'])),
-      execute: undoable('create_synth_patch', ({ synth, ...cfg }) => api.createSynthPatch(synth, cfg)),
+      undo: true,
+      execute: ({ synth, ...cfg }) => api.createSynthPatch(synth, cfg),
     },
     {
       name: 'save_synth_patch',
@@ -293,7 +312,7 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
         notes: { type: 'array', items: int(0, 127), minItems: 1, maxItems: 16, description: 'MIDI note numbers; several = chord.' },
         track: { ...TRACK, description: 'Track name (preferred).' },
         channel: int(0, 15, 'Hardware-style channel if no track is given.'),
-        velocity: int(1, 127, 'Velocity (default 100).'),
+        velocity: VELOCITY,
         duration_ms: int(20, 20000, 'Hold time in ms (default 500).'),
       }, ['notes']),
       execute: (args) => api.playNotes(args),
@@ -301,7 +320,7 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
     {
       name: 'play_drum',
       description: 'Trigger one drum hit right now.',
-      inputSchema: obj({ drum: DRUM, velocity: int(1, 127, 'Velocity (default 100).') }, ['drum']),
+      inputSchema: obj({ drum: DRUM, velocity: VELOCITY }, ['drum']),
       execute: ({ drum, velocity = 100 }) => api.playDrum(drum, velocity),
     },
     {
@@ -322,7 +341,8 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
       name: 'select_patch',
       description: 'Load a patch from the pack\'s patch bank onto Synth 1 or 2 by index (see list_patches).',
       inputSchema: obj({ synth: SYNTH, patch_number: int(0, 127, 'Patch index in the bank.') }, ['synth', 'patch_number']),
-      execute: undoable('select_patch', ({ synth, patch_number }) => api.selectPatch(synth, patch_number)),
+      undo: true,
+      execute: ({ synth, patch_number }) => api.selectPatch(synth, patch_number),
     },
     {
       name: 'list_projects',
@@ -335,7 +355,8 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
       name: 'select_project',
       description: 'Load a project from the bank by slot (0-63), replacing the live project. queued = true switches at the end of the current pattern while playing. An empty slot loads an init project.',
       inputSchema: obj({ project_number: int(0, 63, 'Project slot 0-63.'), queued: bool('Switch at the pattern end while playing.', false) }, ['project_number']),
-      execute: undoable('select_project', ({ project_number, queued = false }) => api.selectProject(project_number, { queued })),
+      undo: true,
+      execute: ({ project_number, queued = false }) => api.selectProject(project_number, { queued }),
     },
     {
       name: 'export_song_to_project',
@@ -351,15 +372,10 @@ export function createTools(api, { loadJson = defaultLoadJson, songSchema = null
     },
     {
       name: 'undo',
-      description: 'Restore the project state from before the last project-changing agent call (load_song, select_project, select_patch, set_pattern...). Repeat to go further back (up to 12 states).',
+      description: 'Restore the project state from before the last structural agent call: load_song, set_pattern, set_track, clear_pattern, set_song, create_synth_patch, edit_synth_patch, select_patch, select_project. Live tweaks (tempo, macros, mutes, synth/drum/project params) are not undone. Repeat to go further back (up to 12 states).',
       inputSchema: obj({}),
       execute: () => api.undo(),
     },
   ];
-}
-
-async function defaultLoadJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to load ${url}: ${res.status}`);
-  return res.json();
+  return tools.map((tool) => (tool.undo ? undoable(tool) : tool));
 }

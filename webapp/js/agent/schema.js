@@ -76,13 +76,21 @@ function distance(a, b) {
   return prev[n];
 }
 
+// Closest candidate for a mistyped key: a small edit distance first, else a
+// partial name ("filter_freq" -> "filter_frequency"), else null.
 export function suggest(key, candidates) {
+  const lower = key.toLowerCase();
   let best = null;
   for (const c of candidates) {
-    const d = distance(key.toLowerCase(), c.toLowerCase());
+    const d = distance(lower, c.toLowerCase());
     if (d <= Math.max(2, Math.floor(c.length / 4)) && (!best || d < best.d)) best = { c, d };
   }
-  return best?.c ?? null;
+  if (best) return best.c;
+  const partial = candidates.find((c) => {
+    const l = c.toLowerCase();
+    return l.startsWith(lower) || (l.length >= 3 && lower.startsWith(l));
+  });
+  return partial ?? null;
 }
 
 function check(schema, v, root, path, errors, depth) {
