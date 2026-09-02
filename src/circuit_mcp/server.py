@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import time
 
 from mcp.server.mcpserver import MCPServer
 
@@ -112,6 +113,11 @@ CRITICAL RULES — violating these produces broken output:
 
 9. WORKFLOW: connect -> get_parameter_reference -> build song/patch ->
    load_song -> start_sequencer (preview) -> export_song_to_project (save).
+
+10. VOICE INPUT: the user can sing/hum a melody into the microphone.
+    Use record_melody (or transcribe_audio_file for a recording), review
+    the returned notes with the user, then apply them with set_track.
+    Read get_parameter_reference("voice") first.
 """,
     log_level="WARNING",
 )
@@ -1185,7 +1191,39 @@ _SECTION_DESCRIPTIONS = {
     "mod_matrix": "Valid mod matrix source and destination names (space-separated)",
     "macros": "Valid macro destination names, standard layout, and presets",
     "song_format": "Full JSON Schema for the load_song SongSchema",
+    "voice": "Workflow and tips for record_melody / transcribe_audio_file (singing -> notes)",
     "best_practices": "Operational rules and common pitfalls",
+}
+
+_VOICE_GUIDE = {
+    "description": (
+        "Turn singing, whistling or humming into sequencer notes with record_melody (microphone) "
+        "or transcribe_audio_file (audio file). Pitch detection is deterministic; the agent's job is "
+        "choosing the track, octave and scale, then applying the notes."
+    ),
+    "workflow": [
+        "1. Optional: list_audio_devices to confirm a microphone is available.",
+        "2. Agree BPM, bars (2 bars = one 32-step pattern) and target track with the user. set_bpm if needed.",
+        "3. Tell the user: 'One-bar count-in on drum 1, then sing for N bars.' Then call record_melody.",
+        "4. Read back the summary and note names. Ask about octave (transpose) and scale snapping if unsure.",
+        "5. Apply with set_track(pattern_name, track, steps) using the returned 'steps' "
+        "(or each entry of 'patterns' when the melody spans several patterns), then start_sequencer to preview.",
+        "6. For the final song, put the same notes into load_song / export_song_to_project.",
+    ],
+    "tips": [
+        "Monophonic only: one note at a time. Chords are not transcribed.",
+        "Repeated notes must be re-articulated ('da da da', not 'daaaa') to be split.",
+        "Vocal range is usually C3-C5: use transpose=-12/-24 for basslines, +12 for leads.",
+        "External MIDI bypasses the device scale engine, so snap with scale_root/scale_type here for live preview.",
+        "If every note lands one step late or early, adjust latency_ms (typical 40-120 ms).",
+        "Quiet or empty results on macOS usually mean the terminal app lacks microphone permission "
+        "(System Settings > Privacy & Security > Microphone).",
+        "pattern_length must match the rest of the project (all 16 or all 32).",
+    ],
+    "output": (
+        "summary, notes[] (step, note, name, gate, velocity, confidence, start_s, duration_s), "
+        "steps{} ready for set_track, patterns[] split by pattern_length, warnings[]."
+    ),
 }
 
 
@@ -1197,10 +1235,11 @@ def get_parameter_reference(section: str = "") -> dict:
     Call with no section to get available sections + best practices.
 
     Sections: synth, patch, drums, project, lookup_tables, mod_matrix,
-    macros, song_format, best_practices.
+    macros, song_format, voice, best_practices.
 
     Which sections to use:
       - Creating a song: "song_format"
+      - Turning singing/humming into notes: "voice"
       - Creating/editing a patch: "patch", then "mod_matrix", then "macros"
       - Setting live synth params: "synth"
       - Setting drum params: "drums"
@@ -1375,6 +1414,9 @@ def get_parameter_reference(section: str = "") -> dict:
             "section": "song_format",
             "schema": _get_song_schema(),
         }
+
+    if section == "voice":
+        return {"section": "voice", **_VOICE_GUIDE}
 
     if section == "best_practices":
         return {
@@ -1776,6 +1818,153 @@ def read_project(slot: int = 0) -> dict:
         "raw_size": len(ncs_bytes),
     }
     return result
+
+
+# --- Voice / Melody Transcription Tools ---
+
+
+@mcp.tool()
+def list_audio_devices() -> dict:
+    """List microphone/audio input devices for record_melody. Requires the 'audio' extra (pip install 'circuit-tracks-tools[audio]')."""
+    try:
+        from circuit_tracks.audio_io import list_input_devices
+
+        return {"devices": list_input_devices()}
+    except Exception as exc:  # missing extra, no PortAudio, no input devices
+        return {"error": str(exc), "devices": []}
+
+
+async def _click(bpm: float, beats: int) -> None:
+    """Play drum 1 on every beat (accented downbeats) as a count-in / click."""
+    beat_s = 60.0 / bpm
+    t0 = time.perf_counter()
+    for beat in range(beats):
+        _midi.note_on(DRUMS_CHANNEL, DRUM_NOTES[1], 127 if beat % 4 == 0 else 80)
+        await asyncio.sleep(max(0.0, t0 + (beat + 1) * beat_s - time.perf_counter()))
+
+
+@mcp.tool()
+async def record_melody(
+    bars: int = 2,
+    bpm: float | None = None,
+    scale_root: str = "",
+    scale_type: str = "",
+    transpose: int = 0,
+    latency_ms: int = 60,
+    click: bool = True,
+    device: int | None = None,
+    pattern_length: int = 32,
+) -> dict:
+    """Record a sung/whistled/hummed melody from the microphone and transcribe it into sequencer steps.
+
+    Plays a one-bar count-in on drum 1, then records `bars` bars while the click continues. The user must sing one
+    note at a time, re-articulating repeated notes ("da da da"). Returns the detected notes, a "steps" dict ready for
+    set_track, and "patterns" (steps split into pattern_length chunks). Review the summary with the user, then apply
+    with set_track(pattern_name, "synth1", steps). See get_parameter_reference("voice") for the full workflow.
+
+    Args:
+        bars: Bars to record after the count-in (16 steps per bar). 2 bars = one 32-step pattern.
+        bpm: Tempo. Defaults to the live sequencer's BPM.
+        scale_root: Root for scale snapping ("C", "F#", "Bb", ...). Only used with scale_type.
+        scale_type: Snap notes to this scale ("major", "minor", "dorian", "minor pentatonic", ...). Empty = chromatic.
+        transpose: Semitones to add to every note (e.g. -12 to turn a sung line into a bassline).
+        latency_ms: Capture latency compensation subtracted from every note onset.
+        click: Play the count-in and click on drum 1 (needs a connected device). False = silent one-bar wait, then record.
+        device: Input device index from list_audio_devices (default: system default microphone).
+        pattern_length: 16 or 32. Must match the other patterns in the project.
+    """
+    try:
+        from circuit_tracks.audio_io import record
+        from circuit_tracks.transcribe import _scale_indices, transcribe
+
+        _scale_indices(scale_root or None, scale_type or None)  # validate before recording
+    except Exception as exc:
+        return {"error": str(exc)}
+
+    if bpm is None:
+        bpm = float(_engine.get_status().get("bpm", 120.0))
+    bar_s = 60.0 / bpm * 4
+    count_in_bars = 1
+    total_s = (count_in_bars + bars) * bar_s + 0.3
+
+    do_click = click and _midi.is_connected
+    tasks = [asyncio.to_thread(record, total_s, None, device)]
+    if do_click:
+        tasks.append(_click(bpm, (count_in_bars + bars) * 4))
+    try:
+        results = await asyncio.gather(*tasks)
+    except Exception as exc:
+        return {"error": f"Recording failed: {exc}"}
+
+    audio, sr = results[0]
+    result = transcribe(
+        audio,
+        sr,
+        bpm,
+        bars,
+        offset_s=count_in_bars * bar_s,
+        latency_s=latency_ms / 1000.0,
+        transpose=transpose,
+        scale_root=scale_root or None,
+        scale_type=scale_type or None,
+    )
+    out = result.to_dict(pattern_length)
+    out["samplerate"] = sr
+    if click and not do_click:
+        out["warnings"].append("No device connected: recorded without a count-in click.")
+    return out
+
+
+@mcp.tool()
+def transcribe_audio_file(
+    file_path: str,
+    bpm: float,
+    bars: int | None = None,
+    offset_s: float = 0.0,
+    scale_root: str = "",
+    scale_type: str = "",
+    transpose: int = 0,
+    latency_ms: int = 0,
+    pattern_length: int = 32,
+) -> dict:
+    """Transcribe a monophonic audio file (wav/flac/aiff/ogg) of singing, whistling or a single-line instrument into sequencer steps.
+
+    Same output as record_melody. Use offset_s to skip a count-in at the start of the file. bars defaults to the
+    file length. Synthetic test files can be generated with scripts/generate_voice_samples.py.
+
+    Args:
+        file_path: Path to the audio file.
+        bpm: Tempo the recording was performed at.
+        bars: Bars to transcribe (16 steps each). Default: derived from the file length.
+        offset_s: Seconds to skip at the start (e.g. a count-in).
+        scale_root: Root for scale snapping ("C", "F#", "Bb", ...). Only used with scale_type.
+        scale_type: Snap notes to this scale ("major", "minor", ...). Empty = chromatic.
+        transpose: Semitones to add to every note.
+        latency_ms: Onset compensation subtracted from every note.
+        pattern_length: 16 or 32. Must match the other patterns in the project.
+    """
+    try:
+        from circuit_tracks.audio_io import load_audio
+        from circuit_tracks.transcribe import transcribe
+
+        audio, sr = load_audio(file_path)
+        result = transcribe(
+            audio,
+            sr,
+            bpm,
+            bars,
+            offset_s=offset_s,
+            latency_s=latency_ms / 1000.0,
+            transpose=transpose,
+            scale_root=scale_root or None,
+            scale_type=scale_type or None,
+        )
+    except Exception as exc:
+        return {"error": str(exc)}
+    out = result.to_dict(pattern_length)
+    out["file_path"] = file_path
+    out["samplerate"] = sr
+    return out
 
 
 def main():

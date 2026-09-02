@@ -630,3 +630,91 @@ class TestSequencerStatus:
         result = srv.get_sequencer_status()
         assert "running" in result
         assert result["running"] is False
+
+
+# ---------------------------------------------------------------------------
+# Voice / melody transcription
+# ---------------------------------------------------------------------------
+
+
+class TestVoiceTools:
+    def test_get_parameter_reference_voice(self, server):
+        srv, _ = server
+        result = srv.get_parameter_reference("voice")
+        assert result["section"] == "voice"
+        assert "workflow" in result and "tips" in result
+
+    def test_list_audio_devices_never_raises(self, server):
+        srv, _ = server
+        result = srv.list_audio_devices()
+        assert isinstance(result["devices"], list)
+
+    def test_transcribe_audio_file(self, server, tmp_path):
+        pytest.importorskip("numpy")
+        pytest.importorskip("soundfile")
+        from circuit_tracks.audio_io import save_audio
+        from circuit_tracks.transcribe import synthesize_melody
+
+        srv, _ = server
+        path = tmp_path / "melody.wav"
+        save_audio(str(path), synthesize_melody([(60, 0.5), (67, 0.5), (64, 1.0)], 22050), 22050)
+        result = srv.transcribe_audio_file(str(path), bpm=120, scale_root="C", scale_type="major")
+        assert [n["name"] for n in result["notes"]] == ["C4", "G4", "E4"]
+        assert result["bars"] == 1
+        assert set(result["steps"]) == {"0", "4", "8"}
+        assert result["steps"]["8"]["gate"] == 8.0
+        assert result["patterns"][0]["4"]["note"] == 67
+        assert result["scale"] == "C major"
+        assert result["summary"].startswith("3 notes over 1 bar(s) at 120 BPM: C4 G4 E4")
+
+    def test_transcribe_audio_file_missing_file(self, server):
+        srv, _ = server
+        result = srv.transcribe_audio_file("/nonexistent/file.wav", bpm=120)
+        assert "error" in result
+
+    def test_record_melody_rejects_unknown_scale_before_recording(self, server):
+        pytest.importorskip("numpy")
+        srv, _ = server
+        result = asyncio.run(srv.record_melody(bars=1, scale_type="lydian"))
+        assert "error" in result and "lydian" in result["error"]
+
+    def test_record_melody_transcribes_after_count_in(self, server):
+        np = pytest.importorskip("numpy")
+        from circuit_tracks.transcribe import synthesize_melody
+
+        srv, midi = server
+        sr = 22050
+        captured = {}
+
+        def fake_record(seconds, samplerate=None, device=None):
+            captured["seconds"] = seconds
+            # one silent count-in bar at 240 BPM (1 s), then 4 quarter notes (0.25 s each)
+            melody = synthesize_melody([(60, 0.25), (64, 0.25), (67, 0.25), (72, 0.25)], sr)
+            audio = np.concatenate((np.zeros(sr, dtype=np.float32), melody))
+            return audio[: int(seconds * sr)], sr
+
+        with patch("circuit_tracks.audio_io.record", fake_record):
+            result = asyncio.run(srv.record_melody(bars=1, bpm=240, latency_ms=0, transpose=-12, click=False))
+
+        assert captured["seconds"] == pytest.approx(2.3)
+        assert [n["name"] for n in result["notes"]] == ["C3", "E3", "G3", "C4"]
+        assert [n["step"] for n in result["notes"]] == [0, 4, 8, 12]
+        assert result["samplerate"] == sr
+        assert not any(m[0] == "note_on" for m in midi.messages)
+
+    def test_record_melody_click_plays_drum_on_every_beat(self, server):
+        np = pytest.importorskip("numpy")
+        srv, midi = server
+        sr = 22050
+
+        def fake_record(seconds, samplerate=None, device=None):
+            return np.zeros(int(seconds * sr), dtype=np.float32), sr
+
+        with patch("circuit_tracks.audio_io.record", fake_record):
+            result = asyncio.run(srv.record_melody(bars=1, bpm=600, click=True))
+
+        hits = [m for m in midi.messages if m[0] == "note_on" and m[1] == 9]
+        assert len(hits) == 8  # 4-beat count-in + 4 beats of recording
+        assert hits[0][3] == 127 and hits[1][3] == 80  # accented downbeat
+        assert result["notes"] == []
+        assert any("No pitched" in w for w in result["warnings"])

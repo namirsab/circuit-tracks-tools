@@ -117,6 +117,26 @@ and round-trips of all tested factory/user projects are now byte-exact.
   validation behave the same on the new API. Verified against hardware:
   full song load, sequencer playback, and NCS project export over SysEx.
 
+## [Unreleased]
+
+### Added
+
+- **Voice to notes** — sing, hum or whistle a melody and get sequencer steps
+  back. New optional `audio` extra (`pip install "circuit-tracks-tools[audio]"`:
+  numpy, sounddevice, soundfile).
+  - `circuit_tracks.transcribe`: pure-numpy YIN pitch tracker, RMS/onset note
+    segmentation, 16th-note step quantization with latency compensation,
+    transpose and scale snapping, and `synthesize_melody()` for generating
+    test audio without a microphone.
+  - `circuit_tracks.audio_io`: microphone capture and audio file I/O (lazy
+    imports, so the rest of the library works without the extra).
+  - MCP tools `record_melody` (one-bar drum count-in, then records N bars and
+    transcribes), `transcribe_audio_file`, and `list_audio_devices`; new
+    `get_parameter_reference("voice")` section with the agent workflow.
+  - `scripts/generate_voice_samples.py` writes synthetic sung melodies as WAV
+    files for trying `transcribe_audio_file`.
+
+[Unreleased]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.1.1...v0.2.0
