@@ -1,6 +1,11 @@
 # Web Tracks as an MCP target: WebMCP + Agent Link
 
-Status: draft plan, 2026-09-02. Nothing implemented yet.
+Status: implemented on branch `feat/webapp-agent-tools` on 2026-09-02 following the
+recommendations below (registry + headless API, WebMCP adapter, Agent Link relay in
+`link/`, song compiler and patch builder ports with golden vectors). Usage lives in
+`webapp/README.md` (AI agents section) and `link/README.md`; this document keeps the
+reasoning. Deviations from the plan: the page-global and WebMCP surfaces are always
+on (same-origin, harmless); only the relay is opt-in via **Connect an AI agent**.
 
 ## Goal
 

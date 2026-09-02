@@ -398,14 +398,14 @@ export class AgentApi {
     const vel = clamp127(velocity);
     const played = [];
     if (t >= 4) {
-      for (const n of notes) {
-        const d = track != null ? t - 4 : DRUM_NOTE_TO_INDEX[n];
-        if (d == null) continue;
+      // A named drum track is one hit; channel 9 maps notes 60/62/64/65 to drums 1-4.
+      const drums = track != null ? [t - 4] : notes.map((n) => DRUM_NOTE_TO_INDEX[n]).filter((d) => d != null);
+      if (!drums.length) throw new Error('Drum notes are 60, 62, 64, 65 for drum 1-4 (or pass track: "drum1")');
+      for (const d of drums) {
         this.app.drums.play(d, now, vel);
         this.seq.visualEvents.push({ type: 'drumhit', time: now, trackId: 4 + d, sample: this.app.drums.tracks[d].config.patchSelect });
         played.push(`drum${d + 1}`);
       }
-      if (!played.length) throw new Error('Drum notes are 60, 62, 64, 65 for drum 1-4 (or pass track: "drum1")');
       return `Hit ${played.join(', ')}`;
     }
     const dur = Math.max(0.03, duration_ms / 1000);

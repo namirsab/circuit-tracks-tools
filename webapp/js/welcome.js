@@ -25,6 +25,8 @@ export function buildWelcome(root) {
           the sidebar exports projects (.ncs), patches (.syx) and whole packs.
           Drop a <b>.circuittrackspack</b> anywhere to load one.</li>
         <li><b>Keyboard</b> — press <kbd>/</kbd> for the full key mapping.</li>
+        <li><b>AI agent</b> — <b>Connect an AI agent…</b> in the sidebar gives Claude (or any
+          MCP client) a private URL to compose and perform on this page; you watch it on the pads.</li>
       </ul>
       <button id="welcome-go" class="welcome-go">Start jamming</button>
       <p class="welcome-disclaimer">Web Tracks is an unofficial, non-commercial fan project
