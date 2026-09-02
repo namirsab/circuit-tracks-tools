@@ -8,9 +8,16 @@ const URL_KEY = 'ct-agent-link-url';
 const SESSION_KEY = 'ct-agent-link-session';
 const RETRY_MS = [1000, 2000, 4000, 8000, 15000];
 
+// Storage access is wrapped: private mode throws, and Node (tests) has none.
 const storage = {
-  get(store, key) { try { return store.getItem(key); } catch { return null; } },
-  set(store, key, value) { try { value == null ? store.removeItem(key) : store.setItem(key, value); } catch { /* private mode */ } },
+  get(name, key) { try { return globalThis[name]?.getItem(key) ?? null; } catch { return null; } },
+  set(name, key, value) {
+    try {
+      const store = globalThis[name];
+      if (!store) return;
+      if (value == null) store.removeItem(key); else store.setItem(key, value);
+    } catch { /* private mode */ }
+  },
 };
 
 export class AgentLink extends EventTarget {
@@ -18,7 +25,7 @@ export class AgentLink extends EventTarget {
     super();
     this.registry = registry;
     this.clientVersion = clientVersion;
-    this.url = url ?? storage.get(localStorage, URL_KEY) ?? DEFAULT_LINK_URL;
+    this.url = url ?? storage.get('localStorage', URL_KEY) ?? DEFAULT_LINK_URL;
     this.state = 'off'; // off | connecting | connected | reconnecting | error
     this.error = null;
     this.mcpUrl = null;
@@ -33,7 +40,7 @@ export class AgentLink extends EventTarget {
   setUrl(url) {
     const clean = String(url ?? '').trim();
     this.url = clean || DEFAULT_LINK_URL;
-    storage.set(localStorage, URL_KEY, this.url === DEFAULT_LINK_URL ? null : this.url);
+    storage.set('localStorage', URL_KEY, this.url === DEFAULT_LINK_URL ? null : this.url);
     if (this.wanted) this.reconnectNow();
   }
 
@@ -94,7 +101,7 @@ export class AgentLink extends EventTarget {
 
   storedSession() {
     try {
-      const raw = storage.get(sessionStorage, SESSION_KEY);
+      const raw = storage.get('sessionStorage', SESSION_KEY);
       const s = raw ? JSON.parse(raw) : null;
       return s?.session && s?.secret && s.url === this.url ? { session: s.session, secret: s.secret } : null;
     } catch { return null; }
@@ -106,7 +113,7 @@ export class AgentLink extends EventTarget {
     if (msg.type === 'hello') {
       this.attempt = 0;
       this.session = msg.session;
-      storage.set(sessionStorage, SESSION_KEY, JSON.stringify({ session: msg.session, secret: msg.secret, url: this.url }));
+      storage.set('sessionStorage', SESSION_KEY, JSON.stringify({ session: msg.session, secret: msg.secret, url: this.url }));
       this.setState('connected', { mcpUrl: msg.mcp_url, error: null });
       return;
     }
