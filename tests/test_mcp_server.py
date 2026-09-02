@@ -702,6 +702,24 @@ class TestVoiceTools:
         assert result["samplerate"] == sr
         assert not any(m[0] == "note_on" for m in midi.messages)
 
+    def test_record_melody_saves_take_without_count_in(self, server, tmp_path):
+        np = pytest.importorskip("numpy")
+        sf = pytest.importorskip("soundfile")
+        srv, _ = server
+        sr = 22050
+
+        def fake_record(seconds, samplerate=None, device=None):
+            return np.zeros(int(seconds * sr), dtype=np.float32), sr
+
+        path = tmp_path / "take.wav"
+        with patch("circuit_tracks.audio_io.record", fake_record):
+            result = asyncio.run(srv.record_melody(bars=1, bpm=240, click=False, save_path=str(path)))
+
+        assert result["saved_to"] == str(path)
+        info = sf.info(str(path))
+        assert info.samplerate == sr
+        assert info.frames == pytest.approx(int(1.3 * sr), abs=2)  # 2.3 s capture minus 1 s count-in
+
     def test_record_melody_click_plays_drum_on_every_beat(self, server):
         np = pytest.importorskip("numpy")
         srv, midi = server

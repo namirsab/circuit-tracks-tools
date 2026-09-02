@@ -1854,6 +1854,7 @@ async def record_melody(
     click: bool = True,
     device: int | None = None,
     pattern_length: int = 32,
+    save_path: str = "",
 ) -> dict:
     """Record a sung/whistled/hummed melody from the microphone and transcribe it into sequencer steps.
 
@@ -1872,9 +1873,10 @@ async def record_melody(
         click: Play the count-in and click on drum 1 (needs a connected device). False = silent one-bar wait, then record.
         device: Input device index from list_audio_devices (default: system default microphone).
         pattern_length: 16 or 32. Must match the other patterns in the project.
+        save_path: Optional .wav path to keep the take (count-in removed) for re-transcribing with transcribe_audio_file.
     """
     try:
-        from circuit_tracks.audio_io import record
+        from circuit_tracks.audio_io import record, save_audio
         from circuit_tracks.transcribe import _scale_indices, transcribe
 
         _scale_indices(scale_root or None, scale_type or None)  # validate before recording
@@ -1897,12 +1899,12 @@ async def record_melody(
         return {"error": f"Recording failed: {exc}"}
 
     audio, sr = results[0]
+    audio = audio[int(count_in_bars * bar_s * sr) :]
     result = transcribe(
         audio,
         sr,
         bpm,
         bars,
-        offset_s=count_in_bars * bar_s,
         latency_s=latency_ms / 1000.0,
         transpose=transpose,
         scale_root=scale_root or None,
@@ -1910,6 +1912,12 @@ async def record_melody(
     )
     out = result.to_dict(pattern_length)
     out["samplerate"] = sr
+    if save_path:
+        try:
+            save_audio(save_path, audio, sr)
+            out["saved_to"] = save_path
+        except Exception as exc:
+            out["warnings"].append(f"Could not save take to {save_path}: {exc}")
     if click and not do_click:
         out["warnings"].append("No device connected: recorded without a count-in click.")
     return out
