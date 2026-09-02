@@ -11,6 +11,7 @@ export function quantizeToScale(note, scaleType) {
   let bestDist = Infinity;
   for (const iv of intervals) {
     for (const cand of [base + iv - 12, base + iv, base + iv + 12]) {
+      if (cand < 0 || cand > 127) continue; // as the hardware path (song.py): never leave the MIDI range
       const dist = Math.abs(cand - note);
       if (dist < bestDist || (dist === bestDist && cand > best)) {
         best = cand;

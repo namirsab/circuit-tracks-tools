@@ -33,9 +33,23 @@ const WEB_TRACKS_NOTES = [
   'Project slots (select_project / export_song_to_project) are the in-app project bank; download_project hands the user a hardware-ready .ncs file.',
 ];
 
-export function createTools(api, { loadJson = defaultLoadJson } = {}) {
+// Tool schemas that embed parts of the song schema keep its $defs at the
+// root so "#/$defs/..." references resolve. Without the schema (fetch failed,
+// tests) the compiler's own checks still produce path-qualified errors.
+function songSchemaParts(songSchema) {
+  if (!songSchema) return { defs: null, song: { type: 'object', description: 'Song in the load_song format (see get_parameter_reference("song_format")).' }, ref: () => ({ type: 'object' }) };
+  const { $defs: defs = {}, ...song } = songSchema;
+  return { defs, song, ref: (name) => (name in defs ? { $ref: `#/$defs/${name}` } : { type: 'object' }) };
+}
+
+export function createTools(api, { loadJson = defaultLoadJson, songSchema = null } = {}) {
   let referencePromise = null;
   const reference = () => (referencePromise ??= loadJson('data/parameter-reference.json'));
+  const parts = songSchemaParts(songSchema);
+  const withDefs = (schema) => (parts.defs ? { ...schema, $defs: parts.defs } : schema);
+  const trackUnion = { anyOf: [parts.ref('SynthTrackConfig'), parts.ref('DrumTrackConfig')] };
+  const stepUnion = { anyOf: [parts.ref('SynthStepConfig'), parts.ref('DrumStepConfig')] };
+  const namesList = { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 16, description: 'Pattern names from load_song / set_pattern, in playback order.' };
 
   // Wrap a mutating tool so its previous project state can be undone.
   const undoable = (label, fn) => async (args) => {
@@ -56,6 +70,78 @@ export function createTools(api, { loadJson = defaultLoadJson } = {}) {
         if (section === '' || section === 'best_practices') return { ...data, web_tracks: WEB_TRACKS_NOTES };
         return data;
       },
+    },
+    {
+      name: 'load_song',
+      description: 'Load a complete song (patterns, sounds, FX, mixer, song order) into the project, replacing it. The song format is the hardware server\'s: see get_parameter_reference("song_format"). CRITICAL: all patterns share one length (16 or 32); include "sounds" for both synths; synth p-locks use the step/track "macros" key, drum automation the track "params" key; mod matrix names are space separated ("filter frequency"); gate max 16. Pattern names map to slots 1-8 and the "song" list to scenes. Then start_sequencer to listen and export_song_to_project to save.',
+      inputSchema: withDefs(obj({ song: parts.song }, ['song'])),
+      execute: undoable('load_song', ({ song }) => api.loadSong(song)),
+    },
+    {
+      name: 'read_project',
+      description: 'Read the live project back in the load_song song format (patterns by name where known, sounds, fx, mixer, scale, song order): what the user played or edited on the pads, ready to modify and load_song again.',
+      inputSchema: obj({}),
+      annotations: READ_ONLY,
+      execute: () => api.readProject(),
+    },
+    {
+      name: 'set_pattern',
+      description: 'Define or replace one named pattern (a slot 1-8 on every track) with song-format track configs: {"synth1": {"steps": {"0": {"note": 60, "gate": 1}}}, "drum1": {"steps": {"0": {}, "4": {}}}}. Tracks not given are silent in this pattern. Length must match the other patterns (all 16 or all 32). When the sequencer is stopped the new pattern is selected on all tracks.',
+      inputSchema: withDefs(obj({
+        name: str('Pattern name, e.g. "intro".', { minLength: 1, maxLength: 32 }),
+        tracks: { type: 'object', minProperties: 1, propertyNames: { enum: TRACK_NAMES }, additionalProperties: trackUnion, description: 'track name -> track config.' },
+        length: int(1, 32, 'Pattern length in steps (default 16).'),
+      }, ['name', 'tracks'])),
+      execute: undoable('set_pattern', ({ name, tracks, length = 16 }) => api.setPattern(name, tracks, length)),
+    },
+    {
+      name: 'set_track',
+      description: 'Replace (default) or merge the steps of one track inside a named pattern while everything else keeps playing. steps: {"0": {"note": 48, "velocity": 110}, "8": {"notes": [48, 55]}} for synths, {"0": {}, "4": {"velocity": 80}} for drums. Track-level automation lanes are kept.',
+      inputSchema: withDefs(obj({
+        pattern_name: str('Pattern name.'),
+        track: TRACK,
+        steps: { type: 'object', additionalProperties: stepUnion, description: 'step index (as string) -> step config; absent steps are rests.' },
+        clear_existing: bool('true (default) replaces all steps of the track; false merges into them.', true),
+      }, ['pattern_name', 'track', 'steps'])),
+      execute: undoable('set_track', ({ pattern_name, track, steps, clear_existing = true }) => api.setTrack(pattern_name, track, steps, clear_existing)),
+    },
+    {
+      name: 'get_pattern',
+      description: 'Read one named pattern in song format (length and per-track steps / automation).',
+      inputSchema: obj({ name: str('Pattern name.') }, ['name']),
+      annotations: READ_ONLY,
+      execute: ({ name }) => api.getPattern(name),
+    },
+    {
+      name: 'list_patterns',
+      description: 'Named patterns with their slots, unnamed slots that hold data, the current song order and the pattern length in use.',
+      inputSchema: obj({}),
+      annotations: READ_ONLY,
+      execute: () => api.listPatterns(),
+    },
+    {
+      name: 'clear_pattern',
+      description: 'Clear every track of a named pattern (the name keeps its slot).',
+      inputSchema: obj({ name: str('Pattern name.') }, ['name']),
+      execute: undoable('clear_pattern', ({ name }) => api.clearNamedPattern(name)),
+    },
+    {
+      name: 'set_song',
+      description: 'Set the song order: a list of pattern names becomes scenes 1..n and a scene chain that loops as a whole (like the hardware). While playing it takes over at the end of the current Drum 1 pattern. Example: ["intro", "verse", "verse", "chorus"].',
+      inputSchema: obj({ patterns: namesList }, ['patterns']),
+      execute: ({ patterns }) => api.setSongOrder(patterns),
+    },
+    {
+      name: 'queue_patterns',
+      description: 'Append pattern names to the song order (see set_song).',
+      inputSchema: obj({ patterns: namesList }, ['patterns']),
+      execute: ({ patterns }) => api.setSongOrder(patterns, { append: true }),
+    },
+    {
+      name: 'clear_queue',
+      description: 'Drop the song order; the current pattern selection loops.',
+      inputSchema: obj({}),
+      execute: () => api.clearQueue(),
     },
     {
       name: 'get_sequencer_status',
@@ -148,6 +234,25 @@ export function createTools(api, { loadJson = defaultLoadJson } = {}) {
         },
       }, ['synth', 'params']),
       execute: ({ synth, params }) => ({ synth, applied: api.setSynthParams(synth, params), patch: api.getSynthPatch(synth).name }),
+    },
+    {
+      name: 'create_synth_patch',
+      description: 'Build a synth patch from scratch (or from a preset: pad, bass, lead, pluck) and put it on Synth 1 or 2. Call get_parameter_reference("patch"), then ("mod_matrix"), then ("macros") first. params are snake_case patch parameters 0-127; mod_matrix entries use SPACE-separated names ({"source1": "LFO 1+/-", "dest": "filter frequency", "depth": 30}, depth -64..63); macros are keyed "1"-"8" with targets [{"dest": "filter frequency", "start": 0, "end": 127, "depth": 63}]. Macros ADD to base values: set base values low for params a macro should sweep up.',
+      inputSchema: withDefs(obj({
+        synth: SYNTH,
+        name: str('Patch name (up to 16 chars).', { maxLength: 16 }),
+        params: { type: 'object', additionalProperties: { type: 'integer', minimum: 0, maximum: 127 }, description: 'param_name -> value.' },
+        mod_matrix: { type: 'array', items: parts.ref('ModMatrixEntry'), maxItems: 20 },
+        macros: { type: 'object', propertyNames: { enum: ['1', '2', '3', '4', '5', '6', '7', '8'] }, additionalProperties: parts.ref('MacroConfig') },
+        preset: str('Base preset.', { enum: ['pad', 'bass', 'lead', 'pluck'] }),
+      }, ['synth', 'name'])),
+      execute: undoable('create_synth_patch', ({ synth, ...cfg }) => api.createSynthPatch(synth, cfg)),
+    },
+    {
+      name: 'save_synth_patch',
+      description: 'Store the live patch of Synth 1 or 2 into a slot of the pack\'s patch bank (0-127) so select_patch and the Preset view can recall it; included in Export pack.',
+      inputSchema: obj({ synth: SYNTH, slot: int(0, 127, 'Bank slot.') }, ['synth', 'slot']),
+      execute: ({ synth, slot }) => api.savePatchToBank(synth, slot),
     },
     {
       name: 'get_synth_patch',

@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { ToolRegistry } from '../js/agent/registry.js';
 import { createTools } from '../js/agent/tools.js';
 
@@ -91,5 +92,33 @@ test('valid calls reach the api with resolved arguments', async () => {
 test('read-only tools carry the readOnlyHint annotation', () => {
   const { reg } = setup();
   const ro = reg.list().filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
-  assert.deepEqual(ro, ['get_parameter_reference', 'get_sequencer_status', 'get_synth_patch', 'get_macros', 'list_drum_samples', 'list_patches', 'list_projects']);
+  assert.deepEqual(ro, ['get_parameter_reference', 'read_project', 'get_pattern', 'list_patterns', 'get_sequencer_status',
+    'get_synth_patch', 'get_macros', 'list_drum_samples', 'list_patches', 'list_projects']);
+});
+
+test('song tools embed the song schema with its $defs hoisted and validate deeply', async () => {
+  const schema = JSON.parse(readFileSync(new URL('../data/song.schema.json', import.meta.url)));
+  const api = fakeApi();
+  const reg = new ToolRegistry().registerAll(createTools(api, { loadJson: async () => reference, songSchema: schema }));
+  const load = reg.list().find((t) => t.name === 'load_song');
+  assert.equal(Object.keys(load.inputSchema.$defs).length, Object.keys(schema.$defs).length);
+  assert.equal(load.inputSchema.properties.song.$defs, undefined);
+  const bad = await reg.call('load_song', { song: { patterns: { a: { tracks: { synth1: { steps: { 0: { velocity: 300 } } } } } } } });
+  assert.equal(bad.isError, true);
+  assert.match(bad.content[0].text, /\$\.song\.patterns\.a\.tracks\.synth1\.steps\["0"\]\.velocity: must be <= 127/);
+  const badTrack = await reg.call('set_pattern', { name: 'x', tracks: { synth9: { steps: {} } } });
+  assert.match(badTrack.content[0].text, /\$\.tracks\.synth9: invalid key "synth9"/);
+  const badPreset = await reg.call('create_synth_patch', { synth: 1, name: 'p', preset: 'organ' });
+  assert.match(badPreset.content[0].text, /must be one of "pad", "bass", "lead", "pluck"/);
+  assert.deepEqual(api.calls, []);
+  await reg.call('set_pattern', { name: 'intro', tracks: { drum1: { steps: { 0: {} } } }, length: 32 });
+  await reg.call('queue_patterns', { patterns: ['intro'] });
+  assert.deepEqual(api.calls, [['snapshot', 'set_pattern'], ['setPattern', 'intro', { drum1: { steps: { 0: {} } } }, 32], ['setSongOrder', ['intro'], { append: true }]]);
+});
+
+test('song tools still register without the schema', () => {
+  const reg = new ToolRegistry().registerAll(createTools(fakeApi(), { loadJson: async () => reference }));
+  const load = reg.list().find((t) => t.name === 'load_song');
+  assert.equal(load.inputSchema.$defs, undefined);
+  assert.equal(load.inputSchema.properties.song.type, 'object');
 });

@@ -1,0 +1,24 @@
+{
+  "name": "Song Order",
+  "bpm": 140,
+  "color": 13,
+  "patterns": {
+    "intro": { "length": 16, "tracks": { "drum1": { "steps": { "0": {}, "8": {} } } } },
+    "verse": {
+      "length": 16,
+      "tracks": {
+        "synth1": { "steps": { "0": { "note": 60 }, "4": { "note": 62 } } },
+        "drum1": { "steps": { "0": {}, "4": {}, "8": {}, "12": {} } }
+      }
+    },
+    "drop": {
+      "length": 16,
+      "tracks": {
+        "synth2": { "steps": { "0": { "notes": [48, 55] } } },
+        "drum2": { "steps": { "4": {}, "12": {} } }
+      }
+    },
+    "unused": { "length": 16, "tracks": { "drum3": { "steps": { "2": {} } } } }
+  },
+  "song": ["drop", "intro", "verse", "verse", "drop", "intro", "drop"]
+}

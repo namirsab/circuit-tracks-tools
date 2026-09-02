@@ -1,0 +1,41 @@
+{
+  "name": "Melody Scale Test",
+  "bpm": 128,
+  "swing": 54,
+  "color": 3,
+  "scale": { "root": "D", "type": "minor" },
+  "patterns": {
+    "lead": {
+      "length": 16,
+      "tracks": {
+        "synth1": {
+          "steps": {
+            "0": { "note": 62, "velocity": 100, "gate": 0.25 },
+            "1": { "note": 61, "velocity": 90, "gate": 0.75 },
+            "2": { "note": 63, "gate": 1.5, "probability": 0.5 },
+            "3": { "notes": [62, 65, 69], "velocity": 80, "gate": 4 },
+            "4": { "note": 74, "gate": 16, "tie": true },
+            "5": { "note": 60, "enabled": false },
+            "6": { "note": 67, "gate": 0.1, "probability": 0.9 },
+            "7": { "note": 70, "gate": 1.75, "probability": 0.25, "velocity": 127 },
+            "8": { "notes": [50, 53, 57, 60, 64, 67, 71], "velocity": 70 },
+            "12": {},
+            "20": { "note": 62 }
+          }
+        },
+        "midi1": {
+          "steps": {
+            "0": { "note": 38, "gate": 2 },
+            "8": { "note": 45, "gate": 0.5, "tie": true }
+          }
+        },
+        "synth2": {
+          "steps": {
+            "4": { "note": 1, "velocity": 64 },
+            "15": { "note": 127, "gate": 0.75 }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,692 @@
+{
+ "name": "Automation 32",
+ "bpm": 124,
+ "swing": 50,
+ "color": 8,
+ "scale": {
+  "root": "C",
+  "type": "chromatic"
+ },
+ "sounds": {
+  "synth1": {
+   "name": "AfterHours",
+   "params": {
+    "polyphony_mode": 0,
+    "portamento_rate": 84,
+    "pre_glide": 65,
+    "keyboard_octave": 62,
+    "osc1_wave": 8,
+    "osc1_wave_interpolate": 127,
+    "osc1_pulse_width_index": 64,
+    "osc1_virtual_sync_depth": 0,
+    "osc1_density": 0,
+    "osc1_density_detune": 48,
+    "osc1_semitones": 64,
+    "osc1_cents": 64,
+    "osc1_pitchbend": 76,
+    "osc2_wave": 23,
+    "osc2_wave_interpolate": 0,
+    "osc2_pulse_width_index": 67,
+    "osc2_virtual_sync_depth": 0,
+    "osc2_density": 26,
+    "osc2_density_detune": 24,
+    "osc2_semitones": 83,
+    "osc2_cents": 63,
+    "osc2_pitchbend": 76,
+    "osc1_level": 127,
+    "osc2_level": 127,
+    "ring_mod_level": 0,
+    "noise_level": 0,
+    "pre_fx_level": 69,
+    "post_fx_level": 69,
+    "routing": 0,
+    "drive": 0,
+    "drive_type": 3,
+    "filter_type": 1,
+    "filter_frequency": 0,
+    "filter_tracking": 63,
+    "filter_resonance": 0,
+    "filter_q_normalize": 64,
+    "env2_to_filter_freq": 64,
+    "env1_velocity": 92,
+    "env1_attack": 0,
+    "env1_decay": 90,
+    "env1_sustain": 72,
+    "env1_release": 0,
+    "env2_velocity": 127,
+    "env2_attack": 0,
+    "env2_decay": 43,
+    "env2_sustain": 35,
+    "env2_release": 58,
+    "env3_delay": 0,
+    "env3_attack": 0,
+    "env3_decay": 46,
+    "env3_sustain": 30,
+    "env3_release": 40,
+    "lfo1_waveform": 6,
+    "lfo1_phase_offset": 0,
+    "lfo1_slew_rate": 58,
+    "lfo1_delay": 0,
+    "lfo1_delay_sync": 0,
+    "lfo1_rate": 0,
+    "lfo1_rate_sync": 7,
+    "lfo1_flags": 6,
+    "lfo2_waveform": 0,
+    "lfo2_phase_offset": 0,
+    "lfo2_slew_rate": 0,
+    "lfo2_delay": 0,
+    "lfo2_delay_sync": 0,
+    "lfo2_rate": 28,
+    "lfo2_rate_sync": 0,
+    "lfo2_flags": 0,
+    "distortion_level": 0,
+    "chorus_level": 0,
+    "eq_bass_frequency": 64,
+    "eq_bass_level": 68,
+    "eq_mid_frequency": 84,
+    "eq_mid_level": 54,
+    "eq_treble_frequency": 125,
+    "eq_treble_level": 104,
+    "distortion_type": 6,
+    "distortion_compensation": 0,
+    "chorus_type": 0,
+    "chorus_rate": 0,
+    "chorus_rate_sync": 16,
+    "chorus_feedback": 57,
+    "chorus_mod_depth": 127,
+    "chorus_delay": 0
+   },
+   "mod_matrix": [
+    {
+     "source": "LFO 1+",
+     "dest": "osc 1 pulse width / index",
+     "depth": 0
+    },
+    {
+     "source": "direct",
+     "dest": "osc 2 pulse width / index",
+     "depth": 30,
+     "source2": "LFO 1+"
+    },
+    {
+     "source": "direct",
+     "dest": "osc 1 v-sync",
+     "depth": 0,
+     "source2": "env 3"
+    }
+   ],
+   "macros": {
+    "1": {
+     "targets": [
+      {
+       "dest": "osc1_virtual_sync_depth",
+       "start": 0,
+       "end": 127,
+       "depth": 93
+      },
+      {
+       "dest": "osc1_density",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 127
+    },
+    "2": {
+     "targets": [
+      {
+       "dest": "mod_matrix_3_depth",
+       "start": 0,
+       "end": 127,
+       "depth": 99
+      }
+     ],
+     "position": 67
+    },
+    "3": {
+     "targets": [
+      {
+       "dest": "env1_release",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 81
+    },
+    "4": {
+     "targets": [
+      {
+       "dest": "env2_to_filter_freq",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 127
+    },
+    "5": {
+     "targets": [
+      {
+       "dest": "filter_frequency",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 58
+    },
+    "6": {
+     "targets": [
+      {
+       "dest": "filter_resonance",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 54
+    },
+    "7": {
+     "targets": [
+      {
+       "dest": "mod_matrix_1_depth",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 127
+    },
+    "8": {
+     "targets": [
+      {
+       "dest": "distortion_level",
+       "start": 0,
+       "end": 127,
+       "depth": 79
+      }
+     ]
+    }
+   }
+  },
+  "synth2": {
+   "name": "AlteredState",
+   "params": {
+    "polyphony_mode": 2,
+    "portamento_rate": 0,
+    "pre_glide": 64,
+    "keyboard_octave": 64,
+    "osc1_wave": 17,
+    "osc1_wave_interpolate": 127,
+    "osc1_pulse_width_index": 127,
+    "osc1_virtual_sync_depth": 0,
+    "osc1_density": 0,
+    "osc1_density_detune": 0,
+    "osc1_semitones": 64,
+    "osc1_cents": 64,
+    "osc1_pitchbend": 76,
+    "osc2_wave": 2,
+    "osc2_wave_interpolate": 127,
+    "osc2_pulse_width_index": 64,
+    "osc2_virtual_sync_depth": 27,
+    "osc2_density": 0,
+    "osc2_density_detune": 0,
+    "osc2_semitones": 69,
+    "osc2_cents": 64,
+    "osc2_pitchbend": 76,
+    "osc1_level": 62,
+    "osc2_level": 0,
+    "ring_mod_level": 0,
+    "noise_level": 0,
+    "pre_fx_level": 66,
+    "post_fx_level": 67,
+    "routing": 0,
+    "drive": 0,
+    "drive_type": 6,
+    "filter_type": 0,
+    "filter_frequency": 1,
+    "filter_tracking": 65,
+    "filter_resonance": 0,
+    "filter_q_normalize": 64,
+    "env2_to_filter_freq": 127,
+    "env1_velocity": 97,
+    "env1_attack": 0,
+    "env1_decay": 88,
+    "env1_sustain": 31,
+    "env1_release": 0,
+    "env2_velocity": 94,
+    "env2_attack": 0,
+    "env2_decay": 32,
+    "env2_sustain": 78,
+    "env2_release": 84,
+    "env3_delay": 0,
+    "env3_attack": 0,
+    "env3_decay": 70,
+    "env3_sustain": 67,
+    "env3_release": 41,
+    "lfo1_waveform": 5,
+    "lfo1_phase_offset": 0,
+    "lfo1_slew_rate": 25,
+    "lfo1_delay": 0,
+    "lfo1_delay_sync": 0,
+    "lfo1_rate": 0,
+    "lfo1_rate_sync": 10,
+    "lfo1_flags": 6,
+    "lfo2_waveform": 6,
+    "lfo2_phase_offset": 0,
+    "lfo2_slew_rate": 39,
+    "lfo2_delay": 0,
+    "lfo2_delay_sync": 0,
+    "lfo2_rate": 0,
+    "lfo2_rate_sync": 10,
+    "lfo2_flags": 6,
+    "distortion_level": 36,
+    "chorus_level": 76,
+    "eq_bass_frequency": 54,
+    "eq_bass_level": 54,
+    "eq_mid_frequency": 76,
+    "eq_mid_level": 64,
+    "eq_treble_frequency": 125,
+    "eq_treble_level": 73,
+    "distortion_type": 0,
+    "distortion_compensation": 23,
+    "chorus_type": 1,
+    "chorus_rate": 20,
+    "chorus_rate_sync": 13,
+    "chorus_feedback": 42,
+    "chorus_mod_depth": 31,
+    "chorus_delay": 0
+   },
+   "mod_matrix": [
+    {
+     "source": "direct",
+     "dest": "filter frequency",
+     "depth": 0,
+     "source2": "LFO 2+"
+    },
+    {
+     "source": "LFO 1+",
+     "dest": "osc 1 & 2 pitch",
+     "depth": 0
+    },
+    {
+     "source": "env 3",
+     "dest": "filter drive amount",
+     "depth": 0
+    },
+    {
+     "source": "LFO 1+/-",
+     "dest": "filter frequency",
+     "depth": 0
+    },
+    {
+     "source": "direct",
+     "dest": "osc 1 pitch",
+     "depth": 0
+    },
+    {
+     "source": "direct",
+     "dest": "osc 2 pitch",
+     "depth": 0
+    },
+    {
+     "source": "direct",
+     "dest": "osc 2 pitch",
+     "depth": 0
+    },
+    {
+     "source": "env 3",
+     "dest": "ring modulation 1*2 level",
+     "depth": 0
+    },
+    {
+     "source": "LFO 2+/-",
+     "dest": "osc 2 level",
+     "depth": 0
+    },
+    {
+     "source": "LFO 2+",
+     "dest": "osc 2 pitch",
+     "depth": 0
+    },
+    {
+     "source": "env filter",
+     "dest": "osc 2 pulse width / index",
+     "depth": 0
+    }
+   ],
+   "macros": {
+    "1": {
+     "targets": [
+      {
+       "dest": "mod_matrix_2_depth",
+       "start": 0,
+       "end": 127,
+       "depth": 49
+      }
+     ],
+     "position": 26
+    },
+    "2": {
+     "targets": [
+      {
+       "dest": "mod_matrix_1_depth",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 127
+    },
+    "3": {
+     "targets": [
+      {
+       "dest": "env1_release",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 83
+    },
+    "4": {
+     "targets": [
+      {
+       "dest": "env2_attack",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 84
+    },
+    "5": {
+     "targets": [
+      {
+       "dest": "filter_frequency",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 58
+    },
+    "6": {
+     "targets": [
+      {
+       "dest": "filter_resonance",
+       "start": 0,
+       "end": 127,
+       "depth": 98
+      }
+     ],
+     "position": 61
+    },
+    "7": {
+     "targets": [
+      {
+       "dest": "lfo1_delay",
+       "start": 0,
+       "end": 127,
+       "depth": 62
+      },
+      {
+       "dest": "pre_fx_level",
+       "start": 0,
+       "end": 127,
+       "depth": 75
+      }
+     ],
+     "position": 127
+    },
+    "8": {
+     "targets": [
+      {
+       "dest": "pre_fx_level",
+       "start": 0,
+       "end": 127,
+       "depth": 110
+      },
+      {
+       "dest": "lfo1_slew_rate",
+       "start": 0,
+       "end": 127,
+       "depth": 127
+      }
+     ],
+     "position": 79
+    }
+   }
+  },
+  "drum1": {
+   "sample": 0,
+   "level": 100,
+   "pitch": 64,
+   "decay": 127,
+   "distortion": 0,
+   "eq": 64,
+   "pan": 64
+  },
+  "drum2": {
+   "sample": 2,
+   "level": 100,
+   "pitch": 64,
+   "decay": 127,
+   "distortion": 0,
+   "eq": 64,
+   "pan": 64
+  },
+  "drum3": {
+   "sample": 4,
+   "level": 100,
+   "pitch": 64,
+   "decay": 127,
+   "distortion": 0,
+   "eq": 64,
+   "pan": 64
+  },
+  "drum4": {
+   "sample": 8,
+   "level": 100,
+   "pitch": 64,
+   "decay": 127,
+   "distortion": 0,
+   "eq": 64,
+   "pan": 64
+  }
+ },
+ "fx": {
+  "reverb": {
+   "type": 2,
+   "decay": 64,
+   "damping": 64
+  },
+  "delay": {
+   "time": 64,
+   "sync": 20,
+   "feedback": 64,
+   "width": 127,
+   "lr_ratio": 4,
+   "slew": 5
+  },
+  "sidechain": {
+   "synth1": {
+    "source": "drum1",
+    "attack": 0,
+    "hold": 50,
+    "decay": 70,
+    "depth": 0
+   },
+   "synth2": {
+    "source": "drum1",
+    "attack": 0,
+    "hold": 50,
+    "decay": 70,
+    "depth": 0
+   },
+   "midi1": {
+    "source": "drum1",
+    "attack": 0,
+    "hold": 50,
+    "decay": 70,
+    "depth": 0
+   },
+   "midi2": {
+    "source": "drum1",
+    "attack": 0,
+    "hold": 50,
+    "decay": 70,
+    "depth": 0
+   }
+  },
+  "reverb_preset": 0,
+  "delay_preset": 0
+ },
+ "patterns": {
+  "pattern_0": {
+   "length": 32,
+   "tracks": {
+    "synth1": {
+     "steps": {
+      "0": {
+       "note": 48,
+       "velocity": 100,
+       "gate": 0.5,
+       "probability": 1.0
+      },
+      "8": {
+       "note": 55,
+       "velocity": 100,
+       "gate": 2.0,
+       "probability": 1.0
+      },
+      "16": {
+       "note": 48,
+       "velocity": 100,
+       "gate": 0.5,
+       "probability": 1.0
+      },
+      "24": {
+       "note": 60,
+       "velocity": 100,
+       "gate": 0.5,
+       "probability": 1.0
+      }
+     },
+     "macros": {
+      "1": {
+       "0": 80
+      },
+      "2": {
+       "0.667": 20,
+       "31": 100
+      },
+      "5": {
+       "0": 0,
+       "3.5": 30,
+       "8": 60,
+       "10.333": 90,
+       "16": 127,
+       "31.5": 64
+      },
+      "8": {
+       "24": 127
+      }
+     },
+     "mixer": {
+      "reverb_send": {
+       "4": 80
+      },
+      "delay_send": {
+       "12.333": 40
+      },
+      "level": {
+       "0": 100,
+       "16": 60
+      },
+      "pan": {
+       "0": 0,
+       "15.5": 127
+      }
+     }
+    },
+    "drum1": {
+     "steps": {
+      "0": {
+       "velocity": 100,
+       "probability": 1.0
+      },
+      "8": {
+       "velocity": 100,
+       "probability": 1.0
+      },
+      "16": {
+       "velocity": 100,
+       "probability": 1.0
+      },
+      "24": {
+       "velocity": 100,
+       "probability": 1.0
+      }
+     },
+     "params": {
+      "pitch": {
+       "0": 30,
+       "4": 90,
+       "8.5": 60
+      },
+      "decay": {
+       "0": 100,
+       "16": 40
+      },
+      "distortion": {
+       "2": 50
+      },
+      "eq": {
+       "3.5": 100
+      },
+      "reverb_send": {
+       "0": 20
+      },
+      "delay_send": {
+       "6": 70
+      },
+      "level": {
+       "24": 80
+      },
+      "pan": {
+       "0": 0
+      }
+     }
+    },
+    "drum2": {
+     "params": {
+      "pitch": {
+       "5": 64
+      }
+     }
+    },
+    "midi2": {
+     "steps": {
+      "0": {
+       "note": 36,
+       "velocity": 100,
+       "gate": 0.5,
+       "probability": 1.0
+      }
+     },
+     "macros": {
+      "1": {
+       "2": 50
+      }
+     }
+    }
+   }
+  }
+ },
+ "song": [
+  "pattern_0"
+ ]
+}

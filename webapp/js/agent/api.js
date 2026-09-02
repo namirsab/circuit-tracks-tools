@@ -2,7 +2,14 @@
 // without DOM events, keeping the audio engine, the project model and the UI
 // (pads, knobs, LCD, sidebar) in sync so the human watches the agent work.
 // Tool descriptors in tools.js are thin wrappers over these methods.
-import { PARAM_OFFSETS } from '../patch.js';
+import { PARAM_OFFSETS, decodePatch } from '../patch.js';
+import { parseNCS } from '../ncs.js';
+import { emptyPattern } from '../state.js';
+import {
+  compileSong, projectToSong, patternSlotToSong, slotIsEmpty,
+  validateTrackConfig, trackConfigToPattern, TRACK_INDEX,
+} from './song-compiler.js';
+import { buildPatchBytes } from './patch-builder.js';
 import {
   MACRO_DESTINATIONS, MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS,
   SCALE_ROOTS, SCALE_TYPES, REVERB_TYPES, SIDECHAIN_PRESETS,
@@ -47,7 +54,8 @@ export class AgentApi {
     this.app = app;
     this.history = []; // project snapshots for undo
     this.maxHistory = 12;
-    this.patternNames = new Map(); // song pattern name -> slot index (set by load_song)
+    this.patternNames = new Map(); // song pattern name -> slot index (set by load_song / set_pattern)
+    this.songOrder = []; // pattern names behind the scene chain (set_song / queue_patterns)
   }
 
   get project() { return this.app.project; }
@@ -477,6 +485,209 @@ export class AgentApi {
   async downloadProject() {
     await this.app.exportNcs();
     return `Downloading ${(this.project.name || 'project').trim()}.ncs`;
+  }
+
+  // ---------- song format ----------
+  async loadSong(song) {
+    // The blank template as base gives hardware parity (template patches when
+    // "sounds" is absent, the same unmodelled bytes the Python export uses).
+    const base = parseNCS(await this.app.emptyTemplate());
+    const { project, patternNames, warnings } = compileSong(song, { baseProject: base });
+    this.app.projectRawBytes = null;
+    this.app.applyProject(project);
+    this.ui.currentProjectIdx = null;
+    this.patternNames = patternNames;
+    this.songOrder = Array.isArray(song.song) ? [...song.song] : [];
+    this.app.markProjectDirty();
+    const names = [...patternNames.keys()];
+    return {
+      loaded: project.name,
+      bpm: project.tempo,
+      patterns: Object.fromEntries([...patternNames].map(([n, i]) => [n, i + 1])),
+      song_order: this.songOrder,
+      warnings,
+      next: `start_sequencer${names.length > 1 && !this.songOrder.length ? ` (pattern: one of ${names.join(', ')})` : ''} to listen; export_song_to_project to save`,
+    };
+  }
+
+  async readProject() {
+    const bytes = await this.app.buildProjectBytes(); // syncs live tempo/swing/patches
+    const proj = parseNCS(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    return projectToSong(proj, { patternNames: this.patternNames });
+  }
+
+  patternLengthInUse(exceptSlot = null) {
+    for (let s = 0; s < 8; s++) {
+      if (s === exceptSlot || slotIsEmpty(this.project, s)) continue;
+      return (this.project.patterns[0][s].settings.playbackEnd ?? 15) + 1;
+    }
+    return null;
+  }
+
+  slotForName(name) {
+    if (!this.patternNames.has(name)) {
+      const known = [...this.patternNames.keys()];
+      throw new Error(`Unknown pattern "${name}". ${known.length ? `Known patterns: ${known.join(', ')}.` : 'No named patterns yet.'} Create it with set_pattern or load_song.`);
+    }
+    return this.patternNames.get(name);
+  }
+
+  allocateSlot(name) {
+    if (this.patternNames.has(name)) return this.patternNames.get(name);
+    const used = new Set(this.patternNames.values());
+    for (let s = 0; s < 8; s++) if (!used.has(s) && slotIsEmpty(this.project, s)) return s;
+    for (let s = 0; s < 8; s++) if (!used.has(s)) return s;
+    throw new Error('All 8 pattern slots already have names. Reuse a name to replace that pattern, or clear_pattern one.');
+  }
+
+  setPattern(name, tracks, length = 16) {
+    const slot = this.allocateSlot(name);
+    const inUse = this.patternLengthInUse(slot);
+    if (inUse != null && inUse !== length) {
+      throw new Error(`All patterns in a project must share one length: the existing patterns use ${inUse} steps but length is ${length}. Use length ${length === inUse ? length : inUse}.`);
+    }
+    const warnings = [];
+    const opts = { scaleRoot: this.project.scaleRoot, scaleType: this.project.scaleType, warnings };
+    const built = {};
+    for (const [track, cfg] of Object.entries(tracks)) {
+      validateTrackConfig(track, cfg, length, `tracks.${track}`);
+      built[track] = trackConfigToPattern(track, cfg, length, { ...opts, where: `tracks.${track}` });
+    }
+    for (const track of TRACK_NAMES) {
+      const t = TRACK_INDEX[track];
+      const pat = built[track] ?? emptyPattern(t >= 4 ? 'drum' : 'synth');
+      pat.settings.playbackEnd = length - 1;
+      this.project.patterns[t][slot] = pat;
+    }
+    this.patternNames.set(name, slot);
+    if (!this.seq.playing) {
+      for (let t = 0; t < 8; t++) {
+        this.ui.currentPattern[t] = slot;
+        this.project.patternChains[t] = { start: 0, end: 0 };
+      }
+    }
+    this.ui.stepPage = 0;
+    this.app.updateStepPageButton();
+    this.app.markProjectDirty();
+    this.app.views.render();
+    return { pattern: name, slot: slot + 1, length, tracks: Object.keys(built), warnings, selected: !this.seq.playing };
+  }
+
+  setTrack(patternName, track, steps, clearExisting = true) {
+    const slot = this.slotForName(patternName);
+    const t = trackId(track);
+    const length = (this.project.patterns[t][slot].settings.playbackEnd ?? 15) + 1;
+    const existing = patternSlotToSong(this.project, slot).tracks?.[track] ?? {};
+    const cfg = clearExisting
+      ? { ...existing, steps }
+      : { ...existing, steps: { ...(existing.steps ?? {}), ...steps } };
+    validateTrackConfig(track, cfg, length, track);
+    const warnings = [];
+    this.project.patterns[t][slot] = trackConfigToPattern(track, cfg, length, {
+      scaleRoot: this.project.scaleRoot, scaleType: this.project.scaleType, warnings, where: track,
+    });
+    this.app.markProjectDirty();
+    this.app.views.render();
+    return { pattern: patternName, track, steps: Object.keys(cfg.steps ?? {}).length, length, warnings };
+  }
+
+  getPattern(name) {
+    const slot = this.slotForName(name);
+    return { name, slot: slot + 1, ...patternSlotToSong(this.project, slot) };
+  }
+
+  listPatterns() {
+    const named = new Set(this.patternNames.values());
+    const unnamed = [];
+    for (let s = 0; s < 8; s++) if (!named.has(s) && !slotIsEmpty(this.project, s)) unnamed.push(s + 1);
+    return {
+      patterns: [...this.patternNames].map(([name, slot]) => ({ name, slot: slot + 1, empty: slotIsEmpty(this.project, slot) })),
+      unnamed_slots_with_data: unnamed,
+      song_order: this.songOrder,
+      length: this.patternLengthInUse(),
+    };
+  }
+
+  clearNamedPattern(name) {
+    const slot = this.slotForName(name);
+    for (let t = 0; t < 8; t++) this.app.clearPattern(this.project.patterns[t][slot]);
+    this.app.markProjectDirty();
+    this.app.views.render();
+    return `Pattern "${name}" (slot ${slot + 1}) cleared`;
+  }
+
+  // Song order = scenes 1..n each holding one pattern slot on every track,
+  // chained; like the hardware, the chain loops as a whole.
+  setSongOrder(names, { append = false } = {}) {
+    const order = append ? [...this.songOrder, ...names] : [...names];
+    if (order.length > 16) throw new Error(`A song can have at most 16 scenes; got ${order.length}`);
+    const slots = order.map((n) => this.slotForName(n));
+    this.project.scenes.forEach((scene, i) => {
+      if (i < slots.length) {
+        scene.trackChains = Array.from({ length: 8 }, () => ({ start: slots[i], end: slots[i] }));
+        scene.flags = 1;
+      } else {
+        scene.trackChains = Array.from({ length: 8 }, () => ({ start: 0, end: 0 }));
+        scene.flags = 0;
+      }
+    });
+    this.songOrder = order;
+    if (!order.length) return this.clearQueue();
+    this.project.sceneChain = { start: 0, end: order.length - 1 };
+    if (this.seq.playing) this.seq.queueSceneChain(0, order.length - 1);
+    else this.seq.applySceneChains(0);
+    this.app.views.activeScene = 0;
+    this.app.markProjectDirty();
+    this.app.views.render();
+    return {
+      song: order,
+      scenes: order.length,
+      status: this.seq.playing ? 'queued for the end of the current Drum 1 pattern' : 'plays from the top on the next start',
+    };
+  }
+
+  clearQueue() {
+    this.songOrder = [];
+    this.project.sceneChain = { start: 0, end: 0 };
+    this.seq.sceneState = null;
+    this.app.views.activeScene = -1;
+    this.app.markProjectDirty();
+    this.app.views.render();
+    return 'Song order cleared; the current pattern selection loops';
+  }
+
+  // ---------- patch building ----------
+  createSynthPatch(synth, { name, params, mod_matrix, macros, preset }) {
+    const st = this.synthTrack(synth);
+    const bytes = buildPatchBytes({ preset, name, params, mod_matrix, macros });
+    const patch = decodePatch(bytes);
+    st.setPatch(patch);
+    this.project[Number(synth) === 1 ? 'synth1Patch' : 'synth2Patch'] = bytes;
+    this.ui.patchIndex[synth - 1] = null;
+    this.afterPatchChange(synth);
+    this.app.views.render();
+    return {
+      synth: Number(synth),
+      name: patch.name,
+      preset: preset ?? null,
+      macros: this.getMacros()[`synth${synth}`].macros.filter((m) => m.targets.length),
+    };
+  }
+
+  savePatchToBank(synth, slot) {
+    const st = this.synthTrack(synth);
+    const raw = new Uint8Array(st.patch.raw).slice(0, 340);
+    const idx = clamp(slot, 0, 127);
+    if (idx > this.app.patchBank.length) throw new Error(`Slot ${idx} is beyond the bank (${this.app.patchBank.length} patches); use 0-${this.app.patchBank.length}`);
+    const syx = new Uint8Array([0xf0, 0x00, 0x20, 0x29, 0x01, 0x64, 0x00, synth - 1, 0x00, ...raw, 0xf7]);
+    const old = this.app.patchBank[idx];
+    if (old?.url) URL.revokeObjectURL(old.url);
+    this.app.patchBank[idx] = { name: st.patch.name || `Patch ${idx}`, bytes: syx.buffer, url: URL.createObjectURL(new Blob([syx])) };
+    this.ui.patchIndex[synth - 1] = idx;
+    this.app._slotsDirty = true;
+    this.app.snapshotPack();
+    this.app.views.render();
+    return { synth: Number(synth), slot: idx, name: this.app.patchBank[idx].name, replaced: old?.name ?? null };
   }
 
   // ---------- undo ----------

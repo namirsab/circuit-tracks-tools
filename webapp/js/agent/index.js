@@ -12,10 +12,22 @@ import { bindAgentPanel } from './panel.js';
 export const AGENT_VERSION = '0.1.0';
 const LOG_LIMIT = 200;
 
-export function initAgent(app) {
+async function loadJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  return res.json();
+}
+
+export async function initAgent(app) {
   const api = new AgentApi(app);
+  let songSchema = null;
+  try {
+    songSchema = await loadJson('data/song.schema.json');
+  } catch (err) {
+    console.warn('[webtracks] song schema unavailable; load_song validates structurally only:', err.message);
+  }
   const registry = new ToolRegistry();
-  registry.registerAll(createTools(api));
+  registry.registerAll(createTools(api, { loadJson, songSchema }));
 
   const log = [];
   registry.on((event) => {

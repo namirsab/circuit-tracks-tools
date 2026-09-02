@@ -152,8 +152,10 @@ class CircuitApp {
     };
     requestAnimationFrame(tick);
 
-    // Agent tools (window.webtracks + WebMCP) over the headless API.
-    this.agent = initAgent(this);
+    // Agent tools (window.webtracks, WebMCP, Agent Link) over the headless API.
+    initAgent(this)
+      .then((agent) => { this.agent = agent; })
+      .catch((err) => console.warn('Agent tools failed to start:', err));
   }
 
   trackKind(t) { return TRACKS[t].kind; }
@@ -637,20 +639,23 @@ class CircuitApp {
   }
 
   // Serialize the live project to hardware-ready .ncs bytes.
+  // The blank project template: supplies the unmodeled bytes of fresh
+  // projects (and the compile base for load_song). Cached after the first
+  // fetch — autosave reserialises ~once a second, and serializeNCS only reads
+  // from the template, so one copy is safe.
+  async emptyTemplate() {
+    if (!this._emptyTemplate) {
+      const res = await fetch('data/Empty.ncs');
+      if (!res.ok) throw new Error('No NCS template available');
+      this._emptyTemplate = await res.arrayBuffer();
+    }
+    return this._emptyTemplate;
+  }
+
   async buildProjectBytes() {
     let base = this.projectRawBytes;
     const fresh = !base;
-    if (fresh) {
-      // Fresh in-app project: the blank template supplies the unmodeled bytes.
-      // Cached after the first fetch — autosave reserialises ~once a second,
-      // and serializeNCS only reads from the template, so one copy is safe.
-      if (!this._emptyTemplate) {
-        const res = await fetch('data/Empty.ncs');
-        if (!res.ok) throw new Error('No NCS template available');
-        this._emptyTemplate = await res.arrayBuffer();
-      }
-      base = this._emptyTemplate;
-    }
+    if (fresh) base = await this.emptyTemplate();
     // Sync live state that isn't written through to the model.
     this.project.tempo = this.seq.bpm;
     this.project.swing = this.seq.swing;

@@ -91,7 +91,7 @@ Tools (26 + song tools): `get_parameter_reference`, `get_sequencer_status`,
 `transport`, `set_bpm`, `set_swing`, `queue_patterns`, `set_song`,
 `clear_queue`, `select_pattern`, `mute_track`, `set_synth_params`,
 `edit_synth_patch`, `create_synth_patch`, `get_synth_patch`,
-`set_drum_params`, `set_project_params`, `set_macro`, `get_macros`,
+`save_synth_patch`, `set_drum_params`, `set_project_params`, `set_macro`, `get_macros`,
 `play_notes`, `play_drum`, `list_drum_samples`, `list_patches`,
 `select_patch`, `list_projects`, `select_project`, `export_song_to_project`,
 `download_project`, `undo`. Call `get_parameter_reference` with no section

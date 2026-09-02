@@ -126,7 +126,7 @@ export const SCALE_TYPES = [
   { name: 'Mixolydian', intervals: [0, 2, 4, 5, 7, 9, 10] },
   { name: 'Melodic Minor', intervals: [0, 2, 3, 5, 7, 9, 11] },
   { name: 'Harmonic Minor', intervals: [0, 2, 3, 5, 7, 8, 11] },
-  { name: 'Bebop Dorian', intervals: [0, 3, 4, 5, 7, 9, 10] },
+  { name: 'Bebop Dorian', intervals: [0, 2, 3, 4, 5, 7, 9, 10] },
   { name: 'Blues', intervals: [0, 3, 5, 6, 7, 10] },
   { name: 'Minor Pentatonic', intervals: [0, 3, 5, 7, 10] },
   { name: 'Hungarian Minor', intervals: [0, 2, 3, 6, 7, 8, 11] },
