@@ -5,7 +5,7 @@
 import { PARAM_OFFSETS } from '../patch.js';
 import {
   MACRO_DESTINATIONS, MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS,
-  SCALE_ROOTS, SCALE_TYPES, REVERB_TYPES,
+  SCALE_ROOTS, SCALE_TYPES, REVERB_TYPES, SIDECHAIN_PRESETS,
 } from '../constants.js';
 
 // Track order matches the webapp model: S1, S2, M1, M2, D1..D4.
@@ -334,7 +334,7 @@ export class AgentApi {
     const notes = [];
     let reverbDirty = false;
     let delayDirty = false;
-    const scDirty = new Set();
+    const scUpdates = new Map(); // track -> {preset?, source?, attack?, ...}
     for (const [name, raw] of Object.entries(params)) {
       const v = clamp127(raw);
       let m;
@@ -363,11 +363,9 @@ export class AgentApi {
       else if (name === 'delay_slew_rate') { fx.delaySlew = v; delayDirty = true; }
       else if ((m = /^sidechain_(synth1|synth2|midi1|midi2)_(preset|source|attack|hold|decay|depth)$/.exec(name))) {
         const i = trackId(m[1]);
-        const sc = this.project.sidechain[i];
-        if (m[2] === 'preset') sc.preset = clamp(raw, 0, 7);
-        else if (m[2] === 'source') sc.source = clamp(raw, 0, 4);
-        else sc[m[2]] = v;
-        scDirty.add(i);
+        const upd = scUpdates.get(i) ?? {};
+        upd[m[2]] = m[2] === 'preset' ? clamp(raw, 0, 7) : m[2] === 'source' ? clamp(raw, 0, 4) : v;
+        scUpdates.set(i, upd);
       } else {
         throw new Error(`Unknown project parameter "${name}". Available:\n- ${PROJECT_PARAM_HELP.join('\n- ')}`);
       }
@@ -375,10 +373,19 @@ export class AgentApi {
     }
     if (reverbDirty) this.engine.reverb.setParams(fx.reverbDecay, fx.reverbDamping);
     if (delayDirty) this.app.applyDelayParams();
-    for (const i of scDirty) {
+    for (const [i, upd] of scUpdates) {
       const sc = this.project.sidechain[i];
-      // Explicit attack/hold/decay/depth win over the preset table in the engine
-      // (the project keeps the preset index for hardware export).
+      // Like the FX view: picking a preset loads its curve, then explicit
+      // attack/hold/decay/depth in the same call override it. The engine gets
+      // the resolved values (preset 99 = "use these numbers"); the project
+      // keeps the preset index for hardware export.
+      const { preset, ...fields } = upd;
+      if (preset !== undefined) {
+        sc.preset = preset;
+        if (preset > 0) Object.assign(sc, SIDECHAIN_PRESETS[preset]);
+      }
+      Object.assign(sc, fields);
+      if (sc.source > 3 && sc.preset > 0 && fields.source === undefined) sc.source = 0;
       this.engine.configureSidechain(i, { ...sc, preset: sc.preset ? 99 : 0 });
       if (sc.preset === 0 && sc.source <= 3) notes.push(`${TRACK_NAMES[i]} sidechain stays off until sidechain_${TRACK_NAMES[i]}_preset is 1-7`);
     }
