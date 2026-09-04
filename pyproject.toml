@@ -60,3 +60,7 @@ packages = ["src/circuit_tracks", "src/circuit_mcp"]
 
 [tool.hatch.build.targets.editable]
 packages = ["src/circuit_tracks", "src/circuit_mcp"]
+
+[tool.pytest.ini_options]
+# The Agent Link relay under link/ has its own test suite and dependencies.
+testpaths = ["tests"]

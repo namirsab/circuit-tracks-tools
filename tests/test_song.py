@@ -835,3 +835,48 @@ def parse_ncs_from_bytes(data: bytes) -> "NCSFile":
         f.write(data)
         f.flush()
         return parse_ncs(f.name)
+
+
+def test_sound_mod_matrix_source1_reaches_the_patch_bytes():
+    """sounds.*.mod_matrix stores the primary source as source1 (regression:
+    _build_patch_bytes used to read "source" and exported every slot as
+    direct)."""
+    from circuit_tracks.constants import MOD_MATRIX_SOURCES
+    from circuit_tracks.song import _build_patch_bytes
+
+    song = parse_song(
+        {
+            "sounds": {
+                "synth1": {
+                    "preset": "pad",
+                    "mod_matrix": [
+                        {"source1": "velocity", "dest": "filter frequency", "depth": 30},
+                    ],
+                }
+            },
+            "patterns": {"a": {"tracks": {"drum1": {"steps": {"0": {}}}}}},
+        }
+    )
+    patch = _build_patch_bytes(song.sounds["synth1"])
+    velocity = next(k for k, v in MOD_MATRIX_SOURCES.items() if v == "velocity")
+    slots = [patch[124 + s * 4 : 124 + s * 4 + 4] for s in range(20)]
+    assert any(slot[0] == velocity and slot[2] == 30 + 64 for slot in slots)
+
+
+def test_named_fx_presets_resolve():
+    from circuit_tracks.constants import DELAY_PRESET_BY_NAME, REVERB_PRESET_BY_NAME
+
+    assert REVERB_PRESET_BY_NAME["hall"] == 4
+    assert REVERB_PRESET_BY_NAME["hall - long reflection"] == 6
+    assert DELAY_PRESET_BY_NAME["8th ping pong"] == 11
+    song = parse_song(
+        {
+            "fx": {"reverb_preset": "Large Hall", "delay_preset": "16th Ping Pong"},
+            "patterns": {"a": {"tracks": {"drum1": {"steps": {"0": {}}}}}},
+        }
+    )
+    from circuit_tracks.ncs_parser import parse_ncs_from_bytes
+
+    ncs = parse_ncs_from_bytes(song_to_ncs(song))
+    assert ncs.project_settings.reverb_preset == 5
+    assert ncs.project_settings.delay_preset == 6

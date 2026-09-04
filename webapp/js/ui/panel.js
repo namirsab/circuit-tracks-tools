@@ -130,6 +130,24 @@ export function buildPanel(root) {
 
 export function buildSidebar(root) {
   root.innerHTML = `
+    <h2>AI agent <span id="agent-state" class="fx-state agent-off">OFF</span></h2>
+    <div class="agent-box">
+      <button id="btn-agent-connect" class="load-btn agent-connect">Connect an AI agent…</button>
+      <div id="agent-connected" hidden>
+        <div class="agent-hint">Add this URL to your MCP client (Claude Code, Claude Desktop, claude.ai…). Keep this tab open.</div>
+        <div class="agent-url-row"><code id="agent-url">…</code><button id="btn-agent-copy" class="mini-btn">Copy</button></div>
+        <div class="agent-hint mono">claude mcp add --transport http webtracks &lt;URL&gt;</div>
+        <button id="btn-agent-disconnect" class="load-btn">Disconnect</button>
+      </div>
+      <div id="agent-error" class="agent-error" hidden></div>
+      <details class="agent-advanced">
+        <summary>Relay URL</summary>
+        <input id="agent-relay-url" type="text" spellcheck="false" placeholder="wss://…/ws">
+        <div class="agent-hint">Point this at your own relay (see link/README.md), e.g. ws://localhost:8770/ws.</div>
+      </details>
+      <ol id="agent-log" class="agent-log"></ol>
+      <button id="btn-agent-undo" class="load-btn" hidden>Undo last agent change</button>
+    </div>
     <h2>Project</h2>
     <div class="status-grid">
       <span>Name</span><span id="status-name">—</span>

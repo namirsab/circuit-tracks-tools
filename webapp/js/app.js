@@ -4,7 +4,7 @@ import { SynthTrack } from './audio/synth.js';
 import { DrumEngine } from './audio/drums.js';
 import { Sequencer } from './sequencer.js';
 import { parseNCS, serializeNCS } from './ncs.js';
-import { decodePatch, parseSyxPatch } from './patch.js';
+import { decodePatch, parseSyxPatch, encodeSyxPatch } from './patch.js';
 import { defaultProject, UIState } from './state.js';
 import { buildPanel, buildSidebar } from './ui/panel.js';
 import { Views } from './ui/views.js';
@@ -13,21 +13,11 @@ import { buildWelcome, bindWelcome } from './welcome.js';
 import { Persistence, showRestorePrompt } from './persistence.js';
 import { readZip, writeZip } from './zip.js';
 import { ncsToMidi } from './scales.js';
+import { initAgent } from './agent/index.js';
 import {
   TRACKS, TRACK_COLORS, SEND_ORDER, SCALE_TYPES, SCALE_ROOTS,
-  REVERB_PRESETS, DELAY_PRESETS, REVERB_TYPES,
+  REVERB_PRESETS, DELAY_PRESETS, REVERB_TYPES, REVERB_PRESET_NAMES, DELAY_PRESET_NAMES,
 } from './constants.js';
-
-const DELAY_PRESET_NAMES = [
-  'Slapback Fast', 'Slapback Slow', '32nd Triplets', '32nd', '16th Triplets',
-  '16th', '16th Ping Pong', '16th Ping Pong Swung', '8th Triplets',
-  '8th dotted Ping Pong', '8th', '8th Ping Pong', '8th Ping Pong Swung',
-  '4th Triplets', '4th dotted PP Swung', '4th Triplets PP Wide',
-];
-const REVERB_PRESET_NAMES = [
-  'Small Chamber', 'Small Room 1', 'Small Room 2', 'Large Room',
-  'Hall', 'Large Hall', 'Hall – long reflection', 'Large Hall – long refl.',
-];
 
 // Views whose button is a different physical button's shift function.
 const VIEW_BUTTON = {
@@ -150,6 +140,9 @@ class CircuitApp {
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
+
+    // Agent tools (window.webtracks, WebMCP, Agent Link) over the headless API.
+    initAgent(this).catch((err) => console.warn('Agent tools failed to start:', err));
   }
 
   trackKind(t) { return TRACKS[t].kind; }
@@ -633,20 +626,29 @@ class CircuitApp {
   }
 
   // Serialize the live project to hardware-ready .ncs bytes.
+  // The blank project template: supplies the unmodeled bytes of fresh
+  // projects (and the compile base for load_song). Cached after the first
+  // fetch — autosave reserialises ~once a second, and serializeNCS only reads
+  // from the template, so one copy is safe.
+  async emptyTemplate() {
+    if (!this._emptyTemplate) {
+      const res = await fetch('data/Empty.ncs');
+      if (!res.ok) throw new Error('No NCS template available');
+      this._emptyTemplate = await res.arrayBuffer();
+    }
+    return this._emptyTemplate;
+  }
+
+  // The template parsed once; callers must clone before mutating (compileSong does).
+  async emptyProject() {
+    this._emptyProject ??= parseNCS(await this.emptyTemplate());
+    return this._emptyProject;
+  }
+
   async buildProjectBytes() {
     let base = this.projectRawBytes;
     const fresh = !base;
-    if (fresh) {
-      // Fresh in-app project: the blank template supplies the unmodeled bytes.
-      // Cached after the first fetch — autosave reserialises ~once a second,
-      // and serializeNCS only reads from the template, so one copy is safe.
-      if (!this._emptyTemplate) {
-        const res = await fetch('data/Empty.ncs');
-        if (!res.ok) throw new Error('No NCS template available');
-        this._emptyTemplate = await res.arrayBuffer();
-      }
-      base = this._emptyTemplate;
-    }
+    if (fresh) base = await this.emptyTemplate();
     // Sync live state that isn't written through to the model.
     this.project.tempo = this.seq.bpm;
     this.project.swing = this.seq.swing;
@@ -869,23 +871,11 @@ class CircuitApp {
       }, { passive: false });
     };
 
+    // Drags rotate the knob themselves; only external setters (agent) do.
     attachKnob(document.getElementById('knob-volume'),
-      () => this.masterVolumeValue,
-      (v) => {
-        this.masterVolumeValue = v;
-        this.engine.setMasterVolume(v);
-        this.lcdMsg(`Master volume: ${v}`);
-      });
-
+      () => this.masterVolumeValue, (v) => this.setMasterVolume(v, false));
     attachKnob(document.getElementById('knob-filter'),
-      () => this.masterFilterValue,
-      (v) => {
-        this.masterFilterValue = v;
-        this.engine.setMasterFilter(v);
-        this.updateFilterLed();
-        const desc = v < 64 ? `LP ${v}` : v === 64 ? 'OFF' : `HP ${v}`;
-        this.lcdMsg(`Master filter: ${desc}`);
-      });
+      () => this.masterFilterValue, (v) => this.setMasterFilter(v, false));
 
     this.macroKnobs.forEach((knob, i) => {
       attachKnob(knob, () => this.knobValue(i), (v) => this.knobChanged(i, v));
@@ -894,6 +884,22 @@ class CircuitApp {
     this.rotateKnob(document.getElementById('knob-volume'), this.masterVolumeValue);
     this.rotateKnob(document.getElementById('knob-filter'), this.masterFilterValue);
     this.updateFilterLed();
+  }
+
+  setMasterVolume(v, updateKnob = true) {
+    this.masterVolumeValue = v;
+    this.engine.setMasterVolume(v);
+    if (updateKnob) this.rotateKnob(document.getElementById('knob-volume'), v);
+    this.lcdMsg(`Master volume: ${v}`);
+  }
+
+  setMasterFilter(v, updateKnob = true) {
+    this.masterFilterValue = v;
+    this.engine.setMasterFilter(v);
+    if (updateKnob) this.rotateKnob(document.getElementById('knob-filter'), v);
+    this.updateFilterLed();
+    const desc = v < 64 ? `LP ${v}` : v === 64 ? 'OFF' : `HP ${v}`;
+    this.lcdMsg(`Master filter: ${desc}`);
   }
 
   // Master Filter LED: pale at the centre detent, blue either side with
@@ -1533,20 +1539,31 @@ class CircuitApp {
     try {
       let slot = this.ui.currentProjectIdx ?? this.projectBank.findIndex((e) => !e);
       if (slot < 0) slot = 0;
-      const bytes = await this.buildProjectBytes();
-      this.projectBank[slot] = {
-        name: (this.project.name || 'Project').trim() || `Project ${slot + 1}`,
-        buf: bytes.slice().buffer,
-        color: this.project.color ?? 0,
-      };
-      this.ui.currentProjectIdx = slot;
-      this._slotsDirty = true;
+      await this.saveToSlot(slot);
       this.lcdMsg(`Saved to slot ${slot + 1}`);
-      this.snapshotPack();
     } catch (err) {
       this.lcdMsg(`Save failed: ${err.message}`);
     }
     this.exitSaveMode();
+  }
+
+  // Write the live project into a bank slot (the hardware "Save" target).
+  // Shared by the Save button and the agent's export_song_to_project.
+  async saveToSlot(slot, name = null) {
+    if (name != null) this.project.name = name;
+    const bytes = await this.buildProjectBytes();
+    this.projectBank[slot] = {
+      name: (this.project.name || 'Project').trim() || `Project ${slot + 1}`,
+      buf: bytes.slice().buffer,
+      color: this.project.color ?? 0,
+    };
+    this.ui.currentProjectIdx = slot;
+    this._slotsDirty = true;
+    this.snapshotPack();
+    this.updateLcd();
+    this.refreshSidebar();
+    this.views.render();
+    return this.projectBank[slot].name;
   }
 
   exitSaveMode() {
@@ -1556,13 +1573,28 @@ class CircuitApp {
     if (this.ui.view === 'saveColor') this.setView(this._saveReturnView ?? 'note');
   }
 
+  // Store the live patch of a synth into a bank slot (0..length): the slot
+  // becomes selectable in the Preset view and part of the pack export.
+  storePatchInBank(synthIdx, slot) {
+    const patch = this.synthTracks[synthIdx].patch;
+    const syx = encodeSyxPatch(new Uint8Array(patch.raw), synthIdx);
+    const old = this.patchBank[slot];
+    if (old?.url) URL.revokeObjectURL(old.url);
+    const entry = { name: patch.name || `Patch ${slot}`, bytes: syx.buffer, url: URL.createObjectURL(new Blob([syx])) };
+    this.patchBank[slot] = entry;
+    (this._packPatchUrls ??= [])[slot] = entry.url;
+    this.ui.patchIndex[synthIdx] = slot;
+    this._slotsDirty = true;
+    this.snapshotPack();
+    return { entry, replaced: old?.name ?? null };
+  }
+
   // ---------- Exports ----------
   exportPatchesSyx() {
     for (const s of [0, 1]) {
       const patch = this.synthTracks[s].patch;
       if (!patch?.raw) continue;
-      const raw = new Uint8Array(patch.raw).slice(0, 340);
-      const syx = new Uint8Array([0xf0, 0x00, 0x20, 0x29, 0x01, 0x64, 0x00, s, 0x00, ...raw, 0xf7]);
+      const syx = encodeSyxPatch(new Uint8Array(patch.raw), s);
       const name = (patch.name || `synth${s + 1}`).trim() || `synth${s + 1}`;
       this.downloadBlob(new Blob([syx], { type: 'application/octet-stream' }), `${name}.syx`);
     }

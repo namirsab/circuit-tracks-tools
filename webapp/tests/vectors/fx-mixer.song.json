@@ -1,0 +1,21 @@
+{
+  "name": "FX Mixer",
+  "bpm": 120,
+  "fx": {
+    "reverb": { "decay": 100 },
+    "reverb_preset": 4,
+    "delay_preset": 11,
+    "reverb_sends": { "synth1": 60, "synth2": 20, "drum1": 5, "drum2": 30, "drum3": 10, "drum4": 40, "midi1": 50, "midi2": 70 },
+    "delay_sends": { "synth1": 45, "midi2": 90, "drum3": 15 },
+    "sidechain": {
+      "synth1": { "preset": 3, "source": "drum1" },
+      "synth2": { "source": "drum2", "attack": 10, "hold": 60, "decay": 90, "depth": 100 },
+      "midi1": { "preset": 5, "source": "drum4", "depth": 50 },
+      "midi2": { "preset": 0, "source": "off" }
+    }
+  },
+  "mixer": { "synth1": { "level": 110, "pan": 50 }, "synth2": { "level": 90 } },
+  "patterns": {
+    "p": { "length": 16, "tracks": { "synth1": { "steps": { "0": { "note": 60 } } } } }
+  }
+}

@@ -15,7 +15,8 @@ const SYNTH_BLOCKS = 16;
 const DRUM_BLOCK_START = 16;
 const DRUM_BLOCK_END = 48;
 const AUTOMATION_REGION_SIZE = 2304;
-const DRUM_AUTOMATION_REGION_SIZE = 1520;
+export const DRUM_AUTOMATION_REGION_SIZE = 1520; // 8 lanes would need 1536: the pan lane is cut short
+export const LANE_POSITIONS = 192; // 6 micro ticks × 32 steps per automation lane
 
 const METADATA_OFFSETS = [
   0x664, 0x130c, 0x1fb4, 0x2c5c, 0x3904, 0x45ac, 0x5254, 0x5efc,
@@ -38,8 +39,9 @@ const T_FX_BYPASS = 779;
 const T_SIDECHAIN = [780, 785, 790, 795]; // S1, S2, M1, M2
 const T_MIXER_LEVELS = 800, T_MIXER_PANS = 804;
 
-const DRUM_AUTOMATION_PARAMS = ['pitch', 'decay', 'distortion', 'eq', 'reverb_send', 'delay_send', 'level', 'pan'];
-const MIXER_AUTOMATION_PARAMS = { 8: 'reverb_send', 9: 'delay_send', 10: 'level', 11: 'pan' };
+// Lane order is the hardware's (it is load-bearing for the region arithmetic).
+export const DRUM_AUTOMATION_PARAMS = ['pitch', 'decay', 'distortion', 'eq', 'reverb_send', 'delay_send', 'level', 'pan'];
+export const MIXER_AUTOMATION_PARAMS = { 8: 'reverb_send', 9: 'delay_send', 10: 'level', 11: 'pan' };
 
 const isDrumBlock = (b) => b >= DRUM_BLOCK_START && b < DRUM_BLOCK_END;
 const stepDataStart = (b) =>
@@ -75,7 +77,7 @@ function parseLocks(preData, slots, numSteps) {
   // Automation region: lane-major, 192 positions per slot (6 micro × 32).
   // Locks are keyed by fractional step position (e.g. 3, 3.5, 3.833) so
   // smooth knob recordings keep their full micro resolution.
-  const total = 192;
+  const total = LANE_POSITIONS;
   const perStep = numSteps > 0 ? Math.floor(total / numSteps) : 6;
   const out = {};
   for (const [slot, key] of slots) {
@@ -265,7 +267,7 @@ function writeChainEntry(d, off, e) {
 // lane-major position (192 positions per lane; fractional step keys map
 // back to their micro positions).
 function writeLocks(d, regionStart, regionSize, slots, paramLocks, numSteps) {
-  const total = 192;
+  const total = LANE_POSITIONS;
   const perStep = numSteps > 0 ? Math.floor(total / numSteps) : 6;
   for (const [slot, key] of slots) {
     const base = slot * total;

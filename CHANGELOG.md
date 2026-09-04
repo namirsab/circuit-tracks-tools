@@ -105,6 +105,18 @@ and round-trips of all tested factory/user projects are now byte-exact.
   `MCPServer` API), which broke the server import and CI. The server stays on
   the 1.x line until it is migrated to the 2.0 API.
 
+## [Unreleased]
+
+### Fixed
+
+- **Mod matrix sources in song exports** — `sounds.*.mod_matrix` entries store
+  the primary source as `source1`, but the NCS export read a `source` key, so
+  every exported slot silently used source "direct". The export now honours
+  `source1` (and still accepts `source`).
+- **Named FX presets** — `fx.reverb_preset` / `fx.delay_preset` given as names
+  (e.g. `"Hall"`, `"8th Ping Pong"`) raised `KeyError` because the name tables
+  were empty. Both tables now hold the Components / Web Tracks preset names.
+
 ## [0.3.0] — 2026-08-11
 
 ### Changed

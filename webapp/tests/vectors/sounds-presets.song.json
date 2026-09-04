@@ -1,0 +1,32 @@
+{
+  "name": "Sounds",
+  "bpm": 110,
+  "sounds": {
+    "synth1": {
+      "preset": "pad",
+      "name": "Test Pad",
+      "params": { "filter_frequency": 40, "osc1_wave": 14 },
+      "mod_matrix": [
+        { "source1": "LFO 1+/-", "dest": "filter frequency", "depth": 25 },
+        { "source1": 12, "source2": "velocity", "dest": 9, "depth": -30 },
+        { "source": "env filter", "destination": "osc 1 & 2 pitch", "depth": 5 }
+      ],
+      "macros": {
+        "5": { "targets": [{ "dest": "filter_frequency", "start": 0, "end": 127, "depth": 127 }], "position": 64 },
+        "8": { "targets": [{ "dest": "chorus_level", "start": 0, "end": 80, "depth": 100 }, { "dest": 45, "start": 10, "end": 100 }] }
+      }
+    },
+    "synth2": { "preset": "bass" },
+    "drum1": { "sample": 2 }
+  },
+  "patterns": {
+    "a": {
+      "length": 16,
+      "tracks": {
+        "synth1": { "steps": { "0": { "notes": [60, 64, 67], "gate": 4 } } },
+        "synth2": { "steps": { "0": { "note": 36 }, "8": { "note": 43 } } },
+        "drum1": { "steps": { "0": {}, "8": {} } }
+      }
+    }
+  }
+}

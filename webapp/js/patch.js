@@ -95,6 +95,12 @@ export function parseSyxPatch(arrayBuffer) {
   return decodePatch(patchBytes);
 }
 
+// Wrap 340 patch bytes as a Circuit Tracks .syx message for synth 0/1:
+// F0 00 20 29 01 64 <cmd 0> <synth> 00 <340 bytes> F7 (the inverse of parseSyxPatch).
+export function encodeSyxPatch(raw, synthIdx) {
+  return new Uint8Array([0xf0, 0x00, 0x20, 0x29, 0x01, 0x64, 0x00, synthIdx, 0x00, ...raw.subarray(0, PATCH_SIZE), 0xf7]);
+}
+
 export function initPatch() {
   const bytes = new Uint8Array(PATCH_SIZE);
   for (let i = 0; i < 16; i++) bytes[i] = 0x20;
