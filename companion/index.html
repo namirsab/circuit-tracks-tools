@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1115">
+  <meta name="description" content="Record, edit and transfer drum samples to your Novation Circuit Tracks">
+  <title>Circuit Sampler</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <img src="favicon.svg" class="logo" alt="" width="30" height="30">
+      <h1>Circuit Sampler</h1>
+    </div>
+    <span id="midi-badge" class="badge" hidden></span>
+  </header>
+
+  <main>
+    <!-- ============ RECORD ============ -->
+    <section id="view-record" class="view">
+      <div class="field">
+        <label for="input-select">Input</label>
+        <div class="row">
+          <select id="input-select" aria-label="Audio input device"></select>
+          <button id="input-refresh" class="btn icon-btn" title="Refresh devices" aria-label="Refresh devices">&#x21bb;</button>
+        </div>
+      </div>
+
+      <div class="meter-wrap" aria-hidden="true">
+        <div id="level-meter" class="meter"><div id="level-bar" class="meter-bar"></div></div>
+      </div>
+
+      <canvas id="live-wave" class="wave-canvas" height="160"></canvas>
+
+      <div id="rec-time" class="rec-time">0:00.0</div>
+
+      <button id="rec-button" class="rec-button" aria-label="Start recording">
+        <span class="rec-dot"></span>
+      </button>
+      <p id="rec-hint" class="hint">Pick an input, then tap to record</p>
+    </section>
+
+    <!-- ============ LIBRARY ============ -->
+    <section id="view-library" class="view" hidden>
+      <div class="row space-between">
+        <h2>Library</h2>
+        <div class="row">
+          <button id="library-select-toggle" class="btn small">Select</button>
+          <button id="library-import" class="btn small">Import audio</button>
+        </div>
+      </div>
+      <input id="import-file" type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac,.aac" hidden>
+      <div id="batch-bar" class="notice" hidden>
+        <p id="batch-count" class="hint">Nothing selected yet — tap samples in the order they should land in slots.</p>
+        <div class="row gap">
+          <button id="batch-send" class="btn primary wide">Send to Circuit</button>
+          <button id="batch-cancel" class="btn wide">Cancel</button>
+        </div>
+      </div>
+      <p id="library-empty" class="hint">No samples yet — record something, or import an audio file!</p>
+      <ul id="library-list" class="library-list"></ul>
+    </section>
+
+    <!-- ============ TRANSFER ============ -->
+    <section id="view-transfer" class="view" hidden>
+      <h2>Circuit Tracks</h2>
+
+      <div id="midi-unsupported" class="notice" hidden>
+        <strong>Sample transfer isn’t available in this browser.</strong>
+        <p>Web MIDI (needed to talk to the Circuit Tracks over USB) is not
+        supported here — notably on iPhone/iPad browsers. You can still record,
+        edit and <em>export samples as .wav files</em> from the Library, then
+        load them with
+        <a href="https://components.novationmusic.com" target="_blank" rel="noopener">Novation Components</a>
+        on a computer, or open this app in Chrome on Android or desktop.</p>
+      </div>
+
+      <div id="midi-panel">
+        <div class="row">
+          <button id="midi-connect" class="btn primary">Connect</button>
+          <span id="midi-status" class="hint">Not connected</span>
+        </div>
+
+        <div id="transfer-sample" class="notice" hidden></div>
+
+        <div id="slots-wrap" hidden>
+          <div class="row space-between">
+            <h3>Sample slots</h3>
+            <button id="slots-refresh" class="btn small">Refresh</button>
+          </div>
+          <p class="hint">Tap a slot to send into it — with multiple samples
+            queued it's the start slot and they fill consecutive slots.
+            Filled slots show their current name.</p>
+          <div id="slot-grid" class="slot-grid" role="listbox" aria-label="Sample slots"></div>
+        </div>
+
+        <div id="transfer-progress" class="progress-wrap" hidden>
+          <div class="progress"><div id="progress-bar" class="progress-bar"></div></div>
+          <p id="progress-text" class="hint"></p>
+        </div>
+        <div id="transfer-result" class="notice" hidden></div>
+      </div>
+    </section>
+
+    <!-- ============ EDITOR (overlay) ============ -->
+    <section id="view-editor" class="view editor" hidden>
+      <div class="row space-between editor-top">
+        <button id="editor-back" class="btn">&#x2039; Back</button>
+        <input id="editor-name" class="name-input" aria-label="Sample name" maxlength="24">
+        <button id="editor-save" class="btn primary">Save</button>
+      </div>
+
+      <canvas id="edit-wave" class="wave-canvas tall" height="220"></canvas>
+
+      <div class="row center gap">
+        <button id="zoom-out" class="btn icon-btn" aria-label="Zoom out">&#x2212;</button>
+        <button id="audition" class="btn primary wide" aria-label="Play trimmed region">&#x25b6; Play</button>
+        <button id="zoom-in" class="btn icon-btn" aria-label="Zoom in">+</button>
+      </div>
+
+      <div class="edit-controls">
+        <div class="field">
+          <label for="gain-slider">Gain <span id="gain-value">0 dB</span></label>
+          <input id="gain-slider" type="range" min="-12" max="12" step="0.5" value="0">
+        </div>
+        <div class="row gap">
+          <label class="check"><input id="normalize-check" type="checkbox"> Normalize</label>
+        </div>
+        <div class="row gap">
+          <div class="field half">
+            <label for="fade-in">Fade in</label>
+            <select id="fade-in">
+              <option value="0">Off</option><option value="5">5 ms</option>
+              <option value="20">20 ms</option><option value="50">50 ms</option>
+              <option value="200">200 ms</option>
+            </select>
+          </div>
+          <div class="field half">
+            <label for="fade-out">Fade out</label>
+            <select id="fade-out">
+              <option value="0">Off</option><option value="5" selected>5 ms</option>
+              <option value="20">20 ms</option><option value="50">50 ms</option>
+              <option value="200">200 ms</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="field slice-section">
+        <label>Slicing <span id="slice-count"></span></label>
+        <div class="row gap">
+          <button id="slice-detect" class="btn wide">Detect slices</button>
+          <button id="slice-save" class="btn primary wide" hidden>Save slices</button>
+          <button id="slice-clear" class="btn icon-btn" hidden aria-label="Clear slices">&#x2715;</button>
+        </div>
+        <div id="slice-sens-wrap" class="field" hidden>
+          <label for="slice-sens">Sensitivity (more slices &#x2192;)</label>
+          <input id="slice-sens" type="range" min="5" max="60" step="1" value="30">
+          <p class="hint">Tap between markers to audition a slice.</p>
+        </div>
+      </div>
+
+      <p id="edit-stats" class="hint stats"></p>
+
+      <div class="row gap editor-actions">
+        <button id="editor-export" class="btn">Export .wav</button>
+        <button id="editor-send" class="btn">Send to Circuit</button>
+        <button id="editor-delete" class="btn danger">Delete</button>
+      </div>
+    </section>
+    <footer class="app-footer"
+      title="Not affiliated with, endorsed, or sponsored by Novation or Focusrite plc. Circuit Tracks is a trademark of its owner; the sample-transfer protocol was independently reverse-engineered. You are responsible for the rights to any audio you record, import, or transfer.">
+      <b>Circuit Sampler</b> by <a href="https://namirsab.dev" target="_blank" rel="noopener">namirsab.dev</a>
+      — an unofficial, non-commercial fan project, not affiliated with
+      Novation or Focusrite. You are responsible for the rights to the
+      audio you sample.
+    </footer>
+  </main>
+
+  <nav class="tabbar">
+    <button data-tab="record" class="tab active" aria-label="Record">
+      <span class="tab-icon">&#x25cf;</span>Record</button>
+    <button data-tab="library" class="tab" aria-label="Library">
+      <span class="tab-icon">&#x2630;</span>Library</button>
+    <button data-tab="transfer" class="tab" aria-label="Circuit">
+      <span class="tab-icon">&#x21c4;</span>Circuit</button>
+  </nav>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <div id="confirm-modal" class="modal" hidden>
+    <div class="modal-card">
+      <p id="confirm-text"></p>
+      <div class="row gap">
+        <button id="confirm-cancel" class="btn wide">Cancel</button>
+        <button id="confirm-ok" class="btn danger wide">Overwrite</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
