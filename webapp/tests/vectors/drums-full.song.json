@@ -1,0 +1,35 @@
+{
+  "name": "Drums",
+  "bpm": 100,
+  "sounds": {
+    "drum1": { "sample": 1, "level": 110, "pitch": 60, "decay": 100, "distortion": 20, "eq": 70, "pan": 64 },
+    "drum2": { "sample": 3 },
+    "drum4": { "pitch": 90 }
+  },
+  "patterns": {
+    "beat": {
+      "length": 16,
+      "tracks": {
+        "drum1": {
+          "steps": {
+            "0": { "velocity": 127 },
+            "4": { "velocity": 100, "probability": 0.5 },
+            "8": { "velocity": 110, "sample": 0 },
+            "12": { "velocity": 90, "probability": 0.75 },
+            "14": { "enabled": false }
+          }
+        },
+        "drum2": { "steps": { "4": {}, "12": { "sample": 2, "micro_step": 3 } } },
+        "drum3": {
+          "steps": {
+            "0": { "velocity": 60 }, "2": { "velocity": 40, "probability": 0.25 },
+            "4": { "velocity": 60 }, "6": { "velocity": 40, "probability": 0.125 },
+            "8": { "velocity": 60 }, "10": { "velocity": 40 },
+            "12": { "velocity": 60 }, "14": { "velocity": 40, "probability": 0.9 }
+          }
+        },
+        "drum4": { "steps": { "7": { "velocity": 80, "sample": 63 }, "15": { "velocity": 70, "probability": 0.3 } } }
+      }
+    }
+  }
+}

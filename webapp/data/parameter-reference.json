@@ -1,0 +1,2128 @@
+{
+ "": {
+  "available_sections": {
+   "synth": "CC and NRPN parameter names for set_synth_params, plus MIDI channels",
+   "patch": "All patch parameters with defaults/ranges for create_synth_patch/edit_synth_patch",
+   "drums": "Drum parameter names and drum numbers for set_drum_params",
+   "project": "CC and NRPN parameter names for set_project_params (reverb, delay, mixer, etc.)",
+   "lookup_tables": "Waveforms, filter types, distortion types, LFO waveforms",
+   "mod_matrix": "Valid mod matrix source and destination names (space-separated)",
+   "macros": "Valid macro destination names, standard layout, and presets",
+   "song_format": "Full JSON Schema for the load_song SongSchema",
+   "best_practices": "Operational rules and common pitfalls"
+  },
+  "usage": "Call get_parameter_reference(section) with one of the section names above to get focused data. For example: get_parameter_reference(\"synth\") for CC/NRPN param names, get_parameter_reference(\"song_format\") for the load_song schema.",
+  "best_practices": {
+   "pattern_length": "All patterns must use the same length (all 16 or all 32). Never mix.",
+   "p_lock_automation": "Use 32-step patterns with micro-step substeps (0.5, 1.5) for smooth automation. Max gate = 16 (one full step).",
+   "macros_add_to_base": "Macros ADD to base values — they don't replace. Set base low for sweep params (e.g., filter_frequency=0 if macro sweeps 0->127). depth=127 means full positive addition.",
+   "macro_destinations": "Only continuous params can be macro targets. Indices 0-70 skip 21 discrete/voice/pitch params. Use the macro_destinations lookup table.",
+   "include_sounds": "Always include 'sounds' in load_song with full synth configs so patches export correctly with export_song_to_project.",
+   "scale_engine": "output = quantize(ncs_note, root=0, type) + root - 12. Rounds up on ties. External MIDI bypasses the scale engine entirely.",
+   "drum_sample_cc_bug": "CC drum sample selection is broken (firmware bug). Use NCS export instead.",
+   "standard_macro_layout": "1=Oscillator, 2=OscMod, 3=AmpEnv, 4=FilterEnv, 5=FilterFreq, 6=Resonance, 7=Modulation, 8=FX",
+   "naming": "Mod matrix: space-separated ('filter frequency'). Synth params: snake_case ('filter_frequency'). These are different namespaces.",
+   "p_lock_keys": "Synth p-locks use 'macros' key (NOT 'p-locks' or 'params'). Drum p-locks use 'params' key at track level.",
+   "sidechain_preset": "Sidechain requires a 'preset' (1-7) to activate on hardware. Just setting source/depth is not enough. The preset auto-fills attack/hold/decay/depth values. Supports synth1, synth2, midi1, midi2."
+  }
+ },
+ "synth": {
+  "section": "synth",
+  "synth_cc_params": [
+   "chorus_level",
+   "distortion_level",
+   "drive",
+   "drive_type",
+   "env1_attack",
+   "env1_decay",
+   "env1_release",
+   "env1_sustain",
+   "env1_velocity",
+   "env2_to_filter_freq",
+   "filter_frequency",
+   "filter_q_normalize",
+   "filter_resonance",
+   "filter_tracking",
+   "filter_type",
+   "keyboard_octave",
+   "macro_knob1",
+   "macro_knob2",
+   "macro_knob3",
+   "macro_knob4",
+   "macro_knob5",
+   "macro_knob6",
+   "macro_knob7",
+   "macro_knob8",
+   "noise_level",
+   "osc1_cents",
+   "osc1_density",
+   "osc1_density_detune",
+   "osc1_level",
+   "osc1_pitchbend",
+   "osc1_pulse_width_index",
+   "osc1_semitones",
+   "osc1_virtual_sync_depth",
+   "osc1_wave",
+   "osc1_wave_interpolate",
+   "osc2_cents",
+   "osc2_density",
+   "osc2_density_detune",
+   "osc2_level",
+   "osc2_pitchbend",
+   "osc2_pulse_width_index",
+   "osc2_semitones",
+   "osc2_virtual_sync_depth",
+   "osc2_wave",
+   "osc2_wave_interpolate",
+   "polyphony_mode",
+   "portamento_rate",
+   "post_fx_level",
+   "pre_fx_level",
+   "pre_glide",
+   "ring_mod_level",
+   "routing"
+  ],
+  "synth_nrpn_params": [
+   "chorus_delay",
+   "chorus_feedback",
+   "chorus_mod_depth",
+   "chorus_rate",
+   "chorus_rate_sync",
+   "chorus_type",
+   "distortion_compensation",
+   "distortion_type",
+   "env2_attack",
+   "env2_decay",
+   "env2_release",
+   "env2_sustain",
+   "env2_velocity",
+   "env3_attack",
+   "env3_decay",
+   "env3_delay",
+   "env3_release",
+   "env3_sustain",
+   "eq_bass_frequency",
+   "eq_bass_level",
+   "eq_mid_frequency",
+   "eq_mid_level",
+   "eq_treble_frequency",
+   "eq_treble_level",
+   "lfo1_common_sync",
+   "lfo1_delay",
+   "lfo1_delay_sync",
+   "lfo1_delay_trigger",
+   "lfo1_fade_mode",
+   "lfo1_key_sync",
+   "lfo1_one_shot",
+   "lfo1_phase_offset",
+   "lfo1_rate",
+   "lfo1_rate_sync",
+   "lfo1_slew_rate",
+   "lfo1_waveform",
+   "lfo2_common_sync",
+   "lfo2_delay",
+   "lfo2_delay_sync",
+   "lfo2_delay_trigger",
+   "lfo2_fade_mode",
+   "lfo2_key_sync",
+   "lfo2_one_shot",
+   "lfo2_phase_offset",
+   "lfo2_rate",
+   "lfo2_rate_sync",
+   "lfo2_slew_rate",
+   "lfo2_waveform",
+   "mod10_depth",
+   "mod10_destination",
+   "mod10_source1",
+   "mod10_source2",
+   "mod11_depth",
+   "mod11_destination",
+   "mod11_source1",
+   "mod11_source2",
+   "mod12_depth",
+   "mod12_destination",
+   "mod12_source1",
+   "mod12_source2",
+   "mod1_depth",
+   "mod1_destination",
+   "mod1_source1",
+   "mod1_source2",
+   "mod2_depth",
+   "mod2_destination",
+   "mod2_source1",
+   "mod2_source2",
+   "mod3_depth",
+   "mod3_destination",
+   "mod3_source1",
+   "mod3_source2",
+   "mod4_depth",
+   "mod4_destination",
+   "mod4_source1",
+   "mod4_source2",
+   "mod5_depth",
+   "mod5_destination",
+   "mod5_source1",
+   "mod5_source2",
+   "mod6_depth",
+   "mod6_destination",
+   "mod6_source1",
+   "mod6_source2",
+   "mod7_depth",
+   "mod7_destination",
+   "mod7_source1",
+   "mod7_source2",
+   "mod8_depth",
+   "mod8_destination",
+   "mod8_source1",
+   "mod8_source2",
+   "mod9_depth",
+   "mod9_destination",
+   "mod9_source1",
+   "mod9_source2"
+  ],
+  "channels": {
+   "synth1": 0,
+   "synth2": 1,
+   "drums": 9,
+   "project": 15
+  }
+ },
+ "patch": {
+  "section": "patch",
+  "patch_parameters": {
+   "voice": {
+    "polyphony_mode": {
+     "default": 2,
+     "range": "0-2",
+     "notes": "0=Mono, 1=Mono AG, 2=Poly"
+    },
+    "portamento_rate": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "pre_glide": {
+     "default": 64,
+     "range": "52-76",
+     "notes": "center=64"
+    },
+    "keyboard_octave": {
+     "default": 64,
+     "range": "58-69",
+     "notes": "center=64"
+    }
+   },
+   "osc1": {
+    "osc1_wave": {
+     "default": 2,
+     "range": "0-29",
+     "notes": "See lookup_tables for waveform names"
+    },
+    "osc1_wave_interpolate": {
+     "default": 127,
+     "range": "0-127"
+    },
+    "osc1_pulse_width_index": {
+     "default": 64,
+     "range": "0-127"
+    },
+    "osc1_virtual_sync_depth": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "osc1_density": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "osc1_density_detune": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "osc1_semitones": {
+     "default": 64,
+     "range": "0-127",
+     "notes": "center=64"
+    },
+    "osc1_cents": {
+     "default": 64,
+     "range": "0-127",
+     "notes": "center=64"
+    },
+    "osc1_pitchbend": {
+     "default": 76,
+     "range": "52-76"
+    }
+   },
+   "osc2": "Same layout as osc1 (prefix osc2_)",
+   "mixer": {
+    "osc1_level": {
+     "default": 127,
+     "range": "0-127"
+    },
+    "osc2_level": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "ring_mod_level": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "noise_level": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "pre_fx_level": {
+     "default": 64,
+     "range": "52-82"
+    },
+    "post_fx_level": {
+     "default": 64,
+     "range": "52-82"
+    }
+   },
+   "filter": {
+    "routing": {
+     "default": 0,
+     "range": "0-2",
+     "notes": "0=Normal, 1=Osc1 bypass, 2=Both bypass"
+    },
+    "drive": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "drive_type": {
+     "default": 0,
+     "range": "0-6",
+     "notes": "See lookup_tables for distortion types"
+    },
+    "filter_type": {
+     "default": 1,
+     "range": "0-5",
+     "notes": "See lookup_tables for filter types"
+    },
+    "filter_frequency": {
+     "default": 127,
+     "range": "0-127"
+    },
+    "filter_tracking": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "filter_resonance": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "filter_q_normalize": {
+     "default": 64,
+     "range": "0-127"
+    },
+    "env2_to_filter_freq": {
+     "default": 64,
+     "range": "0-127",
+     "notes": "center=64"
+    }
+   },
+   "env_amp": {
+    "env1_velocity": {
+     "default": 64,
+     "range": "0-127",
+     "notes": "center=64"
+    },
+    "env1_attack": {
+     "default": 2,
+     "range": "0-127"
+    },
+    "env1_decay": {
+     "default": 90,
+     "range": "0-127"
+    },
+    "env1_sustain": {
+     "default": 127,
+     "range": "0-127"
+    },
+    "env1_release": {
+     "default": 40,
+     "range": "0-127"
+    }
+   },
+   "env_filter": {
+    "env2_velocity": {
+     "default": 64,
+     "range": "0-127"
+    },
+    "env2_attack": {
+     "default": 2,
+     "range": "0-127"
+    },
+    "env2_decay": {
+     "default": 75,
+     "range": "0-127"
+    },
+    "env2_sustain": {
+     "default": 35,
+     "range": "0-127"
+    },
+    "env2_release": {
+     "default": 45,
+     "range": "0-127"
+    }
+   },
+   "env3": {
+    "env3_delay": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "env3_attack": {
+     "default": 10,
+     "range": "0-127"
+    },
+    "env3_decay": {
+     "default": 70,
+     "range": "0-127"
+    },
+    "env3_sustain": {
+     "default": 64,
+     "range": "0-127"
+    },
+    "env3_release": {
+     "default": 40,
+     "range": "0-127"
+    }
+   },
+   "lfo1": "waveform(0-37), phase_offset(0-119), slew_rate, delay, delay_sync(0-35), rate(def=68), rate_sync(0-35), flags(bitfield)",
+   "lfo2": "Same layout as lfo1 (prefix lfo2_)",
+   "effects": {
+    "distortion_level": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "distortion_type": {
+     "default": 0,
+     "range": "0-6"
+    },
+    "distortion_compensation": {
+     "default": 100,
+     "range": "0-127"
+    },
+    "chorus_level": {
+     "default": 0,
+     "range": "0-127"
+    },
+    "chorus_type": {
+     "default": 1,
+     "range": "0-1",
+     "notes": "0=Phaser, 1=Chorus"
+    },
+    "chorus_rate": {
+     "default": 20,
+     "range": "0-127"
+    },
+    "chorus_feedback": {
+     "default": 74,
+     "range": "0-127"
+    },
+    "chorus_mod_depth": {
+     "default": 64,
+     "range": "0-127"
+    },
+    "chorus_delay": {
+     "default": 64,
+     "range": "0-127"
+    }
+   },
+   "eq": {
+    "eq_bass_frequency": {
+     "default": 64,
+     "range": "0-127"
+    },
+    "eq_bass_level": {
+     "default": 64,
+     "range": "0-127",
+     "notes": "center=64"
+    },
+    "eq_mid_frequency": {
+     "default": 64,
+     "range": "0-127"
+    },
+    "eq_mid_level": {
+     "default": 64,
+     "range": "0-127",
+     "notes": "center=64"
+    },
+    "eq_treble_frequency": {
+     "default": 125,
+     "range": "0-127"
+    },
+    "eq_treble_level": {
+     "default": 64,
+     "range": "0-127",
+     "notes": "center=64"
+    }
+   }
+  },
+  "presets": [
+   "pad",
+   "bass",
+   "lead",
+   "pluck"
+  ]
+ },
+ "drums": {
+  "section": "drums",
+  "drum_params": [
+   "level",
+   "pitch",
+   "decay",
+   "distortion",
+   "eq",
+   "pan"
+  ],
+  "drum_numbers": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "note": "CC-based drum sample selection is broken (firmware bug). Use NCS export."
+ },
+ "project": {
+  "section": "project",
+  "project_cc_params": [
+   "delay_drum1_send",
+   "delay_drum2_send",
+   "delay_drum3_send",
+   "delay_drum4_send",
+   "delay_synth1_send",
+   "delay_synth2_send",
+   "master_filter_frequency",
+   "master_filter_resonance",
+   "reverb_drum1_send",
+   "reverb_drum2_send",
+   "reverb_drum3_send",
+   "reverb_drum4_send",
+   "reverb_synth1_send",
+   "reverb_synth2_send",
+   "synth1_level",
+   "synth1_pan",
+   "synth2_level",
+   "synth2_pan"
+  ],
+  "project_nrpn_params": [
+   "delay_feedback",
+   "delay_lr_ratio",
+   "delay_slew_rate",
+   "delay_time",
+   "delay_time_sync",
+   "delay_width",
+   "fx_bypass",
+   "reverb_damping",
+   "reverb_decay",
+   "reverb_type",
+   "sidechain_synth1_attack",
+   "sidechain_synth1_decay",
+   "sidechain_synth1_depth",
+   "sidechain_synth1_hold",
+   "sidechain_synth1_source",
+   "sidechain_synth2_attack",
+   "sidechain_synth2_decay",
+   "sidechain_synth2_depth",
+   "sidechain_synth2_hold",
+   "sidechain_synth2_source"
+  ]
+ },
+ "lookup_tables": {
+  "section": "lookup_tables",
+  "osc_waveforms": {
+   "0": "sine",
+   "1": "triangle",
+   "2": "sawtooth",
+   "3": "saw 9:1 PW",
+   "4": "saw 8:2 PW",
+   "5": "saw 7:3 PW",
+   "6": "saw 6:4 PW",
+   "7": "saw 5:5 PW",
+   "8": "saw 4:6 PW",
+   "9": "saw 3:7 PW",
+   "10": "saw 2:8 PW",
+   "11": "saw 1:9 PW",
+   "12": "pulse width",
+   "13": "square",
+   "14": "sine table",
+   "15": "analogue pulse",
+   "16": "analogue sync",
+   "17": "triangle-saw blend",
+   "18": "digital nasty 1",
+   "19": "digital nasty 2",
+   "20": "digital saw-square",
+   "21": "digital vocal 1",
+   "22": "digital vocal 2",
+   "23": "digital vocal 3",
+   "24": "digital vocal 4",
+   "25": "digital vocal 5",
+   "26": "digital vocal 6",
+   "27": "random collection 1",
+   "28": "random collection 2",
+   "29": "random collection 3"
+  },
+  "filter_types": {
+   "0": "low pass 12dB",
+   "1": "low pass 24dB",
+   "2": "band pass 6/6 dB",
+   "3": "band pass 12/12 dB",
+   "4": "high pass 12dB",
+   "5": "high pass 24dB"
+  },
+  "distortion_types": {
+   "0": "diode",
+   "1": "valve",
+   "2": "clipper",
+   "3": "cross-over",
+   "4": "rectifier",
+   "5": "bit reducer",
+   "6": "rate reducer"
+  },
+  "lfo_waveforms": {
+   "0": "sine",
+   "1": "triangle",
+   "2": "sawtooth",
+   "3": "square",
+   "4": "random S/H",
+   "5": "time S/H",
+   "6": "piano envelope",
+   "7": "sequence 1",
+   "8": "sequence 2",
+   "9": "sequence 3",
+   "10": "sequence 4",
+   "11": "sequence 5",
+   "12": "sequence 6",
+   "13": "sequence 7",
+   "14": "alternative 1",
+   "15": "alternative 2",
+   "16": "alternative 3",
+   "17": "alternative 4",
+   "18": "alternative 5",
+   "19": "alternative 6",
+   "20": "alternative 7",
+   "21": "alternative 8",
+   "22": "chromatic",
+   "23": "chromatic 16",
+   "24": "major",
+   "25": "major 7",
+   "26": "minor 7",
+   "27": "min arp 1",
+   "28": "min arp 2",
+   "29": "diminished",
+   "30": "dec minor",
+   "31": "minor 3rd",
+   "32": "pedal",
+   "33": "4ths",
+   "34": "4ths x12",
+   "35": "1625 maj",
+   "36": "1625 min",
+   "37": "2511"
+  }
+ },
+ "mod_matrix": {
+  "section": "mod_matrix",
+  "sources": {
+   "0": "direct",
+   "4": "velocity",
+   "5": "keyboard",
+   "6": "LFO 1+",
+   "7": "LFO 1+/-",
+   "8": "LFO 2+",
+   "9": "LFO 2+/-",
+   "10": "env amp",
+   "11": "env filter",
+   "12": "env 3"
+  },
+  "destinations": {
+   "0": "osc 1 & 2 pitch",
+   "1": "osc 1 pitch",
+   "2": "osc 2 pitch",
+   "3": "osc 1 v-sync",
+   "4": "osc 2 v-sync",
+   "5": "osc 1 pulse width / index",
+   "6": "osc 2 pulse width / index",
+   "7": "osc 1 level",
+   "8": "osc 2 level",
+   "9": "noise level",
+   "10": "ring modulation 1*2 level",
+   "11": "filter drive amount",
+   "12": "filter frequency",
+   "13": "filter resonance",
+   "14": "LFO 1 rate",
+   "15": "LFO 2 rate",
+   "16": "amp envelope decay",
+   "17": "filter envelope decay"
+  },
+  "note": "Use SPACE-separated names ('filter frequency'), NOT snake_case. Depth is signed: -64 to +63."
+ },
+ "macros": {
+  "section": "macros",
+  "macro_destinations": {
+   "0": "pre_fx_level",
+   "1": "portamento_rate",
+   "2": "post_fx_level",
+   "3": "osc1_wave_interpolate",
+   "4": "osc1_pulse_width_index",
+   "5": "osc1_virtual_sync_depth",
+   "6": "osc1_density",
+   "7": "osc1_density_detune",
+   "8": "osc1_semitones",
+   "9": "osc1_cents",
+   "10": "osc2_wave_interpolate",
+   "11": "osc2_pulse_width_index",
+   "12": "osc2_virtual_sync_depth",
+   "13": "osc2_density",
+   "14": "osc2_density_detune",
+   "15": "osc2_semitones",
+   "16": "osc2_cents",
+   "17": "osc1_level",
+   "18": "osc2_level",
+   "19": "ring_mod_level",
+   "20": "noise_level",
+   "21": "filter_frequency",
+   "22": "filter_resonance",
+   "23": "drive",
+   "24": "filter_tracking",
+   "25": "env2_to_filter_freq",
+   "26": "env1_attack",
+   "27": "env1_decay",
+   "28": "env1_sustain",
+   "29": "env1_release",
+   "30": "env2_attack",
+   "31": "env2_decay",
+   "32": "env2_sustain",
+   "33": "env2_release",
+   "34": "env3_delay",
+   "35": "env3_attack",
+   "36": "env3_decay",
+   "37": "env3_sustain",
+   "38": "env3_release",
+   "39": "lfo1_rate",
+   "40": "lfo1_delay",
+   "41": "lfo1_slew_rate",
+   "42": "lfo2_rate",
+   "43": "lfo2_delay",
+   "44": "lfo2_slew_rate",
+   "45": "distortion_level",
+   "46": "chorus_level",
+   "47": "chorus_rate",
+   "48": "chorus_feedback",
+   "49": "chorus_mod_depth",
+   "50": "chorus_delay",
+   "51": "mod_matrix_1_depth",
+   "52": "mod_matrix_2_depth",
+   "53": "mod_matrix_3_depth",
+   "54": "mod_matrix_4_depth",
+   "55": "mod_matrix_5_depth",
+   "56": "mod_matrix_6_depth",
+   "57": "mod_matrix_7_depth",
+   "58": "mod_matrix_8_depth",
+   "59": "mod_matrix_9_depth",
+   "60": "mod_matrix_10_depth",
+   "61": "mod_matrix_11_depth",
+   "62": "mod_matrix_12_depth",
+   "63": "mod_matrix_13_depth",
+   "64": "mod_matrix_14_depth",
+   "65": "mod_matrix_15_depth",
+   "66": "mod_matrix_16_depth",
+   "67": "mod_matrix_17_depth",
+   "68": "mod_matrix_18_depth",
+   "69": "mod_matrix_19_depth",
+   "70": "mod_matrix_20_depth"
+  },
+  "standard_layout": {
+   "1": "Oscillator",
+   "2": "OscMod",
+   "3": "AmpEnv",
+   "4": "FilterEnv",
+   "5": "FilterFreq",
+   "6": "Resonance",
+   "7": "Modulation",
+   "8": "FX"
+  },
+  "behavior": "Macros ADD to base patch values — they don't replace. Set base low for params you want to sweep upward. Only continuous parameters can be macro targets."
+ },
+ "song_format": {
+  "section": "song_format",
+  "schema": {
+   "$defs": {
+    "DelayConfig": {
+     "description": "Delay engine parameters.",
+     "properties": {
+      "time": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Time"
+      },
+      "sync": {
+       "anyOf": [
+        {
+         "maximum": 35,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Sync"
+      },
+      "feedback": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Feedback"
+      },
+      "width": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Width"
+      },
+      "lr_ratio": {
+       "anyOf": [
+        {
+         "maximum": 12,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Lr Ratio"
+      },
+      "slew": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Slew"
+      }
+     },
+     "title": "DelayConfig",
+     "type": "object"
+    },
+    "DrumSoundConfig": {
+     "description": "Drum track sound configuration.",
+     "properties": {
+      "sample": {
+       "anyOf": [
+        {
+         "maximum": 63,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Sample/patch index.",
+       "title": "Sample"
+      },
+      "level": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Level"
+      },
+      "pitch": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Pitch"
+      },
+      "decay": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Decay"
+      },
+      "distortion": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Distortion"
+      },
+      "eq": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Eq"
+      },
+      "pan": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Pan"
+      }
+     },
+     "title": "DrumSoundConfig",
+     "type": "object"
+    },
+    "DrumStepConfig": {
+     "additionalProperties": false,
+     "description": "A single step in a drum track.",
+     "properties": {
+      "velocity": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Velocity"
+      },
+      "enabled": {
+       "default": true,
+       "title": "Enabled",
+       "type": "boolean"
+      },
+      "probability": {
+       "anyOf": [
+        {
+         "maximum": 1.0,
+         "minimum": 0.0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Probability"
+      },
+      "sample": {
+       "anyOf": [
+        {
+         "maximum": 63,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Per-step sample override.",
+       "title": "Sample"
+      },
+      "micro_step": {
+       "anyOf": [
+        {
+         "maximum": 5,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Micro-step offset within the step (0-5).",
+       "title": "Micro Step"
+      }
+     },
+     "title": "DrumStepConfig",
+     "type": "object"
+    },
+    "DrumTrackConfig": {
+     "additionalProperties": false,
+     "description": "Track data for a drum track within a pattern.",
+     "properties": {
+      "steps": {
+       "additionalProperties": {
+        "$ref": "#/$defs/DrumStepConfig"
+       },
+       "description": "Step index (as string) -> step data.",
+       "title": "Steps",
+       "type": "object"
+      },
+      "params": {
+       "anyOf": [
+        {
+         "additionalProperties": {
+          "additionalProperties": {
+           "maximum": 127,
+           "minimum": 0,
+           "type": "integer"
+          },
+          "type": "object"
+         },
+         "propertyNames": {
+          "enum": [
+           "pitch",
+           "decay",
+           "distortion",
+           "eq",
+           "reverb_send",
+           "delay_send",
+           "level",
+           "pan"
+          ]
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Track-level parameter automation. Keys: 'pitch', 'decay', 'distortion', 'eq', 'reverb_send', 'delay_send', 'level', 'pan'. Values are {step_position: value} dicts.",
+       "title": "Params"
+      }
+     },
+     "title": "DrumTrackConfig",
+     "type": "object"
+    },
+    "FXConfig": {
+     "description": "Global FX configuration.",
+     "properties": {
+      "reverb": {
+       "anyOf": [
+        {
+         "$ref": "#/$defs/ReverbConfig"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null
+      },
+      "delay": {
+       "anyOf": [
+        {
+         "$ref": "#/$defs/DelayConfig"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null
+      },
+      "reverb_preset": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Reverb preset by name or index (0-7).",
+       "title": "Reverb Preset"
+      },
+      "delay_preset": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Delay preset by name or index (0-15).",
+       "title": "Delay Preset"
+      },
+      "reverb_sends": {
+       "anyOf": [
+        {
+         "additionalProperties": {
+          "maximum": 127,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "propertyNames": {
+          "enum": [
+           "synth1",
+           "synth2",
+           "drum1",
+           "drum2",
+           "drum3",
+           "drum4",
+           "midi1",
+           "midi2"
+          ]
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Per-track reverb send level.",
+       "title": "Reverb Sends"
+      },
+      "delay_sends": {
+       "anyOf": [
+        {
+         "additionalProperties": {
+          "maximum": 127,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "propertyNames": {
+          "enum": [
+           "synth1",
+           "synth2",
+           "drum1",
+           "drum2",
+           "drum3",
+           "drum4",
+           "midi1",
+           "midi2"
+          ]
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Per-track delay send level.",
+       "title": "Delay Sends"
+      },
+      "sidechain": {
+       "anyOf": [
+        {
+         "additionalProperties": {
+          "$ref": "#/$defs/SidechainConfig"
+         },
+         "propertyNames": {
+          "enum": [
+           "synth1",
+           "synth2",
+           "midi1",
+           "midi2"
+          ]
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Sidechain"
+      }
+     },
+     "title": "FXConfig",
+     "type": "object"
+    },
+    "MacroConfig": {
+     "description": "Configuration for one macro knob (1-8).",
+     "properties": {
+      "targets": {
+       "items": {
+        "$ref": "#/$defs/MacroTarget"
+       },
+       "title": "Targets",
+       "type": "array"
+      },
+      "position": {
+       "default": 0,
+       "description": "Initial knob position.",
+       "maximum": 127,
+       "minimum": 0,
+       "title": "Position",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "targets"
+     ],
+     "title": "MacroConfig",
+     "type": "object"
+    },
+    "MacroTarget": {
+     "description": "A single destination routed to a macro knob.",
+     "properties": {
+      "dest": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ],
+       "description": "Parameter name (e.g. 'filter_frequency') or macro destination index (0-70). Use get_parameter_reference for the full list.",
+       "title": "Dest"
+      },
+      "start": {
+       "default": 0,
+       "description": "Value when knob is at 0.",
+       "maximum": 127,
+       "minimum": 0,
+       "title": "Start",
+       "type": "integer"
+      },
+      "end": {
+       "default": 127,
+       "description": "Value when knob is at 127.",
+       "maximum": 127,
+       "minimum": 0,
+       "title": "End",
+       "type": "integer"
+      },
+      "depth": {
+       "default": 127,
+       "description": "Modulation depth. 127=full, 64=none.",
+       "maximum": 127,
+       "minimum": 0,
+       "title": "Depth",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "dest"
+     ],
+     "title": "MacroTarget",
+     "type": "object"
+    },
+    "MixerTrackConfig": {
+     "description": "Mixer settings for a synth track.",
+     "properties": {
+      "level": {
+       "default": 100,
+       "maximum": 127,
+       "minimum": 0,
+       "title": "Level",
+       "type": "integer"
+      },
+      "pan": {
+       "default": 64,
+       "maximum": 127,
+       "minimum": 0,
+       "title": "Pan",
+       "type": "integer"
+      }
+     },
+     "title": "MixerTrackConfig",
+     "type": "object"
+    },
+    "ModMatrixEntry": {
+     "description": "A single mod-matrix routing slot.",
+     "properties": {
+      "source1": {
+       "anyOf": [
+        {
+         "enum": [
+          "direct",
+          "velocity",
+          "keyboard",
+          "LFO 1+",
+          "LFO 1+/-",
+          "LFO 2+",
+          "LFO 2+/-",
+          "env amp",
+          "env filter",
+          "env 3"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ],
+       "default": "direct",
+       "title": "Source1"
+      },
+      "source2": {
+       "anyOf": [
+        {
+         "enum": [
+          "direct",
+          "velocity",
+          "keyboard",
+          "LFO 1+",
+          "LFO 1+/-",
+          "LFO 2+",
+          "LFO 2+/-",
+          "env amp",
+          "env filter",
+          "env 3"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ],
+       "default": "direct",
+       "title": "Source2"
+      },
+      "dest": {
+       "anyOf": [
+        {
+         "enum": [
+          "osc 1 & 2 pitch",
+          "osc 1 pitch",
+          "osc 2 pitch",
+          "osc 1 v-sync",
+          "osc 2 v-sync",
+          "osc 1 pulse width / index",
+          "osc 2 pulse width / index",
+          "osc 1 level",
+          "osc 2 level",
+          "noise level",
+          "ring modulation 1*2 level",
+          "filter drive amount",
+          "filter frequency",
+          "filter resonance",
+          "LFO 1 rate",
+          "LFO 2 rate",
+          "amp envelope decay",
+          "filter envelope decay"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ],
+       "description": "Destination parameter (use space-separated names, NOT snake_case).",
+       "title": "Dest"
+      },
+      "destination": {
+       "anyOf": [
+        {
+         "enum": [
+          "osc 1 & 2 pitch",
+          "osc 1 pitch",
+          "osc 2 pitch",
+          "osc 1 v-sync",
+          "osc 2 v-sync",
+          "osc 1 pulse width / index",
+          "osc 2 pulse width / index",
+          "osc 1 level",
+          "osc 2 level",
+          "noise level",
+          "ring modulation 1*2 level",
+          "filter drive amount",
+          "filter frequency",
+          "filter resonance",
+          "LFO 1 rate",
+          "LFO 2 rate",
+          "amp envelope decay",
+          "filter envelope decay"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Alias for 'dest'. Either 'dest' or 'destination' may be used.",
+       "title": "Destination"
+      },
+      "depth": {
+       "default": 0,
+       "description": "Signed depth: -64 to +63. 0 = no modulation.",
+       "maximum": 63,
+       "minimum": -64,
+       "title": "Depth",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "dest"
+     ],
+     "title": "ModMatrixEntry",
+     "type": "object"
+    },
+    "PatternConfig": {
+     "description": "A named pattern containing track data.",
+     "properties": {
+      "length": {
+       "default": 16,
+       "description": "Pattern length in steps.",
+       "maximum": 32,
+       "minimum": 1,
+       "title": "Length",
+       "type": "integer"
+      },
+      "tracks": {
+       "additionalProperties": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/SynthTrackConfig"
+         },
+         {
+          "$ref": "#/$defs/DrumTrackConfig"
+         }
+        ]
+       },
+       "propertyNames": {
+        "enum": [
+         "synth1",
+         "synth2",
+         "drum1",
+         "drum2",
+         "drum3",
+         "drum4",
+         "midi1",
+         "midi2"
+        ]
+       },
+       "title": "Tracks",
+       "type": "object"
+      }
+     },
+     "title": "PatternConfig",
+     "type": "object"
+    },
+    "ReverbConfig": {
+     "description": "Reverb engine parameters.",
+     "properties": {
+      "type": {
+       "anyOf": [
+        {
+         "maximum": 5,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Type"
+      },
+      "decay": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Decay"
+      },
+      "damping": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Damping"
+      }
+     },
+     "title": "ReverbConfig",
+     "type": "object"
+    },
+    "ScaleConfig": {
+     "description": "Musical scale applied to synth/MIDI note quantization.",
+     "properties": {
+      "root": {
+       "default": "C",
+       "enum": [
+        "C",
+        "C#",
+        "Db",
+        "D",
+        "D#",
+        "Eb",
+        "E",
+        "F",
+        "F#",
+        "Gb",
+        "G",
+        "G#",
+        "Ab",
+        "A",
+        "A#",
+        "Bb",
+        "B"
+       ],
+       "title": "Root",
+       "type": "string"
+      },
+      "type": {
+       "default": "chromatic",
+       "enum": [
+        "natural minor",
+        "minor",
+        "major",
+        "dorian",
+        "phrygian",
+        "mixolydian",
+        "melodic minor",
+        "harmonic minor",
+        "bebop dorian",
+        "blues",
+        "minor pentatonic",
+        "hungarian minor",
+        "ukranian dorian",
+        "marva",
+        "todi",
+        "whole tone",
+        "chromatic"
+       ],
+       "title": "Type",
+       "type": "string"
+      }
+     },
+     "title": "ScaleConfig",
+     "type": "object"
+    },
+    "SidechainConfig": {
+     "description": "Sidechain compressor settings for a synth or MIDI track.",
+     "properties": {
+      "preset": {
+       "anyOf": [
+        {
+         "maximum": 7,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Sidechain preset (1-7). Required to activate sidechain on hardware. 0 or omit = OFF.",
+       "title": "Preset"
+      },
+      "source": {
+       "default": "off",
+       "enum": [
+        "drum1",
+        "drum2",
+        "drum3",
+        "drum4",
+        "off"
+       ],
+       "title": "Source",
+       "type": "string"
+      },
+      "attack": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Attack"
+      },
+      "hold": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Hold"
+      },
+      "decay": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Decay"
+      },
+      "depth": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Depth"
+      }
+     },
+     "title": "SidechainConfig",
+     "type": "object"
+    },
+    "SynthSoundConfig": {
+     "description": "Synth engine patch configuration (synth1, synth2).",
+     "properties": {
+      "preset": {
+       "anyOf": [
+        {
+         "enum": [
+          "pad",
+          "bass",
+          "lead",
+          "pluck"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Base preset to start from before applying params.",
+       "title": "Preset"
+      },
+      "name": {
+       "anyOf": [
+        {
+         "maxLength": 16,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Patch name.",
+       "title": "Name"
+      },
+      "params": {
+       "anyOf": [
+        {
+         "additionalProperties": {
+          "type": "integer"
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Synth parameter name -> value (0-127). Use get_parameter_reference for names.",
+       "title": "Params"
+      },
+      "mod_matrix": {
+       "anyOf": [
+        {
+         "items": {
+          "$ref": "#/$defs/ModMatrixEntry"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Mod matrix routing slots.",
+       "title": "Mod Matrix"
+      },
+      "macros": {
+       "anyOf": [
+        {
+         "additionalProperties": {
+          "$ref": "#/$defs/MacroConfig"
+         },
+         "propertyNames": {
+          "enum": [
+           "1",
+           "2",
+           "3",
+           "4",
+           "5",
+           "6",
+           "7",
+           "8"
+          ]
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Macro knob definitions. Keys are '1' through '8'.",
+       "title": "Macros"
+      }
+     },
+     "title": "SynthSoundConfig",
+     "type": "object"
+    },
+    "SynthStepConfig": {
+     "additionalProperties": false,
+     "description": "A single step in a synth or MIDI track.\n\nOnly these fields are allowed — no others. Use 'macros' for p-locks, NOT 'params' or 'p-locks'.",
+     "properties": {
+      "note": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "MIDI note number. Mutually exclusive with 'notes'.",
+       "title": "Note"
+      },
+      "notes": {
+       "anyOf": [
+        {
+         "items": {
+          "maximum": 127,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Multiple MIDI notes for polyphony. Mutually exclusive with 'note'.",
+       "title": "Notes"
+      },
+      "velocity": {
+       "anyOf": [
+        {
+         "maximum": 127,
+         "minimum": 0,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Velocity"
+      },
+      "gate": {
+       "anyOf": [
+        {
+         "maximum": 16.0,
+         "minimum": 0.0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Gate length in steps (e.g. 0.5 = half step, 2.0 = two steps). Max 16.",
+       "title": "Gate"
+      },
+      "tie": {
+       "default": false,
+       "description": "Tie forward — sustain this note into the next triggered step.",
+       "title": "Tie",
+       "type": "boolean"
+      },
+      "enabled": {
+       "default": true,
+       "title": "Enabled",
+       "type": "boolean"
+      },
+      "probability": {
+       "anyOf": [
+        {
+         "maximum": 1.0,
+         "minimum": 0.0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Playback probability, 0.0 to 1.0.",
+       "title": "Probability"
+      },
+      "macros": {
+       "anyOf": [
+        {
+         "additionalProperties": {
+          "maximum": 127,
+          "minimum": 0,
+          "type": "integer"
+         },
+         "propertyNames": {
+          "enum": [
+           "1",
+           "2",
+           "3",
+           "4",
+           "5",
+           "6",
+           "7",
+           "8"
+          ]
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Per-step macro p-locks. Keys are macro numbers '1'-'8', values are 0-127. These lock the macro knob position for this step.",
+       "title": "Macros"
+      }
+     },
+     "title": "SynthStepConfig",
+     "type": "object"
+    },
+    "SynthTrackConfig": {
+     "additionalProperties": false,
+     "description": "Track data for a synth or MIDI track within a pattern.",
+     "properties": {
+      "steps": {
+       "additionalProperties": {
+        "$ref": "#/$defs/SynthStepConfig"
+       },
+       "description": "Step index (as string, e.g. '0', '4') -> step data.",
+       "title": "Steps",
+       "type": "object"
+      },
+      "macros": {
+       "anyOf": [
+        {
+         "additionalProperties": {
+          "additionalProperties": {
+           "maximum": 127,
+           "minimum": 0,
+           "type": "integer"
+          },
+          "type": "object"
+         },
+         "propertyNames": {
+          "enum": [
+           "1",
+           "2",
+           "3",
+           "4",
+           "5",
+           "6",
+           "7",
+           "8"
+          ]
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Track-level macro automation. Keys are macro numbers '1'-'8'. Values are {step_position: value} dicts. Float positions supported for micro-step resolution (e.g. '2.5').",
+       "title": "Macros"
+      },
+      "mixer": {
+       "anyOf": [
+        {
+         "additionalProperties": {
+          "additionalProperties": {
+           "maximum": 127,
+           "minimum": 0,
+           "type": "integer"
+          },
+          "type": "object"
+         },
+         "propertyNames": {
+          "enum": [
+           "reverb_send",
+           "delay_send",
+           "level",
+           "pan"
+          ]
+         },
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Track-level mixer automation. Keys: 'reverb_send', 'delay_send', 'level', 'pan'. Values are {step_position: value} dicts.",
+       "title": "Mixer"
+      }
+     },
+     "title": "SynthTrackConfig",
+     "type": "object"
+    }
+   },
+   "description": "Complete song description for the Circuit Tracks.\n\nDefines patterns, sounds, FX, mixer, and song structure.\nUse ``get_parameter_reference`` to look up valid synth parameter names,\nmod matrix sources/destinations, and macro destinations.",
+   "properties": {
+    "name": {
+     "default": "Song",
+     "description": "Song/project name.",
+     "title": "Name",
+     "type": "string"
+    },
+    "bpm": {
+     "default": 120,
+     "description": "Tempo in BPM.",
+     "maximum": 240,
+     "minimum": 40,
+     "title": "Bpm",
+     "type": "integer"
+    },
+    "swing": {
+     "default": 50,
+     "description": "Swing amount.",
+     "maximum": 80,
+     "minimum": 20,
+     "title": "Swing",
+     "type": "integer"
+    },
+    "color": {
+     "default": 8,
+     "description": "Pattern color index.",
+     "maximum": 13,
+     "minimum": 0,
+     "title": "Color",
+     "type": "integer"
+    },
+    "scale": {
+     "$ref": "#/$defs/ScaleConfig"
+    },
+    "sounds": {
+     "anyOf": [
+      {
+       "additionalProperties": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/SynthSoundConfig"
+         },
+         {
+          "$ref": "#/$defs/DrumSoundConfig"
+         }
+        ]
+       },
+       "propertyNames": {
+        "enum": [
+         "synth1",
+         "synth2",
+         "drum1",
+         "drum2",
+         "drum3",
+         "drum4",
+         "midi1",
+         "midi2"
+        ]
+       },
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Per-track sound/patch configuration.",
+     "title": "Sounds"
+    },
+    "fx": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/FXConfig"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
+    "mixer": {
+     "anyOf": [
+      {
+       "additionalProperties": {
+        "$ref": "#/$defs/MixerTrackConfig"
+       },
+       "propertyNames": {
+        "enum": [
+         "synth1",
+         "synth2"
+        ]
+       },
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Mixer"
+    },
+    "patterns": {
+     "additionalProperties": {
+      "$ref": "#/$defs/PatternConfig"
+     },
+     "description": "Named patterns. At least one required.",
+     "minProperties": 1,
+     "title": "Patterns",
+     "type": "object"
+    },
+    "song": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "maxItems": 16,
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Ordered list of pattern names for playback (max 16 scenes).",
+     "title": "Song"
+    }
+   },
+   "required": [
+    "patterns"
+   ],
+   "title": "SongSchema",
+   "type": "object"
+  }
+ },
+ "best_practices": {
+  "section": "best_practices",
+  "pattern_length": "All patterns must use the same length (all 16 or all 32). Never mix.",
+  "p_lock_automation": "Use 32-step patterns with micro-step substeps (0.5, 1.5) for smooth automation. Max gate = 16 (one full step).",
+  "macros_add_to_base": "Macros ADD to base values — they don't replace. Set base low for sweep params (e.g., filter_frequency=0 if macro sweeps 0->127). depth=127 means full positive addition.",
+  "macro_destinations": "Only continuous params can be macro targets. Indices 0-70 skip 21 discrete/voice/pitch params. Use the macro_destinations lookup table.",
+  "include_sounds": "Always include 'sounds' in load_song with full synth configs so patches export correctly with export_song_to_project.",
+  "scale_engine": "output = quantize(ncs_note, root=0, type) + root - 12. Rounds up on ties. External MIDI bypasses the scale engine entirely.",
+  "drum_sample_cc_bug": "CC drum sample selection is broken (firmware bug). Use NCS export instead.",
+  "standard_macro_layout": "1=Oscillator, 2=OscMod, 3=AmpEnv, 4=FilterEnv, 5=FilterFreq, 6=Resonance, 7=Modulation, 8=FX",
+  "naming": "Mod matrix: space-separated ('filter frequency'). Synth params: snake_case ('filter_frequency'). These are different namespaces.",
+  "p_lock_keys": "Synth p-locks use 'macros' key (NOT 'p-locks' or 'params'). Drum p-locks use 'params' key at track level.",
+  "sidechain_preset": "Sidechain requires a 'preset' (1-7) to activate on hardware. Just setting source/depth is not enough. The preset auto-fills attack/hold/decay/depth values. Supports synth1, synth2, midi1, midi2."
+ }
+}

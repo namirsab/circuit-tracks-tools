@@ -576,8 +576,49 @@ DELAY_PRESETS: dict[int, dict[str, int]] = {
     15: {"time": 0, "sync": 12, "feedback": 50, "width": 115, "lr_ratio": 5, "slew": 111},
 }
 
-REVERB_PRESET_BY_NAME: dict[str, int] = {}
-DELAY_PRESET_BY_NAME: dict[str, int] = {}
+# Preset names as shown on the Components / Web Tracks FX pages, lower-cased
+# for lookup (song "reverb_preset": "hall"). ASCII-hyphen spellings of the
+# dashed names are accepted too.
+REVERB_PRESET_NAMES: list[str] = [
+    "Small Chamber",
+    "Small Room 1",
+    "Small Room 2",
+    "Large Room",
+    "Hall",
+    "Large Hall",
+    "Hall – long reflection",
+    "Large Hall – long refl.",
+]
+DELAY_PRESET_NAMES: list[str] = [
+    "Slapback Fast",
+    "Slapback Slow",
+    "32nd Triplets",
+    "32nd",
+    "16th Triplets",
+    "16th",
+    "16th Ping Pong",
+    "16th Ping Pong Swung",
+    "8th Triplets",
+    "8th dotted Ping Pong",
+    "8th",
+    "8th Ping Pong",
+    "8th Ping Pong Swung",
+    "4th Triplets",
+    "4th dotted PP Swung",
+    "4th Triplets PP Wide",
+]
+
+
+def _preset_lookup(names: list[str]) -> dict[str, int]:
+    table: dict[str, int] = {}
+    for idx, name in enumerate(names):
+        table[name.lower()] = idx
+        table[name.lower().replace("–", "-")] = idx
+    return table
+
+
+REVERB_PRESET_BY_NAME: dict[str, int] = _preset_lookup(REVERB_PRESET_NAMES)
+DELAY_PRESET_BY_NAME: dict[str, int] = _preset_lookup(DELAY_PRESET_NAMES)
 
 # SysEx constants
 SYSEX_MANUFACTURER_ID = [0x00, 0x20, 0x29]  # Novation

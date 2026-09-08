@@ -1303,9 +1303,11 @@ def _build_patch_bytes(sc: SoundConfig) -> bytes:
             raw_depth = entry.get("depth", 16)
             if -64 <= raw_depth <= 63:
                 raw_depth = raw_depth + 64
+            # The schema stores the primary source as "source1" (plain "source"
+            # is accepted for older hand-written songs).
             builder.add_mod(
-                source=entry.get("source", 0),
-                destination=entry.get("dest", 0),
+                source=entry.get("source1", entry.get("source", 0)),
+                destination=entry.get("dest", entry.get("destination", 0)),
                 depth=raw_depth,
                 source2=entry.get("source2", 0),
             )

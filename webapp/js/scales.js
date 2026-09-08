@@ -2,15 +2,19 @@
 // quantize(ncsNote, root=0, scaleType) + root - 12, rounding UP on ties.
 import { SCALE_TYPES } from './constants.js';
 
-export function quantizeToScale(note, scaleType) {
+// Nearest scale note (ties round up, never outside 0-127). root shifts the
+// interval set: the hardware plays with root 0 and adds the root afterwards,
+// while the song compiler quantises root-aware like song.py.
+export function quantizeToScale(note, scaleType, root = 0) {
   const intervals = SCALE_TYPES[scaleType]?.intervals ?? SCALE_TYPES[15].intervals;
   if (intervals.length === 12) return note;
   const pc = ((note % 12) + 12) % 12;
-  const base = note - pc;
+  const base = note - pc + root;
   let best = null;
   let bestDist = Infinity;
   for (const iv of intervals) {
     for (const cand of [base + iv - 12, base + iv, base + iv + 12]) {
+      if (cand < 0 || cand > 127) continue; // as the hardware path (song.py): never leave the MIDI range
       const dist = Math.abs(cand - note);
       if (dist < bestDist || (dist === bestDist && cand > best)) {
         best = cand;

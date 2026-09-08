@@ -157,6 +157,19 @@ python scripts/generate_voice_samples.py example-audio
 The transcriber is a pure-numpy YIN pitch tracker plus onset segmentation, available from Python as
 `circuit_tracks.transcribe.transcribe(audio, samplerate, bpm)`.
 
+## No hardware? Use Web Tracks in the browser
+
+[Web Tracks](webapp/) is a browser emulation of the Circuit Tracks that ships in
+this repository (live at [webtracks.namirsab.dev](https://webtracks.namirsab.dev/)).
+It exposes the same MCP tool surface as the hardware server, so the workflow above
+works without a device: press **Connect an AI agent…** in its sidebar, add the URL
+it shows to Claude Code (`claude mcp add --transport http webtracks <url>`), Claude
+Desktop or claude.ai, and watch the agent play on the pads. The URL is served by the
+small [Agent Link relay](link/); the tools also register with WebMCP
+(`document.modelContext`) and as `window.webtracks` on the page. Details in
+[webapp/README.md](webapp/README.md#ai-agents-mcp) and the design notes in
+[docs/webmcp-plan.md](docs/webmcp-plan.md).
+
 ## Windows Setup
 
 The library and MCP server work on Windows. Install Python 3.11+ from [python.org](https://www.python.org/downloads/) and then:
@@ -206,8 +219,17 @@ src/circuit_tracks/   # Standalone library for Circuit Tracks control
   audio_io.py         # Microphone capture and audio file I/O (optional audio extra)
 src/circuit_mcp/      # MCP server (thin wrapper over the library)
   server.py           # All MCP tool definitions
+webapp/               # Web Tracks: browser emulation (static, no build step)
+  js/agent/           # MCP tool registry, headless API, WebMCP + Agent Link adapters
+  js/agent/song-compiler.js  # Song JSON -> project (golden-tested against song.py)
+  data/               # song.schema.json + parameter-reference.json (generated)
+  tests/              # node --test suites and golden .ncs vectors
+link/                 # Agent Link relay: MCP endpoint for a Web Tracks tab
+scripts/
+  generate_agent_data.py     # Regenerates webapp/data and the golden vectors
 docs/
   ncs-format.md       # Reverse-engineered .ncs file format spec
+  webmcp-plan.md      # Why and how Web Tracks became an MCP target
 ```
 
 ## License

@@ -1,0 +1,39 @@
+{
+  "name": "Kitchen Sink Session Twenty-Two Chars!",
+  "bpm": 174,
+  "swing": 62,
+  "color": 0,
+  "scale": { "root": "G#", "type": "dorian" },
+  "sounds": {
+    "synth1": { "preset": "lead", "name": "KS Lead", "params": { "portamento_rate": 40 }, "macros": { "1": { "targets": [{ "dest": "osc1_virtual_sync_depth" }] } } },
+    "synth2": { "preset": "pluck", "mod_matrix": [{ "source1": "env 3", "dest": "LFO 1 rate", "depth": 63 }] },
+    "drum1": { "sample": 16, "decay": 60 },
+    "drum2": { "sample": 18 },
+    "drum3": { "sample": 20, "pan": 30 },
+    "drum4": { "sample": 27, "pan": 100, "level": 80 }
+  },
+  "fx": {
+    "reverb": { "type": 5, "decay": 118, "damping": 110 },
+    "delay": { "time": 0, "sync": 12, "feedback": 30, "width": 100, "lr_ratio": 3, "slew": 100 },
+    "reverb_sends": { "synth1": 90 },
+    "delay_sends": { "synth2": 40 }
+  },
+  "mixer": { "synth2": { "pan": 80 } },
+  "patterns": {
+    "p1": {
+      "length": 32,
+      "tracks": {
+        "synth1": { "steps": { "0": { "note": 68, "gate": 0.5 }, "6": { "note": 71, "gate": 0.333 }, "12": { "note": 75, "gate": 8.5, "tie": true, "probability": 0.643 } } },
+        "drum1": { "steps": { "0": {}, "16": {} } }
+      }
+    },
+    "p2": { "length": 32, "tracks": { "synth2": { "steps": { "0": { "notes": [56, 59, 63] } } }, "drum2": { "steps": { "8": {}, "24": {} } } } },
+    "p3": { "length": 32, "tracks": { "midi1": { "steps": { "0": { "note": 44 } }, "mixer": { "level": { "0": 127, "31": 0 } } } } },
+    "p4": { "length": 32, "tracks": { "midi2": { "steps": { "3": { "note": 80, "velocity": 1 } } } } },
+    "p5": { "length": 32, "tracks": { "drum3": { "steps": { "2": {}, "6": {}, "10": {} } } } },
+    "p6": { "length": 32, "tracks": { "drum4": { "steps": { "31": { "velocity": 127 } } } } },
+    "p7": { "length": 32, "tracks": {} },
+    "p8": { "length": 32, "tracks": { "synth1": { "macros": { "3": { "0": 10 } } } } }
+  },
+  "song": ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"]
+}

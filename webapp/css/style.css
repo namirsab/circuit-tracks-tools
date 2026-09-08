@@ -416,6 +416,58 @@ body.sidebar-hidden #sidebar { display: none; }
   font-size: 10px;
 }
 .fx-state.bypassed { background: #4d1d1d; color: #ff5a5a; }
+.fx-state.agent-off { background: #2a2a34; color: #8a8a96; }
+.fx-state.agent-connecting, .fx-state.agent-reconnecting { background: #4d3d1d; color: #ffc34d; }
+.fx-state.agent-error { background: #4d1d1d; color: #ff5a5a; }
+.agent-box .load-btn { margin-top: 8px; }
+.agent-box .agent-connect { background: #3a2c62; }
+.agent-box .agent-connect:hover { background: #4a3a7a; }
+.agent-hint { color: #8a8a96; font-size: 11px; margin: 6px 0 4px; line-height: 1.4; }
+.agent-hint.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; word-break: break-all; }
+.agent-url-row { display: flex; gap: 6px; align-items: center; }
+.agent-url-row code {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  background: #15151d;
+  border: 1px solid #2c2c3c;
+  border-radius: 6px;
+  padding: 5px 7px;
+  word-break: break-all;
+  user-select: all;
+  color: #c9c9e0;
+}
+.mini-btn {
+  background: #2c3a52;
+  color: #e6e6f0;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.mini-btn:hover { background: #35496a; }
+.mini-btn:disabled { opacity: .4; cursor: default; }
+.agent-error { color: #ff7a7a; font-size: 11px; margin-top: 6px; }
+.agent-advanced { margin-top: 8px; font-size: 11px; color: #8a8a96; }
+.agent-advanced summary { cursor: pointer; }
+.agent-advanced input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  background: #15151d;
+  border: 1px solid #2c2c3c;
+  border-radius: 6px;
+  color: #e6e6f0;
+  font-size: 11px;
+  padding: 5px 7px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.agent-log { list-style: none; padding: 0; margin: 8px 0 0; font-size: 11px; }
+.agent-log li { padding: 2px 0; border-bottom: 1px solid #28282f; color: #8a8a96; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-log li b { font-weight: 600; color: #c9c9e0; }
+.agent-log li.err b { color: #ff7a7a; }
+.agent-log:empty { display: none; }
 .mixer-table { width: 100%; border-collapse: collapse; }
 .mixer-table th, .mixer-table td {
   text-align: left;

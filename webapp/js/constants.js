@@ -51,6 +51,11 @@ export const REVERB_PRESETS = [
   { type: 5, decay: 120, damping: 115 },
 ];
 
+export const REVERB_PRESET_NAMES = [
+  'Small Chamber', 'Small Room 1', 'Small Room 2', 'Large Room',
+  'Hall', 'Large Hall', 'Hall – long reflection', 'Large Hall – long refl.',
+];
+
 export const DELAY_PRESETS = [
   { time: 3, sync: 0, feedback: 100, width: 115, lr_ratio: 5, slew: 115 },
   { time: 6, sync: 0, feedback: 45, width: 104, lr_ratio: 6, slew: 26 },
@@ -75,6 +80,13 @@ export const DELAY_PRESETS = [
 // delay presets' "cycles per bar" descriptions in the user guide (p.92):
 // sync 2 = 48/bar (32nd-T), 4 = 32/bar, 5 = 24/bar, 7 = 16/bar (16th),
 // 8 = 12/bar, 9 = 8 per 3 beats, 10 = 8/bar (8th), 11 = 6/bar, 12 = dotted.
+export const DELAY_PRESET_NAMES = [
+  'Slapback Fast', 'Slapback Slow', '32nd Triplets', '32nd', '16th Triplets',
+  '16th', '16th Ping Pong', '16th Ping Pong Swung', '8th Triplets',
+  '8th dotted Ping Pong', '8th', '8th Ping Pong', '8th Ping Pong Swung',
+  '4th Triplets', '4th dotted PP Swung', '4th Triplets PP Wide',
+];
+
 const SYNC_BEATS = [
   1 / 24, 1 / 16, 1 / 12, 3 / 32, 1 / 8, 1 / 6, 3 / 16, 1 / 4,
   1 / 3, 3 / 8, 1 / 2, 2 / 3, 3 / 4, 1, 4 / 3, 1.5,
@@ -126,7 +138,7 @@ export const SCALE_TYPES = [
   { name: 'Mixolydian', intervals: [0, 2, 4, 5, 7, 9, 10] },
   { name: 'Melodic Minor', intervals: [0, 2, 3, 5, 7, 9, 11] },
   { name: 'Harmonic Minor', intervals: [0, 2, 3, 5, 7, 8, 11] },
-  { name: 'Bebop Dorian', intervals: [0, 3, 4, 5, 7, 9, 10] },
+  { name: 'Bebop Dorian', intervals: [0, 2, 3, 4, 5, 7, 9, 10] },
   { name: 'Blues', intervals: [0, 3, 5, 6, 7, 10] },
   { name: 'Minor Pentatonic', intervals: [0, 3, 5, 7, 10] },
   { name: 'Hungarian Minor', intervals: [0, 2, 3, 6, 7, 8, 11] },
@@ -155,6 +167,26 @@ export const MACRO_DESTINATIONS = {
   49: 'chorus_mod_depth', 50: 'chorus_delay',
 };
 for (let i = 51; i <= 70; i++) MACRO_DESTINATIONS[i] = `mod${i - 50}_depth`;
+
+// Mod matrix source index -> name (Programmer's Reference Guide v3). Sparse:
+// only these indices are valid sources.
+export const MOD_MATRIX_SOURCES = {
+  0: 'direct', 4: 'velocity', 5: 'keyboard',
+  6: 'LFO 1+', 7: 'LFO 1+/-', 8: 'LFO 2+', 9: 'LFO 2+/-',
+  10: 'env amp', 11: 'env filter', 12: 'env 3',
+};
+
+// Mod matrix destination index -> name.
+export const MOD_MATRIX_DESTINATIONS = {
+  0: 'osc 1 & 2 pitch', 1: 'osc 1 pitch', 2: 'osc 2 pitch',
+  3: 'osc 1 v-sync', 4: 'osc 2 v-sync',
+  5: 'osc 1 pulse width / index', 6: 'osc 2 pulse width / index',
+  7: 'osc 1 level', 8: 'osc 2 level', 9: 'noise level',
+  10: 'ring modulation 1*2 level', 11: 'filter drive amount',
+  12: 'filter frequency', 13: 'filter resonance',
+  14: 'LFO 1 rate', 15: 'LFO 2 rate',
+  16: 'amp envelope decay', 17: 'filter envelope decay',
+};
 
 // Sidechain preset index (1-7) -> fixed attack/hold/decay/depth.
 export const SIDECHAIN_PRESETS = {

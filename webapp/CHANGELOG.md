@@ -6,6 +6,31 @@ Python library that lives in the same repository.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.0] — 2026-09-02
+
+### Added
+
+- **AI agent tools (MCP)** — the console is exposed as MCP tools that mirror
+  the `circuit-tracks-mcp` hardware server (`load_song`, `set_pattern`,
+  `set_synth_params`, `set_drum_params`, `set_project_params`, `set_macro`,
+  `play_notes`, transport, banks, patch tools, `read_project`, plus web-only
+  extras like `download_project` and `undo`). Every call is applied through a
+  headless API so it shows on the pads, knobs and LCD.
+- **Agent Link** — a sidebar panel that connects the tab to a relay and shows
+  a private MCP URL for Claude Code, Claude Desktop, claude.ai or any other
+  MCP client; no browser extension needed. The panel logs tool calls, mirrors
+  them on the LCD and offers **Undo last agent change**. A reload keeps the
+  same URL.
+- **WebMCP** — the same tools are published on `document.modelContext`
+  (falling back to `navigator.modelContext`) when the browser supports it,
+  and on `window.webtracks` for scripts and the console.
+- **Song compiler** — the hardware server's song JSON format compiles to the
+  in-app project (and back for `read_project`), verified against golden
+  `.ncs` files produced by the Python library; the synth patch builder
+  (presets, mod matrix, macros) is ported the same way.
+- **Tests** — `node --test tests/*.test.mjs` covers the validator, registry,
+  tools, compiler and patch builder.
+
 ## [1.2.2] — 2026-06-30
 
 ### Added

@@ -39,6 +39,7 @@ and sample fetches without a server.)
 ## Deploy
 
 The app is 100% static — no build step, no backend. Any static host works.
+The optional Agent Link relay (`link/`) is a separate tiny service; see its README.
 
 **With Coolify** (two options):
 
@@ -51,6 +52,57 @@ The app is 100% static — no build step, no backend. Any static host works.
 
 No SPA fallback or special headers are needed — it's a single page, all
 assets are same-origin relative paths, and packs/samples are plain files.
+
+## AI agents (MCP)
+
+Web Tracks exposes its whole console as [MCP](https://modelcontextprotocol.io)
+tools, so Claude (or any MCP client) can compose, perform and sound-design on
+this page with no hardware. Tool names and arguments mirror the
+`circuit-tracks-mcp` hardware server wherever the concept exists, so prompts
+written for a real Circuit Tracks work here unchanged; the agent's moves show
+up live on the pads, knobs and LCD, and the sidebar keeps a log of its calls
+with an **Undo last agent change** button.
+
+Three ways in:
+
+- **Agent Link (any MCP client, no extension).** Press **Connect an AI agent…**
+  in the sidebar. The tab opens a WebSocket to a small relay and shows a
+  private URL; add it to your client and keep the tab open:
+
+  ```sh
+  claude mcp add --transport http webtracks "https://link.example/mcp/<session>/<secret>"
+  ```
+
+  Claude Desktop and claude.ai take the same URL as a custom connector.
+  The relay only forwards tool calls; audio never leaves the browser. The
+  default relay is `wss://link.webtracks.namirsab.dev/ws`; run your own with
+  the code in [`link/`](../link/) and change the address under *Relay URL*.
+  A reload keeps the same URL (the session is resumed).
+- **WebMCP.** The same tools are registered on `document.modelContext` when
+  the browser has it (Chrome origin trial / `chrome://flags`), for in-browser
+  agents and WebMCP bridge extensions.
+- **Page global.** `window.webtracks.call(name, args)` and
+  `window.webtracks.list()` from the console or any script runner, e.g.
+  Claude in Chrome's JavaScript tool.
+
+Tools (26 + song tools): `get_parameter_reference`, `get_sequencer_status`,
+`load_song`, `read_project`, `set_pattern`, `set_track`, `get_pattern`,
+`list_patterns`, `clear_pattern`, `start_sequencer`, `stop_sequencer`,
+`transport`, `set_bpm`, `set_swing`, `queue_patterns`, `set_song`,
+`clear_queue`, `select_pattern`, `mute_track`, `set_synth_params`,
+`edit_synth_patch`, `create_synth_patch`, `get_synth_patch`,
+`save_synth_patch`, `set_drum_params`, `set_project_params`, `set_macro`, `get_macros`,
+`play_notes`, `play_drum`, `list_drum_samples`, `list_patches`,
+`select_patch`, `list_projects`, `select_project`, `export_song_to_project`,
+`download_project`, `undo`. Call `get_parameter_reference` with no section
+first: it returns the workflow, the rules and Web Tracks specific notes.
+The song format and parameter reference are generated from the Python
+library (`scripts/generate_agent_data.py`) so both servers answer alike.
+
+Browsers block sound until the page has been clicked once; the **Connect**
+button doubles as that click. Tests: `cd webapp && node --test tests/*.test.mjs`
+(the song compiler is checked against golden `.ncs` files produced by the
+Python library).
 
 ## What's bundled
 
