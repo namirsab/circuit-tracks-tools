@@ -85,7 +85,7 @@ Three ways in:
   `window.webtracks.list()` from the console or any script runner, e.g.
   Claude in Chrome's JavaScript tool.
 
-Tools (26 + song tools): `get_parameter_reference`, `get_sequencer_status`,
+Tools (27 + song tools): `get_parameter_reference`, `get_sequencer_status`,
 `load_song`, `read_project`, `set_pattern`, `set_track`, `get_pattern`,
 `list_patterns`, `clear_pattern`, `start_sequencer`, `stop_sequencer`,
 `transport`, `set_bpm`, `set_swing`, `queue_patterns`, `set_song`,
@@ -94,15 +94,35 @@ Tools (26 + song tools): `get_parameter_reference`, `get_sequencer_status`,
 `save_synth_patch`, `set_drum_params`, `set_project_params`, `set_macro`, `get_macros`,
 `play_notes`, `play_drum`, `list_drum_samples`, `list_patches`,
 `select_patch`, `list_projects`, `select_project`, `export_song_to_project`,
-`download_project`, `undo`. Call `get_parameter_reference` with no section
-first: it returns the workflow, the rules and Web Tracks specific notes.
-The song format and parameter reference are generated from the Python
-library (`scripts/generate_agent_data.py`) so both servers answer alike.
+`download_project`, `record_melody`, `undo`. Call `get_parameter_reference`
+with no section first: it returns the workflow, the rules and Web Tracks
+specific notes. The song format and parameter reference are generated from
+the Python library (`scripts/generate_agent_data.py`) so both servers answer
+alike.
 
 Browsers block sound until the page has been clicked once; the **Connect**
 button doubles as that click. Tests: `cd webapp && node --test tests/*.test.mjs`
 (the song compiler is checked against golden `.ncs` files produced by the
 Python library).
+
+### Voice to notes
+
+`record_melody` turns singing, humming or whistling into sequencer steps
+entirely in the browser — pitch tracking, note segmentation and step
+quantization are a JS port of the hardware server's `circuit_tracks.transcribe`
+(`webapp/js/agent/transcribe.js`, unit-tested against synthetic melodies the
+same way), so both servers answer alike for the same take.
+
+Click **Enable microphone** in the sidebar once (a real user gesture, so the
+browser's permission prompt doesn't need to interrupt a later *remote* agent
+call over the relay). After that, ask the agent to record you: it plays a
+one-bar count-in on drum 1, records `bars` bars while the click continues,
+and returns the detected notes ready for `set_track`. Works the same way
+whether the client is local (`window.webtracks`) or a remote MCP client
+connected through Agent Link — the relay just forwards the tool call to the
+open tab, which does the recording. See `get_parameter_reference("voice")`
+for the full workflow and tips (sing one note at a time, re-articulate
+repeats, adjust `latency_ms` if notes land early/late).
 
 ## What's bundled
 

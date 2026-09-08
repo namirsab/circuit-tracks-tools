@@ -29,13 +29,14 @@ const SYNTH_PARAMS = {
 };
 const READ_ONLY = { readOnlyHint: true };
 
-const REFERENCE_SECTIONS = ['synth', 'patch', 'drums', 'project', 'lookup_tables', 'mod_matrix', 'macros', 'song_format', 'best_practices'];
+const REFERENCE_SECTIONS = ['synth', 'patch', 'drums', 'project', 'lookup_tables', 'mod_matrix', 'macros', 'song_format', 'voice', 'best_practices'];
 
 const WEB_TRACKS_NOTES = [
   'You are controlling Web Tracks, a browser emulation of the Circuit Tracks. The sequencer, synths, drums and FX run in the page; the user sees every change on the pads, knobs and LCD.',
   'No MIDI connection is needed: skip connect/list_midi_ports. Changes apply instantly. load_song loads a song into the project; start_sequencer plays it.',
   'Drum sample selection works here (set_drum_params {"sample": n} or sounds.drumN.sample in load_song); the hardware CC bug does not apply.',
   'Browsers block sound until the page has been clicked once. If a play tool reports locked audio, ask the user to click the page and retry.',
+  'record_melody (sing/hum/whistle -> notes) needs the user to click "Enable microphone" in the AI agent panel once before it works.',
   'Project slots (select_project / export_song_to_project) are the in-app project bank; download_project hands the user a hardware-ready .ncs file.',
 ];
 
@@ -369,6 +370,21 @@ export function createTools(api, { loadJson, songSchema = null } = {}) {
       description: 'Download the live project as a hardware-ready .ncs file in the user\'s browser (Web Tracks extra; the file can be sent to a Circuit Tracks with Components or the hardware MCP server).',
       inputSchema: obj({}),
       execute: () => api.downloadProject(),
+    },
+    {
+      name: 'record_melody',
+      description: 'Record a sung/whistled/hummed melody from the user\'s microphone and transcribe it into sequencer steps. Plays a one-bar count-in on drum 1, then records `bars` bars while the click continues; the user sings one note at a time, re-articulating repeated notes ("da da da"). Returns the detected notes, a "steps" dict ready for set_track, and "patterns" (steps split into pattern_length chunks). Review the summary with the user, then apply with set_track(pattern_name, "synth1", steps). Web-only extra (no MIDI/hardware equivalent needed): requires the user to click "Enable microphone" in the AI agent panel once first, so remote agent calls do not hit a blocked permission prompt.',
+      inputSchema: obj({
+        bars: int(1, 8, 'Bars to record after the count-in (16 steps per bar). 2 bars = one 32-step pattern. Default 2.'),
+        bpm: BPM,
+        scale_root: str('Root for scale snapping ("C", "F#", "Bb", ...). Only used with scale_type.'),
+        scale_type: str('Snap notes to this scale ("major", "minor", "dorian", "minor pentatonic", ...). Empty = chromatic.'),
+        transpose: int(-48, 48, 'Semitones to add to every note (e.g. -12 to turn a sung line into a bassline).'),
+        latency_ms: int(0, 500, 'Capture latency compensation subtracted from every note onset. Default 60.'),
+        click: bool('Play a count-in/metronome click on drum 1 while recording.', true),
+        pattern_length: int(1, 32, 'Split the steps dict into chunks of this size for "patterns". Default 32.'),
+      }),
+      execute: (args) => api.recordMelody(args),
     },
     {
       name: 'undo',

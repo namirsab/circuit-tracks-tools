@@ -11,6 +11,8 @@ import {
 } from './song-compiler.js';
 import { buildPatchBytes } from './patch-builder.js';
 import { suggest } from './schema.js';
+import { transcribe, scaleIndices } from './transcribe.js';
+import { recordSeconds } from './mic.js';
 import {
   MACRO_DESTINATIONS, MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS,
   SCALE_ROOTS, SCALE_TYPES, REVERB_TYPES, SIDECHAIN_PRESETS,
@@ -689,6 +691,41 @@ export class AgentApi {
     const { entry, replaced } = this.app.storePatchInBank(synth - 1, idx);
     this.app.views.render();
     return { synth: Number(synth), slot: idx, name: entry.name, replaced };
+  }
+
+  // ---------- voice ----------
+  // Plays drum 1 on every beat (accented downbeats), scheduled instantly on
+  // the AudioContext clock, in parallel with the mic capture below.
+  scheduleClick(bpm, beats) {
+    const beatS = 60.0 / bpm;
+    const now = this.engine.now();
+    for (let beat = 0; beat < beats; beat++) {
+      const t = now + beat * beatS;
+      this.app.drums.play(0, t, beat % 4 === 0 ? 127 : 80);
+      this.seq.visualEvents.push({ type: 'drumhit', time: t, trackId: 4, sample: this.app.drums.tracks[0].config.patchSelect });
+    }
+  }
+
+  async recordMelody({
+    bars = 2, bpm = null, scale_root: scaleRoot = '', scale_type: scaleType = '',
+    transpose = 0, latency_ms: latencyMs = 60, click = true, pattern_length: patternLength = 32,
+  } = {}) {
+    scaleIndices(scaleRoot || null, scaleType || null); // validate before recording
+    const useBpm = bpm ?? this.seq.bpm;
+    const barS = (60.0 / useBpm) * 4;
+    const countInBars = 1;
+    const totalS = (countInBars + bars) * barS + 0.3;
+
+    await this.ensureAudio();
+    if (click) this.scheduleClick(useBpm, (countInBars + bars) * 4);
+    const { audio, sampleRate } = await recordSeconds(this.engine.ctx, totalS);
+    const withoutCountIn = audio.subarray(Math.round(countInBars * barS * sampleRate));
+
+    const result = transcribe(withoutCountIn, sampleRate, useBpm, {
+      bars, latencyS: latencyMs / 1000.0, transpose,
+      scaleRoot: scaleRoot || null, scaleType: scaleType || null, patternLength,
+    });
+    return { ...result, samplerate: sampleRate };
   }
 
   // ---------- undo ----------

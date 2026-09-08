@@ -166,7 +166,10 @@ works without a device: press **Connect an AI agent…** in its sidebar, add the
 it shows to Claude Code (`claude mcp add --transport http webtracks <url>`), Claude
 Desktop or claude.ai, and watch the agent play on the pads. The URL is served by the
 small [Agent Link relay](link/); the tools also register with WebMCP
-(`document.modelContext`) and as `window.webtracks` on the page. Details in
+(`document.modelContext`) and as `window.webtracks` on the page. Voice to
+notes works here too — `record_melody` runs entirely client-side (mic
+capture + a JS port of the pitch tracker), including through a remote MCP
+client connected over the relay. Details in
 [webapp/README.md](webapp/README.md#ai-agents-mcp) and the design notes in
 [docs/webmcp-plan.md](docs/webmcp-plan.md).
 

@@ -6,6 +6,22 @@ Python library that lives in the same repository.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.4.0] — 2026-09-08
+
+### Added
+
+- **Voice to notes (`record_melody`)** — a new agent tool records the user's
+  microphone, plays a one-bar count-in click on drum 1, and transcribes the
+  take into sequencer steps entirely client-side: `webapp/js/agent/transcribe.js`
+  is a JS port of the hardware server's `circuit_tracks.transcribe` (YIN
+  pitch tracking, note segmentation, 16th-note step quantization, scale
+  snapping), unit-tested against synthetic melodies the same way the Python
+  library is. `webapp/js/agent/mic.js` wraps `getUserMedia` capture; a new
+  **Enable microphone** button in the sidebar primes the browser permission
+  from a real click so a *remote* agent call (through Agent Link) doesn't
+  need a fresh prompt. `get_parameter_reference("voice")` now answers here
+  too, generated from the same Python source as the hardware server.
+
 ## [1.3.0] — 2026-09-02
 
 ### Added
