@@ -152,13 +152,17 @@ class CircuitApp {
   reverbPresetName(i) { return REVERB_PRESET_NAMES[i] ?? `${i + 1}`; }
   ncsNoteToMidi(ncs) { return ncsToMidi(ncs, this.project.scaleRoot, this.project.scaleType); }
 
-  // Shift + a synth/MIDI track button: sing/hum 2 bars, apply straight onto
-  // that track's currently selected pattern slot. No agent connection needed
-  // — window.webtracks.api is the same headless API the agent tools use.
+  // Shift + a synth/MIDI track button: sing/hum as many bars as that
+  // track's currently selected pattern holds, then apply straight onto it.
+  // No agent connection needed — window.webtracks.api is the same headless
+  // API the agent tools use.
   async recordVoiceOnto(t) {
     const api = window.webtracks?.api;
     if (!api) { this.lcdMsg('Agent tools not ready yet'); return; }
     const track = AGENT_TRACK_NAMES[t];
+    const slot = this.ui.currentPattern[t];
+    const length = (this.project.patterns[t][slot].settings.playbackEnd ?? 15) + 1;
+    const bars = Math.max(1, Math.round(length / 16));
     // Switch to that track's Note view so the pad-grid playhead (below) is
     // actually visible while singing.
     this.selectTrack(t);
@@ -166,10 +170,10 @@ class CircuitApp {
     this.ui.stepPage = 0;
     this.updateStepPageButton();
     this.setView('note');
-    this.lcdMsg(`${this.trackName(t)}: get ready to sing…`);
+    this.lcdMsg(`${this.trackName(t)}: get ready to sing (${bars} bar${bars > 1 ? 's' : ''})…`);
     let result;
     try {
-      result = await api.recordMelody({ bars: 2 }, { visualTrack: t });
+      result = await api.recordMelody({ bars, pattern_length: length }, { visualTrack: t, visualLength: length });
     } catch (err) {
       this.lcdMsg(`Recording failed: ${err.message}`);
       return;
