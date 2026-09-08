@@ -150,6 +150,20 @@ export function buildSidebar(root) {
       <ol id="agent-log" class="agent-log"></ol>
       <button id="btn-agent-undo" class="load-btn" hidden>Undo last agent change</button>
     </div>
+    <h2>Sing a melody</h2>
+    <div id="voice-box" class="agent-box">
+      <div class="agent-hint">Try it yourself, no AI agent needed — sing or hum, one note at a time.</div>
+      <select id="voice-track" class="voice-select">
+        <option value="synth1">Synth 1</option>
+        <option value="synth2">Synth 2</option>
+      </select>
+      <button id="btn-voice-record" class="load-btn">Record melody (2 bars)</button>
+      <div id="voice-status" class="agent-hint"></div>
+      <div id="voice-result" hidden>
+        <div id="voice-summary" class="agent-hint mono"></div>
+        <button id="btn-voice-apply" class="load-btn">Apply to track</button>
+      </div>
+    </div>
     <h2>Project</h2>
     <div class="status-grid">
       <span>Name</span><span id="status-name">—</span>

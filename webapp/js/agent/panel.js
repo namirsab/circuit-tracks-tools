@@ -17,6 +17,8 @@ export function bindAgentPanel(webtracks, app) {
     url: $('agent-url'), copy: $('btn-agent-copy'), disconnect: $('btn-agent-disconnect'),
     relay: $('agent-relay-url'), log: $('agent-log'), undo: $('btn-agent-undo'), error: $('agent-error'),
     mic: $('btn-agent-mic'),
+    voiceTrack: $('voice-track'), voiceRecord: $('btn-voice-record'), voiceStatus: $('voice-status'),
+    voiceResult: $('voice-result'), voiceSummary: $('voice-summary'), voiceApply: $('btn-voice-apply'),
   };
   if (!els.connect) return;
   const { link } = webtracks;
@@ -34,6 +36,36 @@ export function bindAgentPanel(webtracks, app) {
         els.mic.disabled = false;
         els.error.textContent = `Microphone: ${err.message}`;
         els.error.hidden = false;
+      }
+    });
+  }
+
+  if (els.voiceRecord) {
+    let lastSteps = null;
+    els.voiceRecord.addEventListener('click', async () => {
+      els.voiceRecord.disabled = true;
+      els.voiceResult.hidden = true;
+      els.voiceStatus.textContent = 'Get ready — count-in, then sing 2 bars…';
+      try {
+        const result = await webtracks.api.recordMelody({ bars: 2 });
+        lastSteps = result.steps;
+        els.voiceStatus.textContent = '';
+        els.voiceSummary.textContent = result.summary ?? '(no notes detected)';
+        els.voiceResult.hidden = false;
+        els.voiceApply.disabled = !lastSteps || Object.keys(lastSteps).length === 0;
+      } catch (err) {
+        els.voiceStatus.textContent = `Recording failed: ${err.message}`;
+      } finally {
+        els.voiceRecord.disabled = false;
+      }
+    });
+    els.voiceApply.addEventListener('click', () => {
+      if (!lastSteps) return;
+      try {
+        const applied = webtracks.api.applyMelodyToTrack(els.voiceTrack.value, lastSteps);
+        els.voiceStatus.textContent = `Applied ${applied.steps} notes to ${els.voiceTrack.value}, pattern slot ${applied.slot}.`;
+      } catch (err) {
+        els.voiceStatus.textContent = `Couldn't apply: ${err.message}`;
       }
     });
   }

@@ -728,6 +728,28 @@ export class AgentApi {
     return { ...result, samplerate: sampleRate };
   }
 
+  // Applies record_melody's steps to the pattern slot currently selected in
+  // the UI for `track` (no pattern name needed, unlike the agent's
+  // setTrack — this is for the manual "Sing a melody" sidebar button).
+  applyMelodyToTrack(track, steps, clearExisting = true) {
+    const t = trackId(track);
+    const slot = this.ui.currentPattern[t];
+    const length = (this.project.patterns[t][slot].settings.playbackEnd ?? 15) + 1;
+    const existing = patternSlotToSong(this.project, slot).tracks?.[track] ?? {};
+    const cfg = clearExisting
+      ? { ...existing, steps }
+      : { ...existing, steps: { ...(existing.steps ?? {}), ...steps } };
+    validateTrackConfig(track, cfg, length, track);
+    const warnings = [];
+    const compiled = trackConfigToPattern(track, cfg, length, {
+      scaleRoot: this.project.scaleRoot, scaleType: this.project.scaleType, warnings, where: track,
+    });
+    replacePatternSlot(this.project, t, slot, compiled, length);
+    this.app.markProjectDirty();
+    this.app.views.render();
+    return { track, slot: slot + 1, steps: Object.keys(cfg.steps ?? {}).length, length, warnings };
+  }
+
   // ---------- undo ----------
   // Returns true when a snapshot was pushed (so a failed call can drop it).
   async snapshot(label) {
