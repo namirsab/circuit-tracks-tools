@@ -45,6 +45,12 @@ transferable between them.
 - **Trigger**: keyboard key (e.g. spacebar) press-and-hold stands in for the
   physical AT switch. Press opens/unmutes the audio stream, release closes it.
 - **Tool set** (fixed, same across both prototypes, for a fair comparison):
+  - `connect` — establish the MIDI connection to the Circuit Tracks. Called once
+    at session start, not per-turn; not part of the measured round trip.
+  - `list_midi_ports` — available to the model as a fallback if `connect`
+    fails without a port name (e.g. multiple MIDI devices present), so it can
+    ask the user or retry with the right port. Not expected to be called in
+    the happy path.
   - `set_bpm`
   - `set_pattern`
   - `set_synth_params`
@@ -68,11 +74,13 @@ transferable between them.
 ## Architecture
 
 ```
+(once, at startup) connect (+ list_midi_ports fallback) → MIDI link established
+        ↓
 [hold spacebar] → open realtime audio session, stream mic audio
         ↓ (vendor handles VAD/turn-detection internally)
    Realtime API (audio in) → (audio out)
      - session instructions: narrow, circuit-tracks domain only
-     - tools: set_bpm, set_pattern, set_synth_params, play_notes
+     - tools: connect, list_midi_ports, set_bpm, set_pattern, set_synth_params, play_notes
         ↓ function call event received
         ↓ execute tool call against circuit-tracks MCP server (staging TBD later)
         ↓ send function result back into session
@@ -90,7 +98,9 @@ transferable between them.
 - [ ] Local mic input + audio playback working in the prototype's runtime
       environment, with support for the vendor's required audio format/sample
       rate for the realtime session.
-- [ ] circuit-tracks MCP server running and reachable (existing `connect` tool).
+- [ ] circuit-tracks MCP server running and reachable (existing `connect` tool),
+      with the Circuit Tracks hardware powered on and its MIDI port known ahead
+      of time so `connect` succeeds on the first call in the happy path.
 
 ## What to build
 1. A standalone script (not inside Claude Code) using the vendor's realtime SDK:
