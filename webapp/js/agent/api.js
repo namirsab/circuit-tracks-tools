@@ -706,10 +706,22 @@ export class AgentApi {
     }
   }
 
+  // Marches the pad-grid playhead across the bars being sung, on `t`, purely
+  // as visual feedback — starts once the count-in ends, wraps every 32
+  // steps like a real playing pattern. Not part of the returned data.
+  schedulePlayhead(t, bpm, countInBars, bars) {
+    const stepS = 60.0 / bpm / 4;
+    const start = this.engine.now() + countInBars * (60.0 / bpm * 4);
+    const patIdx = this.ui.currentPattern[t];
+    for (let i = 0; i < bars * 16; i++) {
+      this.seq.visualEvents.push({ type: 'step', time: start + i * stepS, trackId: t, step: i % 32, patIdx });
+    }
+  }
+
   async recordMelody({
     bars = 2, bpm = null, scale_root: scaleRoot = '', scale_type: scaleType = '',
     transpose = 0, latency_ms: latencyMs = 60, click = true, pattern_length: patternLength = 32,
-  } = {}) {
+  } = {}, { visualTrack = null } = {}) {
     scaleIndices(scaleRoot || null, scaleType || null); // validate before recording
     const useBpm = bpm ?? this.seq.bpm;
     const barS = (60.0 / useBpm) * 4;
@@ -718,6 +730,7 @@ export class AgentApi {
 
     await this.ensureAudio();
     if (click) this.scheduleClick(useBpm, (countInBars + bars) * 4);
+    if (visualTrack != null) this.schedulePlayhead(visualTrack, useBpm, countInBars, bars);
     const { audio, sampleRate } = await recordSeconds(this.engine.ctx, totalS);
     const withoutCountIn = audio.subarray(Math.round(countInBars * barS * sampleRate));
 

@@ -159,10 +159,17 @@ class CircuitApp {
     const api = window.webtracks?.api;
     if (!api) { this.lcdMsg('Agent tools not ready yet'); return; }
     const track = AGENT_TRACK_NAMES[t];
+    // Switch to that track's Note view so the pad-grid playhead (below) is
+    // actually visible while singing.
+    this.selectTrack(t);
+    this.ui.noteExpanded = false;
+    this.ui.stepPage = 0;
+    this.updateStepPageButton();
+    this.setView('note');
     this.lcdMsg(`${this.trackName(t)}: get ready to sing…`);
     let result;
     try {
-      result = await api.recordMelody({ bars: 2 });
+      result = await api.recordMelody({ bars: 2 }, { visualTrack: t });
     } catch (err) {
       this.lcdMsg(`Recording failed: ${err.message}`);
       return;
