@@ -140,6 +140,8 @@ export function buildSidebar(root) {
         <button id="btn-agent-disconnect" class="load-btn">Disconnect</button>
       </div>
       <div id="agent-error" class="agent-error" hidden></div>
+      <button id="btn-agent-mic" class="load-btn">Enable microphone</button>
+      <div class="agent-hint">One-time permission so record_melody (sing/hum -> notes) works, including for remote agent calls. Once enabled, Shift + a Synth/MIDI track button records straight onto that track — no agent needed.</div>
       <details class="agent-advanced">
         <summary>Relay URL</summary>
         <input id="agent-relay-url" type="text" spellcheck="false" placeholder="wss://…/ws">

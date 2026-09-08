@@ -11,6 +11,8 @@ import {
 } from './song-compiler.js';
 import { buildPatchBytes } from './patch-builder.js';
 import { suggest } from './schema.js';
+import { transcribe, scaleIndices } from './transcribe.js';
+import { recordSeconds } from './mic.js';
 import {
   MACRO_DESTINATIONS, MOD_MATRIX_SOURCES, MOD_MATRIX_DESTINATIONS,
   SCALE_ROOTS, SCALE_TYPES, REVERB_TYPES, SIDECHAIN_PRESETS,
@@ -689,6 +691,77 @@ export class AgentApi {
     const { entry, replaced } = this.app.storePatchInBank(synth - 1, idx);
     this.app.views.render();
     return { synth: Number(synth), slot: idx, name: entry.name, replaced };
+  }
+
+  // ---------- voice ----------
+  // Plays drum 1 on every beat (accented downbeats), scheduled instantly on
+  // the AudioContext clock, in parallel with the mic capture below.
+  scheduleClick(bpm, beats) {
+    const beatS = 60.0 / bpm;
+    const now = this.engine.now();
+    for (let beat = 0; beat < beats; beat++) {
+      const t = now + beat * beatS;
+      this.app.drums.play(0, t, beat % 4 === 0 ? 127 : 80);
+      this.seq.visualEvents.push({ type: 'drumhit', time: t, trackId: 4, sample: this.app.drums.tracks[0].config.patchSelect });
+    }
+  }
+
+  // Marches the pad-grid playhead across the bars being sung, on `t`, purely
+  // as visual feedback — starts once the count-in ends, wraps every
+  // `length` steps like a real playing pattern of that length. Not part of
+  // the returned data.
+  schedulePlayhead(t, bpm, countInBars, bars, length) {
+    const stepS = 60.0 / bpm / 4;
+    const start = this.engine.now() + countInBars * (60.0 / bpm * 4);
+    const patIdx = this.ui.currentPattern[t];
+    for (let i = 0; i < bars * 16; i++) {
+      this.seq.visualEvents.push({ type: 'step', time: start + i * stepS, trackId: t, step: i % length, patIdx });
+    }
+  }
+
+  async recordMelody({
+    bars = 2, bpm = null, scale_root: scaleRoot = '', scale_type: scaleType = '',
+    transpose = 0, latency_ms: latencyMs = 60, click = true, pattern_length: patternLength = 32,
+  } = {}, { visualTrack = null, visualLength = 32 } = {}) {
+    scaleIndices(scaleRoot || null, scaleType || null); // validate before recording
+    const useBpm = bpm ?? this.seq.bpm;
+    const barS = (60.0 / useBpm) * 4;
+    const countInBars = 1;
+    const totalS = (countInBars + bars) * barS + 0.3;
+
+    await this.ensureAudio();
+    if (click) this.scheduleClick(useBpm, (countInBars + bars) * 4);
+    if (visualTrack != null) this.schedulePlayhead(visualTrack, useBpm, countInBars, bars, visualLength);
+    const { audio, sampleRate } = await recordSeconds(this.engine.ctx, totalS);
+    const withoutCountIn = audio.subarray(Math.round(countInBars * barS * sampleRate));
+
+    const result = transcribe(withoutCountIn, sampleRate, useBpm, {
+      bars, latencyS: latencyMs / 1000.0, transpose,
+      scaleRoot: scaleRoot || null, scaleType: scaleType || null, patternLength,
+    });
+    return { ...result, samplerate: sampleRate };
+  }
+
+  // Applies record_melody's steps to the pattern slot currently selected in
+  // the UI for `track` (no pattern name needed, unlike the agent's
+  // setTrack — this is for the manual "Sing a melody" sidebar button).
+  applyMelodyToTrack(track, steps, clearExisting = true) {
+    const t = trackId(track);
+    const slot = this.ui.currentPattern[t];
+    const length = (this.project.patterns[t][slot].settings.playbackEnd ?? 15) + 1;
+    const existing = patternSlotToSong(this.project, slot).tracks?.[track] ?? {};
+    const cfg = clearExisting
+      ? { ...existing, steps }
+      : { ...existing, steps: { ...(existing.steps ?? {}), ...steps } };
+    validateTrackConfig(track, cfg, length, track);
+    const warnings = [];
+    const compiled = trackConfigToPattern(track, cfg, length, {
+      scaleRoot: this.project.scaleRoot, scaleType: this.project.scaleType, warnings, where: track,
+    });
+    replacePatternSlot(this.project, t, slot, compiled, length);
+    this.app.markProjectDirty();
+    this.app.views.render();
+    return { track, slot: slot + 1, steps: Object.keys(cfg.steps ?? {}).length, length, warnings };
   }
 
   // ---------- undo ----------

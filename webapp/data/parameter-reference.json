@@ -9,6 +9,7 @@
    "mod_matrix": "Valid mod matrix source and destination names (space-separated)",
    "macros": "Valid macro destination names, standard layout, and presets",
    "song_format": "Full JSON Schema for the load_song SongSchema",
+   "voice": "Workflow and tips for record_melody / transcribe_audio_file (singing -> notes)",
    "best_practices": "Operational rules and common pitfalls"
   },
   "usage": "Call get_parameter_reference(section) with one of the section names above to get focused data. For example: get_parameter_reference(\"synth\") for CC/NRPN param names, get_parameter_reference(\"song_format\") for the load_song schema.",
@@ -2110,6 +2111,28 @@
    "title": "SongSchema",
    "type": "object"
   }
+ },
+ "voice": {
+  "section": "voice",
+  "description": "Turn singing, whistling or humming into sequencer notes with record_melody (microphone) or transcribe_audio_file (audio file). Pitch detection is deterministic; the agent's job is choosing the track, octave and scale, then applying the notes.",
+  "workflow": [
+   "1. Optional: list_audio_devices to confirm a microphone is available.",
+   "2. Agree BPM, bars (2 bars = one 32-step pattern) and target track with the user. set_bpm if needed.",
+   "3. Tell the user: 'One-bar count-in on drum 1, then sing for N bars.' Then call record_melody.",
+   "4. Read back the summary and note names. Ask about octave (transpose) and scale snapping if unsure.",
+   "5. Apply with set_track(pattern_name, track, steps) using the returned 'steps' (or each entry of 'patterns' when the melody spans several patterns), then start_sequencer to preview.",
+   "6. For the final song, put the same notes into load_song / export_song_to_project."
+  ],
+  "tips": [
+   "Monophonic only: one note at a time. Chords are not transcribed.",
+   "Repeated notes must be re-articulated ('da da da', not 'daaaa') to be split.",
+   "Vocal range is usually C3-C5: use transpose=-12/-24 for basslines, +12 for leads.",
+   "External MIDI bypasses the device scale engine, so snap with scale_root/scale_type here for live preview.",
+   "If every note lands one step late or early, adjust latency_ms (typical 40-120 ms).",
+   "Quiet or empty results on macOS usually mean the terminal app lacks microphone permission (System Settings > Privacy & Security > Microphone).",
+   "pattern_length must match the rest of the project (all 16 or all 32)."
+  ],
+  "output": "summary, notes[] (step, note, name, gate, velocity, confidence, start_s, duration_s), steps{} ready for set_track, patterns[] split by pattern_length, warnings[]."
  },
  "best_practices": {
   "section": "best_practices",

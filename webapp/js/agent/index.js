@@ -9,7 +9,7 @@ import { exposeWebMCP } from './webmcp.js';
 import { AgentLink } from './link.js';
 import { bindAgentPanel } from './panel.js';
 
-export const AGENT_VERSION = '0.1.0';
+export const AGENT_VERSION = '0.2.0';
 const LOG_LIMIT = 200;
 
 async function loadJson(url) {

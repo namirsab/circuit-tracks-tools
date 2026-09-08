@@ -85,7 +85,7 @@ Three ways in:
   `window.webtracks.list()` from the console or any script runner, e.g.
   Claude in Chrome's JavaScript tool.
 
-Tools (26 + song tools): `get_parameter_reference`, `get_sequencer_status`,
+Tools (27 + song tools): `get_parameter_reference`, `get_sequencer_status`,
 `load_song`, `read_project`, `set_pattern`, `set_track`, `get_pattern`,
 `list_patterns`, `clear_pattern`, `start_sequencer`, `stop_sequencer`,
 `transport`, `set_bpm`, `set_swing`, `queue_patterns`, `set_song`,
@@ -94,15 +94,48 @@ Tools (26 + song tools): `get_parameter_reference`, `get_sequencer_status`,
 `save_synth_patch`, `set_drum_params`, `set_project_params`, `set_macro`, `get_macros`,
 `play_notes`, `play_drum`, `list_drum_samples`, `list_patches`,
 `select_patch`, `list_projects`, `select_project`, `export_song_to_project`,
-`download_project`, `undo`. Call `get_parameter_reference` with no section
-first: it returns the workflow, the rules and Web Tracks specific notes.
-The song format and parameter reference are generated from the Python
-library (`scripts/generate_agent_data.py`) so both servers answer alike.
+`download_project`, `record_melody`, `undo`. Call `get_parameter_reference`
+with no section first: it returns the workflow, the rules and Web Tracks
+specific notes. The song format and parameter reference are generated from
+the Python library (`scripts/generate_agent_data.py`) so both servers answer
+alike.
 
 Browsers block sound until the page has been clicked once; the **Connect**
 button doubles as that click. Tests: `cd webapp && node --test tests/*.test.mjs`
 (the song compiler is checked against golden `.ncs` files produced by the
 Python library).
+
+### Voice to notes
+
+Singing, humming or whistling turns into sequencer steps entirely in the
+browser, two ways:
+
+- **Live, no agent needed:** press **Play**, then hold **Shift** and click a
+  Synth or MIDI track button to arm it (the button pulses red). Sing along
+  with the playing pattern — each note is written straight onto whatever
+  step the transport is crossing as you sing it, the same
+  `Sequencer.recordNote`/`finishRecordedNote` path a human playing pads live
+  uses, so gate quantization and the pad-grid playhead are already correct
+  and already in sync with the real transport (`webapp/js/agent/live-pitch.js`,
+  a streaming/causal pitch tracker, unit-tested against synthetic melodies —
+  see `webapp/js/agent/mic.js`'s `startLiveCapture` for the mic tap). Shift +
+  the same track disarms it; stopping playback disarms it too.
+- **Through an agent:** ask it to record you — the `record_melody` tool
+  captures a fixed number of bars in one batch pass (with its own count-in
+  click) and returns notes ready for `set_track`, so the agent can review
+  them with you before applying. This is the tool a remote MCP client uses
+  over Agent Link; it's unrelated to the live-arm workflow above and still
+  needs **Enable microphone** clicked once in the sidebar first (a real user
+  gesture, so the permission prompt doesn't have to interrupt a later
+  *remote* call). Batch transcription (`webapp/js/agent/transcribe.js`) is a
+  JS port of the hardware server's `circuit_tracks.transcribe`, so both
+  servers answer alike for the same take.
+
+See `get_parameter_reference("voice")` for the agent-facing workflow and
+tips (sing one note at a time, re-articulate repeats, adjust `latency_ms` if
+notes land early/late) — those tips apply to the batch tool; the live-arm
+workflow needs no latency compensation since it writes onto the real,
+already-playing step.
 
 ## What's bundled
 

@@ -20,6 +20,7 @@ A Python library and MCP server for controlling a [Novation Circuit Tracks](http
 - **Sidechain automation** — automate volume ducking across all 4 tracks with preset sidechain curves
 - **Scale quantization** — quantize notes to any of the Circuit Tracks' built-in scales
 - **Live transport** — start/stop sequencer, set BPM, mute tracks, queue patterns
+- **Voice to notes** — sing or hum a melody into the microphone and turn it into sequencer steps (optional `audio` extra)
 
 ## Requirements
 
@@ -39,6 +40,12 @@ pip install circuit-tracks-tools
 
 ```bash
 pip install circuit-tracks-tools[mcp]
+```
+
+### With microphone input (voice to notes)
+
+```bash
+pip install "circuit-tracks-tools[mcp,audio]"
 ```
 
 ## Quick Start: Python Library
@@ -130,6 +137,26 @@ If you prefer a manual setup, install into a virtual environment and use the ful
 }
 ```
 
+## Voice to Notes
+
+With the `audio` extra installed, the agent can turn singing, humming or whistling into sequencer steps:
+
+1. Ask the agent to record a melody, e.g. *"Record me singing 2 bars at 100 BPM and put it on synth 1 in C minor."*
+2. The agent calls `record_melody`: it plays a one-bar count-in on drum 1, records, and returns the detected notes.
+3. Review the notes together, then the agent applies them with `set_track` (or into a full `load_song`).
+
+Tips: sing one note at a time, re-articulate repeated notes ("da da da"), and use `transpose=-12` for basslines. If the
+first recording comes back silent on macOS, grant microphone access to your terminal app (System Settings > Privacy &
+Security > Microphone). To try the pipeline without singing, generate synthetic samples and feed them to
+`transcribe_audio_file`:
+
+```bash
+python scripts/generate_voice_samples.py example-audio
+```
+
+The transcriber is a pure-numpy YIN pitch tracker plus onset segmentation, available from Python as
+`circuit_tracks.transcribe.transcribe(audio, samplerate, bpm)`.
+
 ## No hardware? Use Web Tracks in the browser
 
 [Web Tracks](webapp/) is a browser emulation of the Circuit Tracks that ships in
@@ -139,7 +166,10 @@ works without a device: press **Connect an AI agent…** in its sidebar, add the
 it shows to Claude Code (`claude mcp add --transport http webtracks <url>`), Claude
 Desktop or claude.ai, and watch the agent play on the pads. The URL is served by the
 small [Agent Link relay](link/); the tools also register with WebMCP
-(`document.modelContext`) and as `window.webtracks` on the page. Details in
+(`document.modelContext`) and as `window.webtracks` on the page. Voice to
+notes works here too — `record_melody` runs entirely client-side (mic
+capture + a JS port of the pitch tracker), including through a remote MCP
+client connected over the relay. Details in
 [webapp/README.md](webapp/README.md#ai-agents-mcp) and the design notes in
 [docs/webmcp-plan.md](docs/webmcp-plan.md).
 
@@ -188,6 +218,8 @@ src/circuit_tracks/   # Standalone library for Circuit Tracks control
   song.py             # Song format and device export
   song_schema.py      # Pydantic models and JSON Schema for song format
   morph.py            # Parameter morphing engine
+  transcribe.py       # Voice/melody -> notes (YIN pitch tracking, step quantization)
+  audio_io.py         # Microphone capture and audio file I/O (optional audio extra)
 src/circuit_mcp/      # MCP server (thin wrapper over the library)
   server.py           # All MCP tool definitions
 webapp/               # Web Tracks: browser emulation (static, no build step)

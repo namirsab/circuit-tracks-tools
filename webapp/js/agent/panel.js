@@ -1,5 +1,8 @@
 // Sidebar "AI agent" panel: connect/disconnect the Agent Link, show the MCP
-// URL, a rolling log of tool calls, and an undo button for agent changes.
+// URL, a rolling log of tool calls, an undo button for agent changes, and a
+// microphone-permission button for record_melody.
+import { enableMicrophone, microphonePrimed } from './mic.js';
+
 const STATE_LABEL = { off: 'OFF', connecting: '…', connected: 'LIVE', reconnecting: 'RETRY', error: 'ERROR' };
 
 function summarize(args) {
@@ -13,9 +16,27 @@ export function bindAgentPanel(webtracks, app) {
     state: $('agent-state'), connect: $('btn-agent-connect'), connected: $('agent-connected'),
     url: $('agent-url'), copy: $('btn-agent-copy'), disconnect: $('btn-agent-disconnect'),
     relay: $('agent-relay-url'), log: $('agent-log'), undo: $('btn-agent-undo'), error: $('agent-error'),
+    mic: $('btn-agent-mic'),
   };
   if (!els.connect) return;
   const { link } = webtracks;
+
+  if (els.mic) {
+    if (microphonePrimed()) { els.mic.textContent = 'Microphone enabled'; els.mic.disabled = true; }
+    els.mic.addEventListener('click', async () => {
+      els.mic.disabled = true;
+      els.mic.textContent = 'Requesting…';
+      try {
+        await enableMicrophone();
+        els.mic.textContent = 'Microphone enabled';
+      } catch (err) {
+        els.mic.textContent = 'Enable microphone';
+        els.mic.disabled = false;
+        els.error.textContent = `Microphone: ${err.message}`;
+        els.error.hidden = false;
+      }
+    });
+  }
 
   els.relay.value = link.url;
   els.relay.addEventListener('change', () => { link.setUrl(els.relay.value); els.relay.value = link.url; });
