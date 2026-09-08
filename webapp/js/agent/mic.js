@@ -86,3 +86,40 @@ export async function recordSeconds(ctx, seconds) {
     stream.getTracks().forEach((t) => t.stop());
   }
 }
+
+/**
+ * Continuous mic capture for the live-arm workflow (see live-pitch.js):
+ * `onChunk(Float32Array, sampleRate)` fires on every audio buffer until
+ * `stop()` is called. Unlike recordSeconds() this has no fixed duration or
+ * timeout — the caller (an armed track) decides when it ends.
+ */
+export async function startLiveCapture(ctx, onChunk) {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    });
+  } catch (err) {
+    throw new Error(`Microphone unavailable: ${err.message}. Click "Enable microphone" in the AI agent panel and retry.`);
+  }
+  permissionPrimed = true;
+
+  const source = ctx.createMediaStreamSource(stream);
+  const processor = ctx.createScriptProcessor(4096, 1, 1);
+  const sink = ctx.createGain();
+  sink.gain.value = 0; // ScriptProcessorNode only runs while connected to a destination
+  processor.onaudioprocess = (e) => onChunk(Float32Array.from(e.inputBuffer.getChannelData(0)), ctx.sampleRate);
+  source.connect(processor);
+  processor.connect(sink);
+  sink.connect(ctx.destination);
+
+  return {
+    stop() {
+      processor.onaudioprocess = null;
+      processor.disconnect();
+      source.disconnect();
+      sink.disconnect();
+      stream.getTracks().forEach((t) => t.stop());
+    },
+  };
+}

@@ -14,7 +14,8 @@ import { Persistence, showRestorePrompt } from './persistence.js';
 import { readZip, writeZip } from './zip.js';
 import { ncsToMidi } from './scales.js';
 import { initAgent } from './agent/index.js';
-import { TRACK_NAMES as AGENT_TRACK_NAMES } from './agent/song-compiler.js';
+import { LivePitchTracker } from './agent/live-pitch.js';
+import { startLiveCapture } from './agent/mic.js';
 import {
   TRACKS, TRACK_COLORS, SEND_ORDER, SCALE_TYPES, SCALE_ROOTS,
   REVERB_PRESETS, DELAY_PRESETS, REVERB_TYPES, REVERB_PRESET_NAMES, DELAY_PRESET_NAMES,
@@ -51,6 +52,7 @@ class CircuitApp {
     this.masterFilterValue = 64;
     this.shiftLatched = false;
     this.shiftMomentary = false;
+    this.voiceArmedTrack = null; // track index currently armed for live voice input, or null
 
     const { pads, macroKnobs, trackButtons } = buildPanel(document.getElementById('panel-root'));
     this.pads = pads;
@@ -152,40 +154,61 @@ class CircuitApp {
   reverbPresetName(i) { return REVERB_PRESET_NAMES[i] ?? `${i + 1}`; }
   ncsNoteToMidi(ncs) { return ncsToMidi(ncs, this.project.scaleRoot, this.project.scaleType); }
 
-  // Shift + a synth/MIDI track button: sing/hum as many bars as that
-  // track's currently selected pattern holds, then apply straight onto it.
-  // No agent connection needed — window.webtracks.api is the same headless
-  // API the agent tools use.
-  async recordVoiceOnto(t) {
-    const api = window.webtracks?.api;
-    if (!api) { this.lcdMsg('Agent tools not ready yet'); return; }
-    const track = AGENT_TRACK_NAMES[t];
-    const slot = this.ui.currentPattern[t];
-    const length = (this.project.patterns[t][slot].settings.playbackEnd ?? 15) + 1;
-    const bars = Math.max(1, Math.round(length / 16));
-    // Switch to that track's Note view so the pad-grid playhead (below) is
-    // actually visible while singing.
-    this.selectTrack(t);
-    this.ui.noteExpanded = false;
-    this.ui.stepPage = 0;
-    this.updateStepPageButton();
-    this.setView('note');
-    this.lcdMsg(`${this.trackName(t)}: get ready to sing (${bars} bar${bars > 1 ? 's' : ''})…`);
-    let result;
+  // Shift + a synth/MIDI track button: arm/disarm live voice input on that
+  // track. While armed and the sequencer is playing, singing writes notes
+  // straight onto whichever step is playing right now — the same
+  // Sequencer.recordNote()/finishRecordedNote() path a human playing pads
+  // live uses (see liveNoteOn/liveNoteOff above), so gate quantization and
+  // the pad-grid playhead are already correct and already in sync with the
+  // real transport; nothing synthetic to keep aligned with it.
+  async toggleVoiceArm(t) {
+    if (this.voiceArmedTrack === t) { this.disarmVoice('Voice off'); return; }
+    if (this.voiceArmedTrack != null) this.disarmVoice();
+    if (!this.seq.playing) { this.lcdMsg('Press Play, then Shift+track to sing along'); return; }
+
+    let capture;
     try {
-      result = await api.recordMelody({ bars, pattern_length: length }, { visualTrack: t, visualLength: length });
+      capture = await startLiveCapture(this.engine.ctx, (chunk) => this.voiceTracker?.push(chunk));
     } catch (err) {
-      this.lcdMsg(`Recording failed: ${err.message}`);
+      this.lcdMsg(`Microphone: ${err.message}`);
       return;
     }
-    const noteCount = Object.keys(result.steps ?? {}).length;
-    if (!noteCount) { this.lcdMsg('No notes detected — try again'); return; }
-    try {
-      const applied = api.applyMelodyToTrack(track, result.steps);
-      this.lcdMsg(`${this.trackName(t)}: applied ${applied.steps} notes`);
-    } catch (err) {
-      this.lcdMsg(`Couldn't apply: ${err.message}`);
-    }
+
+    let liveRec = null;
+    this.voiceTracker = new LivePitchTracker(this.engine.ctx.sampleRate, {
+      onNoteOn: (midi, velocity) => {
+        const ncs = Math.max(0, Math.min(127, midi - this.project.scaleRoot + 12));
+        liveRec = this.seq.recordNote(t, ncs, this.ui.fixedVelocity ? 96 : velocity);
+      },
+      onNoteOff: () => {
+        if (liveRec) {
+          this.seq.finishRecordedNote(liveRec);
+          liveRec = null;
+          this.views.render();
+        }
+      },
+    });
+    this.voiceArmedTrack = t;
+    this.voiceCapture = capture;
+
+    // Switch to that track's Note view so the (real) playhead is visible.
+    this.selectTrack(t);
+    this.ui.noteExpanded = false;
+    this.setView('note');
+    this.trackButtons[t].classList.add('voice-armed');
+    this.lcdMsg(`${this.trackName(t)}: sing along — Shift+${this.trackName(t)} to stop`);
+  }
+
+  disarmVoice(msg) {
+    const t = this.voiceArmedTrack;
+    if (t == null) return;
+    this.voiceCapture?.stop();
+    this.voiceTracker?.flush(); // finishes a note still sounding, via onNoteOff
+    this.trackButtons[t]?.classList.remove('voice-armed');
+    this.voiceArmedTrack = null;
+    this.voiceCapture = null;
+    this.voiceTracker = null;
+    if (msg) this.lcdMsg(msg);
   }
 
   currentEditPattern() {
@@ -352,7 +375,7 @@ class CircuitApp {
       b.addEventListener('click', () => {
         const t = Number(b.dataset.track);
         if (this.ui.shift && this.trackKind(t) !== 'drum') {
-          this.recordVoiceOnto(t);
+          this.toggleVoiceArm(t);
           return;
         }
         this.selectTrack(t);
@@ -1720,7 +1743,10 @@ class CircuitApp {
 
   onTransport(playing) {
     document.getElementById('btn-play').classList.toggle('active', playing);
-    if (!playing) this.views.clearPlayheads();
+    if (!playing) {
+      this.views.clearPlayheads();
+      this.disarmVoice(this.voiceArmedTrack != null ? 'Voice off (playback stopped)' : null);
+    }
   }
 
   onPatternEdited() { this.markProjectDirty(); }

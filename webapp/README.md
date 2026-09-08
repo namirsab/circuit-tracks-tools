@@ -107,30 +107,35 @@ Python library).
 
 ### Voice to notes
 
-`record_melody` turns singing, humming or whistling into sequencer steps
-entirely in the browser — pitch tracking, note segmentation and step
-quantization are a JS port of the hardware server's `circuit_tracks.transcribe`
-(`webapp/js/agent/transcribe.js`, unit-tested against synthetic melodies the
-same way), so both servers answer alike for the same take.
+Singing, humming or whistling turns into sequencer steps entirely in the
+browser, two ways:
 
-Click **Enable microphone** in the sidebar once (a real user gesture, so the
-browser's permission prompt doesn't need to interrupt a later *remote* agent
-call over the relay). After that:
+- **Live, no agent needed:** press **Play**, then hold **Shift** and click a
+  Synth or MIDI track button to arm it (the button pulses red). Sing along
+  with the playing pattern — each note is written straight onto whatever
+  step the transport is crossing as you sing it, the same
+  `Sequencer.recordNote`/`finishRecordedNote` path a human playing pads live
+  uses, so gate quantization and the pad-grid playhead are already correct
+  and already in sync with the real transport (`webapp/js/agent/live-pitch.js`,
+  a streaming/causal pitch tracker, unit-tested against synthetic melodies —
+  see `webapp/js/agent/mic.js`'s `startLiveCapture` for the mic tap). Shift +
+  the same track disarms it; stopping playback disarms it too.
+- **Through an agent:** ask it to record you — the `record_melody` tool
+  captures a fixed number of bars in one batch pass (with its own count-in
+  click) and returns notes ready for `set_track`, so the agent can review
+  them with you before applying. This is the tool a remote MCP client uses
+  over Agent Link; it's unrelated to the live-arm workflow above and still
+  needs **Enable microphone** clicked once in the sidebar first (a real user
+  gesture, so the permission prompt doesn't have to interrupt a later
+  *remote* call). Batch transcription (`webapp/js/agent/transcribe.js`) is a
+  JS port of the hardware server's `circuit_tracks.transcribe`, so both
+  servers answer alike for the same take.
 
-- **No agent needed:** hold **Shift** and click a Synth or MIDI track
-  button. It plays a one-bar count-in on drum 1, records 2 bars while the
-  click continues, and writes the detected notes straight onto that track's
-  currently selected pattern slot.
-- **Through an agent:** ask it to record you — same `record_melody` tool,
-  returning notes ready for `set_track` so the agent can review them with
-  you first. Works the same way whether the client is local
-  (`window.webtracks`) or a remote MCP client connected through Agent Link —
-  the relay just forwards the tool call to the open tab, which does the
-  recording.
-
-See `get_parameter_reference("voice")` for the full agent workflow and tips
-(sing one note at a time, re-articulate repeats, adjust `latency_ms` if
-notes land early/late).
+See `get_parameter_reference("voice")` for the agent-facing workflow and
+tips (sing one note at a time, re-articulate repeats, adjust `latency_ms` if
+notes land early/late) — those tips apply to the batch tool; the live-arm
+workflow needs no latency compensation since it writes onto the real,
+already-playing step.
 
 ## What's bundled
 

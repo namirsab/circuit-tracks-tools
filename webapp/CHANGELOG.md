@@ -6,6 +6,25 @@ Python library that lives in the same repository.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.5.0] — 2026-09-08
+
+### Changed
+
+- **Voice to notes: Shift+track now arms live singing instead of one-shot
+  recording.** Press Play, hold Shift and click a Synth/MIDI track button to
+  arm it (it pulses red); sing along and notes are written straight onto the
+  step the transport is crossing right now, via the same
+  `Sequencer.recordNote`/`finishRecordedNote` path a human playing pads live
+  uses — the pad-grid playhead and gate quantization are already correct and
+  already in sync with the real transport, since nothing is running on a
+  separate clock. Replaces the previous batch flow (self-generated count-in
+  click + synthetic playhead), whose two clocks would drift out of sync with
+  an already-running sequencer. New `webapp/js/agent/live-pitch.js`
+  (streaming/causal YIN-based onset+offset detection, unit-tested) and
+  `startLiveCapture` in `webapp/js/agent/mic.js` (continuous mic tap). The
+  agent-facing `record_melody` tool (batch, one-shot, with a count-in) is
+  unchanged — still used for remote/agent-driven takes over Agent Link.
+
 ## [1.4.0] — 2026-09-08
 
 ### Added

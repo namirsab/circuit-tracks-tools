@@ -318,6 +318,15 @@ body.sidebar-hidden #sidebar { display: none; }
   color: #101014;
   font-weight: 700;
 }
+.track-btn.voice-armed {
+  outline: 2px solid #ff5a5a;
+  outline-offset: 1px;
+  animation: voice-armed-pulse 1.1s ease-in-out infinite;
+}
+@keyframes voice-armed-pulse {
+  0%, 100% { outline-color: #ff5a5a; }
+  50% { outline-color: #ff9a9a; }
+}
 
 /* ---------- Main area ---------- */
 .main-area {
