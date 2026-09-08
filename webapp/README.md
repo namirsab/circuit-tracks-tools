@@ -115,14 +115,22 @@ same way), so both servers answer alike for the same take.
 
 Click **Enable microphone** in the sidebar once (a real user gesture, so the
 browser's permission prompt doesn't need to interrupt a later *remote* agent
-call over the relay). After that, ask the agent to record you: it plays a
-one-bar count-in on drum 1, records `bars` bars while the click continues,
-and returns the detected notes ready for `set_track`. Works the same way
-whether the client is local (`window.webtracks`) or a remote MCP client
-connected through Agent Link — the relay just forwards the tool call to the
-open tab, which does the recording. See `get_parameter_reference("voice")`
-for the full workflow and tips (sing one note at a time, re-articulate
-repeats, adjust `latency_ms` if notes land early/late).
+call over the relay). After that:
+
+- **No agent needed:** hold **Shift** and click a Synth or MIDI track
+  button. It plays a one-bar count-in on drum 1, records 2 bars while the
+  click continues, and writes the detected notes straight onto that track's
+  currently selected pattern slot.
+- **Through an agent:** ask it to record you — same `record_melody` tool,
+  returning notes ready for `set_track` so the agent can review them with
+  you first. Works the same way whether the client is local
+  (`window.webtracks`) or a remote MCP client connected through Agent Link —
+  the relay just forwards the tool call to the open tab, which does the
+  recording.
+
+See `get_parameter_reference("voice")` for the full agent workflow and tips
+(sing one note at a time, re-articulate repeats, adjust `latency_ms` if
+notes land early/late).
 
 ## What's bundled
 

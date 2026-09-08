@@ -14,6 +14,7 @@ import { Persistence, showRestorePrompt } from './persistence.js';
 import { readZip, writeZip } from './zip.js';
 import { ncsToMidi } from './scales.js';
 import { initAgent } from './agent/index.js';
+import { TRACK_NAMES as AGENT_TRACK_NAMES } from './agent/song-compiler.js';
 import {
   TRACKS, TRACK_COLORS, SEND_ORDER, SCALE_TYPES, SCALE_ROOTS,
   REVERB_PRESETS, DELAY_PRESETS, REVERB_TYPES, REVERB_PRESET_NAMES, DELAY_PRESET_NAMES,
@@ -150,6 +151,31 @@ class CircuitApp {
   delayPresetName(i) { return DELAY_PRESET_NAMES[i] ?? `${i + 1}`; }
   reverbPresetName(i) { return REVERB_PRESET_NAMES[i] ?? `${i + 1}`; }
   ncsNoteToMidi(ncs) { return ncsToMidi(ncs, this.project.scaleRoot, this.project.scaleType); }
+
+  // Shift + a synth/MIDI track button: sing/hum 2 bars, apply straight onto
+  // that track's currently selected pattern slot. No agent connection needed
+  // — window.webtracks.api is the same headless API the agent tools use.
+  async recordVoiceOnto(t) {
+    const api = window.webtracks?.api;
+    if (!api) { this.lcdMsg('Agent tools not ready yet'); return; }
+    const track = AGENT_TRACK_NAMES[t];
+    this.lcdMsg(`${this.trackName(t)}: get ready to sing…`);
+    let result;
+    try {
+      result = await api.recordMelody({ bars: 2 });
+    } catch (err) {
+      this.lcdMsg(`Recording failed: ${err.message}`);
+      return;
+    }
+    const noteCount = Object.keys(result.steps ?? {}).length;
+    if (!noteCount) { this.lcdMsg('No notes detected — try again'); return; }
+    try {
+      const applied = api.applyMelodyToTrack(track, result.steps);
+      this.lcdMsg(`${this.trackName(t)}: applied ${applied.steps} notes`);
+    } catch (err) {
+      this.lcdMsg(`Couldn't apply: ${err.message}`);
+    }
+  }
 
   currentEditPattern() {
     const t = this.ui.currentTrack;
@@ -313,7 +339,12 @@ class CircuitApp {
 
     this.trackButtons.forEach((b) => {
       b.addEventListener('click', () => {
-        this.selectTrack(Number(b.dataset.track));
+        const t = Number(b.dataset.track);
+        if (this.ui.shift && this.trackKind(t) !== 'drum') {
+          this.recordVoiceOnto(t);
+          return;
+        }
+        this.selectTrack(t);
         this.ui.noteExpanded = false;
         this.setView('note'); // track buttons always open Note View
       });
