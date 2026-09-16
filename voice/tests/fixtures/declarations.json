@@ -421,6 +421,15 @@
           "maximum": 127,
           "default": 100
         },
+        "velocities": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 127
+          },
+          "description": "per-note velocities, cycled when shorter (accents: [110, 70])"
+        },
         "replace": {
           "type": "boolean",
           "default": false
@@ -465,6 +474,15 @@
           "maximum": 127,
           "default": 100
         },
+        "velocities": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 127
+          },
+          "description": "per-hit velocities in step order, cycled when shorter ([110, 70] = accents)"
+        },
         "replace": {
           "type": "boolean",
           "default": false
@@ -473,6 +491,91 @@
       "required": [
         "track",
         "steps"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Change one existing step of a track: its velocity, note (synth) or gate, e.g. 'Schritt 5 lauter'. Spoken 1-based step.",
+    "name": "set_step",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string"
+        },
+        "track": {
+          "type": "string"
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "velocity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 127
+        },
+        "note": {
+          "type": "string"
+        },
+        "gate": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 16
+        }
+      },
+      "required": [
+        "track",
+        "step"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "The drum samples on the device by number and name (64 per page of the bank, page 1-4).",
+    "name": "list_drum_samples",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      }
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Choose the sample (1-64, by number or by a word from its name such as 'Snare') for drum 1-4. The device cannot switch samples live over MIDI, so it is stored in the song and audible after saving to the device and playing the project from there. Says so.",
+    "name": "set_drum_sample",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "drum": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "drum"
       ]
     },
     "behavior": "BLOCKING"
@@ -634,7 +737,7 @@
     "behavior": "NON_BLOCKING"
   },
   {
-    "description": "Have a musical idea written for ONE track by a text model (a few seconds): 'groovige Bassline auf Synth 2', 'Hi-Hat-Pattern mit Offbeats auf drum3'. Replaces that track only; the rest of the song stays. Say you are working on it and stay responsive.",
+    "description": "Have a musical idea written for ONE track by a text model (a few seconds): 'groovige Bassline auf Synth 2', 'Hi-Hat-Pattern mit Offbeats auf drum3'. Replaces that track only. Without confirmed it returns how long it takes and the question to ask; after a clear yes call again with confirmed=true.",
     "name": "generate_track",
     "parameters_json_schema": {
       "type": "object",
@@ -647,6 +750,10 @@
         },
         "brief": {
           "type": "string"
+        },
+        "confirmed": {
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -657,7 +764,7 @@
     "behavior": "NON_BLOCKING"
   },
   {
-    "description": "Design a new synth sound from a description ('warmer, weicher Bass mit langsamem Filter') and load it into synth 1 or 2 (working memory, not saved). Takes a few seconds; stay responsive.",
+    "description": "Design a new synth sound from a description ('warmer, weicher Bass mit langsamem Filter') and load it into synth 1 or 2 (working memory, not saved). Without confirmed it returns the question to ask first.",
     "name": "design_patch",
     "parameters_json_schema": {
       "type": "object",
@@ -707,13 +814,17 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Build a new song from a German brief (style, tempo, key, mood, instruments). Runs in the background for about half a minute: say you are working on it, stay responsive, and summarise when the result arrives. Replaces the loaded song.",
+    "description": "Build a new song from a German brief (style, tempo, key, mood, instruments). Runs in the background for about half a minute. Without confirmed it returns the question to ask first. Replaces the loaded song.",
     "name": "compose",
     "parameters_json_schema": {
       "type": "object",
       "properties": {
         "brief": {
           "type": "string"
+        },
+        "confirmed": {
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -723,13 +834,17 @@
     "behavior": "NON_BLOCKING"
   },
   {
-    "description": "Change the loaded song by instruction ('Hi-Hats leiser', 'Bassline auf Synth 2 dazu', 'Chorus doppelt so lang'). Runs in the background; keeps the music playing where possible.",
+    "description": "Change the loaded song by instruction ('Hi-Hats leiser', 'Bassline auf Synth 2 dazu', 'Chorus doppelt so lang'). Slow (half a minute or more). Without confirmed it returns the question to ask first.",
     "name": "revise",
     "parameters_json_schema": {
       "type": "object",
       "properties": {
         "instruction": {
           "type": "string"
+        },
+        "confirmed": {
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -755,26 +870,6 @@
       "type": "object",
       "properties": {},
       "required": []
-    },
-    "behavior": "BLOCKING"
-  },
-  {
-    "description": "Switch between 'control' (Steuermodus: only exact, instant commands; the agent never invents music) and 'creative' (Kreativmodus: additionally generate_track, design_patch, compose, revise). Takes a moment; the session reconnects.",
-    "name": "set_agent_mode",
-    "parameters_json_schema": {
-      "type": "object",
-      "properties": {
-        "mode": {
-          "type": "string",
-          "enum": [
-            "control",
-            "creative"
-          ]
-        }
-      },
-      "required": [
-        "mode"
-      ]
     },
     "behavior": "BLOCKING"
   },

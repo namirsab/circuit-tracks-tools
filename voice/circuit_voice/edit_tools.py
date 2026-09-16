@@ -58,6 +58,15 @@ def parse_notes(spoken: Any) -> list[int]:
     return [note_number(t) for t in tokens]
 
 
+def _velocities(raw: Any, default: int) -> list[int]:
+    if not raw:
+        return [default]
+    if isinstance(raw, str):
+        raw = [t for t in re.split(r"[\s,;]+", raw) if t]
+    out = [_int_in_range({"v": v}, "v", 1, 127, "Die Anschlagstärke") for v in raw]
+    return out or [default]
+
+
 def empty_song(name: str, bpm: float) -> dict[str, Any]:
     return {
         "name": name[:16],
@@ -150,6 +159,7 @@ def register_edit_tools(bridge: Bridge) -> None:
         gate = float(args.get("gate") or spacing)
         gate = max(0.25, min(16.0, gate))
         velocity = _int_in_range({"v": args.get("velocity", 100)}, "v", 1, 127, "Die Anschlagstärke")
+        velocities = _velocities(args.get("velocities"), velocity)
         name, pat = pattern(args.get("pattern"))
         length = int(pat.get("length", DEFAULT_LENGTH))
         tracks = pat.setdefault("tracks", {})
@@ -167,7 +177,7 @@ def register_edit_tools(bridge: Bridge) -> None:
             idx = start + i * spacing
             if idx >= length:
                 break
-            steps[str(idx)] = {"note": note, "velocity": velocity, "gate": gate}
+            steps[str(idx)] = {"note": note, "velocity": velocities[i % len(velocities)], "gate": gate}
             placed += 1
         tracks[track] = {"steps": steps}
         error = await push(name, track, steps, previous=before)
@@ -187,14 +197,15 @@ def register_edit_tools(bridge: Bridge) -> None:
         if not raw:
             raise ArgumentError("Ich brauche mindestens einen Schritt, zum Beispiel 1, 5, 9, 13.")
         velocity = _int_in_range({"v": args.get("velocity", 100)}, "v", 1, 127, "Die Anschlagstärke")
+        velocities = _velocities(args.get("velocities"), velocity)
         name, pat = pattern(args.get("pattern"))
         length = int(pat.get("length", DEFAULT_LENGTH))
         tracks = pat.setdefault("tracks", {})
         before = copy.deepcopy((tracks.get(track) or {}).get("steps") or {})
         steps: dict[str, Any] = {} if args.get("replace") else dict(before)
-        for item in raw:
+        for i, item in enumerate(raw):
             n = _int_in_range({"n": item}, "n", 1, length, "Der Schritt")
-            steps[str(n - 1)] = {"velocity": velocity}
+            steps[str(n - 1)] = {"velocity": velocities[i % len(velocities)]}
         tracks[track] = {"steps": steps}
         error = await push(name, track, steps, previous=before)
         if error:
@@ -214,6 +225,67 @@ def register_edit_tools(bridge: Bridge) -> None:
             return error
         return f"{track} in {name} ist leer."
 
+    async def set_step(args: dict[str, Any]) -> str:
+        track = str(args.get("track", "")).lower()
+        if track not in SYNTH_TRACKS + DRUM_TRACKS:
+            raise ArgumentError("Welche Spur? synth1, synth2, drum1 bis drum4, midi1 oder midi2.")
+        name, pat = pattern(args.get("pattern"))
+        length = int(pat.get("length", DEFAULT_LENGTH))
+        n = _int_in_range(args, "step", 1, length, "Der Schritt")
+        tracks = pat.setdefault("tracks", {})
+        before = copy.deepcopy((tracks.get(track) or {}).get("steps") or {})
+        steps = dict(before)
+        step = dict(steps.get(str(n - 1)) or {})
+        if not step:
+            return f"Auf Schritt {n} von {track} liegt nichts. Sag mir erst, was da hin soll."
+        changes = []
+        if args.get("velocity") is not None:
+            step["velocity"] = _int_in_range(args, "velocity", 1, 127, "Die Anschlagstärke")
+            changes.append(f"Anschlag {step['velocity']}")
+        if args.get("note") is not None and track in SYNTH_TRACKS:
+            step["note"] = note_number(args["note"])
+            step.pop("notes", None)
+            changes.append(f"Note {args['note']}")
+        if args.get("gate") is not None and track in SYNTH_TRACKS:
+            step["gate"] = max(0.25, min(16.0, float(args["gate"])))
+            changes.append(f"Länge {step['gate']}")
+        if not changes:
+            raise ArgumentError("Was soll sich an dem Schritt ändern: Anschlag, Note oder Länge?")
+        steps[str(n - 1)] = step
+        tracks[track] = {"steps": steps}
+        error = await push(name, track, steps, previous=before)
+        return error or f"Schritt {n} auf {track}: {', '.join(changes)}."
+
+    async def set_drum_sample(args: dict[str, Any]) -> str:
+        drum = _int_in_range(args, "drum", 1, 4, "Die Drum-Nummer")
+        data = song()
+        number = args.get("number")
+        label = ""
+        if number is None:
+            query = str(args.get("name") or "").strip().lower()
+            if not query:
+                raise ArgumentError("Sag mir die Sample-Nummer (1 bis 64) oder ein Wort aus dem Namen.")
+            listing = await backend.call("list_drum_samples", {})
+            samples = (listing.data or {}).get("samples", {}) if isinstance(listing.data, dict) else {}
+            hits = [(int(k), v) for k, v in samples.items() if query in str(v).lower()]
+            if not hits:
+                return f"Kein Sample-Name enthält '{query}'. Frag mit list_drum_samples nach den Namen."
+            number, label = hits[0][0] + 1, str(hits[0][1])
+        number = _int_in_range({"n": number}, "n", 1, 64, "Die Sample-Nummer")
+        sounds = data.setdefault("sounds", {})
+        entry = dict(sounds.get(f"drum{drum}") or {})
+        entry["sample"] = number - 1
+        sounds[f"drum{drum}"] = entry
+        ledger.unsaved = True
+        # The CC route (patch_select) does not switch samples on this firmware; the project export does.
+        shown = f"{number} ({label})" if label else str(number)
+        return (
+            f"Drum {drum} bekommt Sample {shown}. Das Gerät wechselt Samples nicht live über MIDI; "
+            "hörbar wird es nach dem Speichern und Abspielen vom Gerät."
+        )
+
+    bridge.register_virtual("set_step", set_step)
+    bridge.register_virtual("set_drum_sample", set_drum_sample)
     bridge.register_internal("restore_track", restore_track)
     bridge.register_virtual("new_song", new_song)
     bridge.register_virtual("write_notes", write_notes)

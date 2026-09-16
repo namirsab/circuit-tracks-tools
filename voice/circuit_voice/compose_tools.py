@@ -28,10 +28,16 @@ def register_compose_tools(bridge: Bridge, composer: Composer) -> None:
             await bridge.dispatch("start_sequencer", {})
         return summary(song, verb)
 
-    async def compose(args: dict[str, Any]) -> str:
+    async def compose(args: dict[str, Any]) -> Any:
         brief = str(args.get("brief", "")).strip()
         if not brief:
             return "Sag mir, was für Musik du möchtest: Stil, Tempo, Stimmung."
+        if not args.get("confirmed"):
+            return {
+                "needs_confirmation": f"Einen ganzen Song bauen ({brief[:60]}) dauert etwa eine halbe Minute und "
+                "ersetzt den geladenen Song. Soll ich?",
+                "hint": "Ask; on yes call compose again with confirmed=true.",
+            }
         ledger.composer_job = brief
         try:
             song = await composer.compose(brief)
@@ -41,10 +47,16 @@ def register_compose_tools(bridge: Bridge, composer: Composer) -> None:
             ledger.composer_job = None
         return await load_new(song, song.get("name") or brief[:16], "Fertig gebaut")
 
-    async def revise(args: dict[str, Any]) -> str:
+    async def revise(args: dict[str, Any]) -> Any:
         instruction = str(args.get("instruction", "")).strip()
         if ledger.song_json is None:
             return "Es ist kein Song geladen, den ich ändern könnte."
+        if not args.get("confirmed"):
+            return {
+                "needs_confirmation": f"Den ganzen Song umbauen ({instruction[:60]}) dauert bis zu einer Minute. "
+                "Soll ich?",
+                "hint": "Ask; on yes call revise again with confirmed=true.",
+            }
         old = ledger.song_json
         ledger.composer_job = instruction
         try:

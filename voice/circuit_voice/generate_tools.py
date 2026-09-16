@@ -96,7 +96,7 @@ def register_generate_tools(bridge: Bridge, model: ComposerModel, patch_schema: 
 
     bridge.generate_prepare = prepare  # type: ignore[attr-defined]
 
-    async def generate_track(args: dict[str, Any]) -> str:
+    async def generate_track(args: dict[str, Any]) -> Any:
         track = str(args.get("track", "")).lower()
         if track not in SYNTH_TRACKS + DRUM_TRACKS:
             raise ArgumentError("Welche Spur? synth1, synth2, drum1 bis drum4, midi1 oder midi2.")
@@ -105,6 +105,12 @@ def register_generate_tools(bridge: Bridge, model: ComposerModel, patch_schema: 
             raise ArgumentError("Sag mir, wie die Spur klingen soll.")
         if ledger.song_json is None:
             raise ArgumentError("Es ist kein Song geladen. Sag 'neuer Song' oder lade einen.")
+        if not args.get("confirmed"):
+            return {
+                "needs_confirmation": f"{track}: {brief[:60]} bauen lassen? Das dauert etwa zehn Sekunden und ersetzt "
+                f"die Spur.",
+                "hint": "Ask; on yes call generate_track again with confirmed=true.",
+            }
         song = ledger.song_json
         pattern_name = str(args.get("pattern") or ledger.first_pattern() or next(iter(song["patterns"])))
         key = pattern_name.strip().lower().replace(" ", "")
@@ -165,11 +171,17 @@ def register_generate_tools(bridge: Bridge, model: ComposerModel, patch_schema: 
         )
         return f"{track} in {key} hat jetzt {len(steps)} Schritte: {brief[:60]}."
 
-    async def design_patch(args: dict[str, Any]) -> str:
+    async def design_patch(args: dict[str, Any]) -> Any:
         synth = _int_in_range(args, "synth", 1, 2, "Der Synth")
         brief = str(args.get("brief", "")).strip()
         if not brief:
             raise ArgumentError("Beschreib den Sound: zum Beispiel 'warmer, weicher Bass mit langsamem Filter'.")
+        if not args.get("confirmed"):
+            return {
+                "needs_confirmation": f"Einen Sound für Synth {synth} entwerfen ({brief[:50]})? Das dauert etwa zehn "
+                "Sekunden und ersetzt den aktuellen Sound auf dem Synth (nicht gespeichert).",
+                "hint": "Ask; on yes call design_patch again with confirmed=true.",
+            }
         schema = patch_schema or await backend.input_schema("create_synth_patch")
         schema = {k: v for k, v in schema.items() if k != "title"}
         props = {k: v for k, v in schema.get("properties", {}).items() if k != "synth"}

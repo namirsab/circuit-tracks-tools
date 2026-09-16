@@ -62,3 +62,7 @@
 {"say": "Kick auf eins, fünf, neun und dreizehn.", "tool": "write_drums", "args": {"track": "drum1", "steps": [1, 5, 9, 13]}, "state": "loaded"}
 {"say": "Snare auf fünf und dreizehn.", "tool": "write_drums", "args": {"track": "drum2", "steps": [5, 13]}, "state": "loaded"}
 {"say": "Lösch die Hi-Hats in Pattern eins.", "tool": "clear_track", "args": {"track": "drum3"}, "state": "loaded"}
+{"say": "Hi-Hats auf jedem Schritt, aber jeder zweite leiser.", "tool": "write_drums", "args": {"track": "drum3", "velocities": "*"}, "state": "loaded"}
+{"say": "Schritt fünf auf der Kick lauter.", "tool": "set_step", "args": {"track": "drum1", "step": 5, "velocity": "*"}, "state": "loaded"}
+{"say": "Nimm für Drum zwei ein anderes Snare-Sample.", "tool": ["set_drum_sample", "list_drum_samples"], "state": "loaded"}
+{"say": "Welche Drum-Samples gibt es?", "tool": "list_drum_samples"}

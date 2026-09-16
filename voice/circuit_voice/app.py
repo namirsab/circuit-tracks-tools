@@ -110,14 +110,6 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
             warn = " Am besten mit Kopfhörern, sonst höre ich die Musik mit." if mode == "open" else ""
             return f"Ich höre jetzt so zu: {names[mode]}.{warn}"
 
-        async def set_agent_mode(args: dict[str, Any]) -> str:
-            mode = str(args.get("mode", "")).lower()
-            await bridge.set_profile(mode)
-            asyncio.get_running_loop().create_task(session.request_reconnect())
-            names = {"control": "Steuermodus", "creative": "Kreativmodus"}
-            return f"{names[bridge.profile]} ist an; ich verbinde kurz neu."
-
-        bridge.register_virtual("set_agent_mode", set_agent_mode)
         bridge.register_virtual("set_listening", set_listening)
         hint = listen.start_terminal() if config.key_source == "terminal" else listen.start()
         if hint:

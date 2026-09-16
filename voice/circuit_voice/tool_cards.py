@@ -227,6 +227,11 @@ CARDS: list[ToolCard] = [
                 "spacing": {"type": "integer", "minimum": 1, "maximum": 32, "default": 4},
                 "gate": {"type": "number", "minimum": 0.25, "maximum": 16},
                 "velocity": {"type": "integer", "minimum": 1, "maximum": 127, "default": 100},
+                "velocities": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 1, "maximum": 127},
+                    "description": "per-note velocities, cycled when shorter (accents: [110, 70])",
+                },
                 "replace": {"type": "boolean", "default": False},
             },
             ["track", "notes"],
@@ -242,9 +247,50 @@ CARDS: list[ToolCard] = [
                 "track": {"type": "string", "enum": ["drum1", "drum2", "drum3", "drum4"]},
                 "steps": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 32}},
                 "velocity": {"type": "integer", "minimum": 1, "maximum": 127, "default": 100},
+                "velocities": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 1, "maximum": 127},
+                    "description": "per-hit velocities in step order, cycled when shorter ([110, 70] = accents)",
+                },
                 "replace": {"type": "boolean", "default": False},
             },
             ["track", "steps"],
+        ),
+    ),
+    ToolCard(
+        "set_step",
+        "Change one existing step of a track: its velocity, note (synth) or gate, e.g. 'Schritt 5 lauter'. "
+        "Spoken 1-based step.",
+        schema=_obj(
+            {
+                "pattern": {"type": "string"},
+                "track": {"type": "string"},
+                "step": {"type": "integer", "minimum": 1, "maximum": 32},
+                "velocity": {"type": "integer", "minimum": 1, "maximum": 127},
+                "note": {"type": "string"},
+                "gate": {"type": "number", "minimum": 0.25, "maximum": 16},
+            },
+            ["track", "step"],
+        ),
+    ),
+    ToolCard(
+        "list_drum_samples",
+        "The drum samples on the device by number and name (64 per page of the bank, page 1-4).",
+        mcp_tool="list_drum_samples",
+        read_only=True,
+    ),
+    ToolCard(
+        "set_drum_sample",
+        "Choose the sample (1-64, by number or by a word from its name such as 'Snare') for drum 1-4. The device "
+        "cannot switch samples live over MIDI, so it is stored in the song and audible after saving to the device "
+        "and playing the project from there. Says so.",
+        schema=_obj(
+            {
+                "drum": {"type": "integer", "minimum": 1, "maximum": 4},
+                "number": {"type": "integer", "minimum": 1, "maximum": 64},
+                "name": {"type": "string"},
+            },
+            ["drum"],
         ),
     ),
     ToolCard(
@@ -319,10 +365,15 @@ CARDS: list[ToolCard] = [
     ToolCard(
         "generate_track",
         "Have a musical idea written for ONE track by a text model (a few seconds): 'groovige Bassline auf Synth 2', "
-        "'Hi-Hat-Pattern mit Offbeats auf drum3'. Replaces that track only; the rest of the song stays. Say you are "
-        "working on it and stay responsive.",
+        "'Hi-Hat-Pattern mit Offbeats auf drum3'. Replaces that track only. Without confirmed it returns how long it "
+        "takes and the question to ask; after a clear yes call again with confirmed=true.",
         schema=_obj(
-            {"pattern": {"type": "string"}, "track": {"type": "string"}, "brief": {"type": "string"}},
+            {
+                "pattern": {"type": "string"},
+                "track": {"type": "string"},
+                "brief": {"type": "string"},
+                "confirmed": {"type": "boolean", "default": False},
+            },
             ["track", "brief"],
         ),
         blocking=False,
@@ -331,7 +382,7 @@ CARDS: list[ToolCard] = [
     ToolCard(
         "design_patch",
         "Design a new synth sound from a description ('warmer, weicher Bass mit langsamem Filter') and load it into "
-        "synth 1 or 2 (working memory, not saved). Takes a few seconds; stay responsive.",
+        "synth 1 or 2 (working memory, not saved). Without confirmed it returns the question to ask first.",
         schema=_obj(
             {"synth": {"type": "integer", "minimum": 1, "maximum": 2}, "brief": {"type": "string"}}, ["synth", "brief"]
         ),
@@ -355,17 +406,18 @@ CARDS: list[ToolCard] = [
     ToolCard(
         "compose",
         "Build a new song from a German brief (style, tempo, key, mood, instruments). Runs in the background for "
-        "about half a minute: say you are working on it, stay responsive, and summarise when the result arrives. "
-        "Replaces the loaded song.",
-        schema=_obj({"brief": {"type": "string"}}, ["brief"]),
+        "about half a minute. Without confirmed it returns the question to ask first. Replaces the loaded song.",
+        schema=_obj({"brief": {"type": "string"}, "confirmed": {"type": "boolean", "default": False}}, ["brief"]),
         blocking=False,
         profiles=("creative",),
     ),
     ToolCard(
         "revise",
         "Change the loaded song by instruction ('Hi-Hats leiser', 'Bassline auf Synth 2 dazu', 'Chorus doppelt so "
-        "lang'). Runs in the background; keeps the music playing where possible.",
-        schema=_obj({"instruction": {"type": "string"}}, ["instruction"]),
+        "lang'). Slow (half a minute or more). Without confirmed it returns the question to ask first.",
+        schema=_obj(
+            {"instruction": {"type": "string"}, "confirmed": {"type": "boolean", "default": False}}, ["instruction"]
+        ),
         blocking=False,
         profiles=("creative",),
     ),
@@ -381,13 +433,6 @@ CARDS: list[ToolCard] = [
         "undo_last",
         "Revert the last parameter, tempo or mute change ('Rückgängig'). Says when nothing can be undone.",
         schema=_obj({}, []),
-    ),
-    ToolCard(
-        "set_agent_mode",
-        "Switch between 'control' (Steuermodus: only exact, instant commands; the agent never invents music) and "
-        "'creative' (Kreativmodus: additionally generate_track, design_patch, compose, revise). Takes a moment; "
-        "the session reconnects.",
-        schema=_obj({"mode": {"type": "string", "enum": ["control", "creative"]}}, ["mode"]),
     ),
     ToolCard(
         "set_listening",

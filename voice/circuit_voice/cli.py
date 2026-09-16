@@ -37,7 +37,7 @@ class Config:
     mcp: str = "inproc"
     midi_port: str | None = None
     no_midi: bool = False
-    tools: str = "control"
+    tools: str = "creative"
     song: str | None = None
     songs_dir: str | None = None
     patch_cache: Path | None = Path.home() / ".circuit-voice" / "patches.json"
@@ -126,7 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--midi-port", help="MIDI port name (default: first port containing 'Circuit Tracks')")
     g.add_argument("--no-midi", action="store_true", help="skip the MIDI connection (development)")
     g.add_argument(
-        "--tools", default="control", help="agent mode: control (exact commands only) or creative (adds model jobs)"
+        "--tools", default="creative", help="tool profile: creative (everything, default) or control (no model jobs)"
     )
     g.add_argument("--song", help="song JSON file to load at start")
     g.add_argument("--songs-dir", help="folder of song JSON files the user can load by voice")

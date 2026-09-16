@@ -12,7 +12,7 @@ def test_defaults():
     assert cfg.silence_ms == 1200
     assert cfg.voice == "Kore"
     assert cfg.mcp == "inproc"
-    assert cfg.tools == "control"
+    assert cfg.tools == "creative"
     assert cfg.model == "gemini-3.8-live"
     assert cfg.composer_model == "gemini-3.8-flash"
     assert cfg.api_key == "k"
@@ -30,7 +30,7 @@ def test_flags_override_defaults():
             "--voice",
             "Puck",
             "--tools",
-            "creative",
+            "control",
             "--no-log",
             "--song",
             "x.json",
@@ -46,7 +46,7 @@ def test_flags_override_defaults():
     assert cfg.mode == "open"
     assert cfg.silence_ms == 1500
     assert cfg.voice == "Puck"
-    assert cfg.tools == "creative"
+    assert cfg.tools == "control"
     assert cfg.log_path is None
     assert cfg.song == "x.json"
     assert cfg.songs_dir == "songs"

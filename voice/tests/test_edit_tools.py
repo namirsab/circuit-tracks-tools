@@ -126,3 +126,63 @@ async def test_step_edits_are_undoable(server):
         await bridge.dispatch("clear_track", {"track": "synth1"})
         await bridge.dispatch("undo_last", {})
         assert list(ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]) == ["0", "4"]
+
+
+async def test_velocities_set_step_and_drum_sample(server):
+    async with agent(server) as (bridge, ledger, midi):
+        await bridge.dispatch("new_song", {"name": "Probe", "bpm": 100})
+        await bridge.dispatch("write_drums", {"track": "drum3", "steps": [1, 2, 3, 4], "velocities": [110, 70]})
+        steps = ledger.song_json["patterns"]["pattern1"]["tracks"]["drum3"]["steps"]
+        assert [steps[k]["velocity"] for k in ("0", "1", "2", "3")] == [110, 70, 110, 70]
+        await bridge.dispatch("write_notes", {"track": "synth1", "notes": "C3 D3 E3", "velocities": "120 60"})
+        notes = ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]
+        assert [notes[k]["velocity"] for k in ("0", "4", "8")] == [120, 60, 120]
+
+        out = await bridge.dispatch("set_step", {"track": "drum3", "step": 2, "velocity": 40})
+        assert "Schritt 2" in out.response["result"] and steps is not None
+        assert ledger.song_json["patterns"]["pattern1"]["tracks"]["drum3"]["steps"]["1"]["velocity"] == 40
+        out = await bridge.dispatch("set_step", {"track": "synth1", "step": 5, "note": "G3", "gate": 2})
+        assert ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]["4"]["note"] == 67
+        out = await bridge.dispatch("set_step", {"track": "synth1", "step": 7, "velocity": 50})
+        assert "liegt nichts" in out.response["result"]
+        await bridge.dispatch("undo_last", {})
+        assert ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]["4"]["note"] == 62
+
+        out = await bridge.dispatch("set_drum_sample", {"drum": 2, "name": "snare"})
+        assert "Snare" in out.response["result"] and "nach dem Speichern" in out.response["result"]
+        assert ledger.song_json["sounds"]["drum2"]["sample"] == 2
+        out = await bridge.dispatch("set_drum_sample", {"drum": 1, "number": 64})
+        assert ledger.song_json["sounds"]["drum1"]["sample"] == 63
+
+
+async def test_save_captures_live_patches_and_drum_values(server, monkeypatch):
+    from circuit_voice.mcp_client import ToolResult
+
+    exported = []
+
+    def fake_export(song, midi, slot=0, name="", template_path=None):
+        exported.append(song)
+        return {"status": "ok"}
+
+    monkeypatch.setattr("circuit_tracks.song.export_song_to_device", fake_export)
+    async with agent(server) as (bridge, ledger, midi):
+        real_call = bridge.backend.call
+
+        async def fake_call(name, args=None):
+            if name == "get_synth_patch":
+                return ToolResult(
+                    text="", data={"name": f"Live {args['synth']}", "params": {"filter_frequency": 33}}, is_error=False
+                )
+            return await real_call(name, args)
+
+        bridge.backend.call = fake_call  # type: ignore[method-assign]
+        await bridge.dispatch("new_song", {"name": "Probe", "bpm": 90})
+        await bridge.dispatch("write_drums", {"track": "drum1", "steps": [1]})
+        await bridge.dispatch("set_drum_params", {"drum": 1, "params": {"decay": 44, "level": 80}})
+        await bridge.dispatch("set_project_params", {"params": {"synth1_level": 70}})
+        await bridge.dispatch("save_to_device", {"slot": 12, "confirmed": True})
+        song = exported[0]
+        assert song.sounds["synth1"].name == "Live 1" and song.sounds["synth1"].params["filter_frequency"] == 33
+        assert song.sounds["drum1"].decay == 44 and song.sounds["drum1"].level == 80
+        assert ledger.song_json["mixer"]["synth1"]["level"] == 70
+        assert ledger.device_dirty is False and ledger.device_bpm[12] == 90.0

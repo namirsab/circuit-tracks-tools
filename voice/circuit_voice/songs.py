@@ -64,6 +64,49 @@ class SongLibrary:
         return data
 
 
+DRUM_FIELDS = ("level", "pitch", "decay", "distortion", "eq", "pan")
+
+
+async def capture_live_sounds(bridge: Bridge) -> list[str]:
+    """Fold the synths' current patches and live drum/mixer values into the song JSON."""
+    ledger, backend = bridge.ledger, bridge.backend
+    song = ledger.song_json
+    if song is None:
+        return []
+    notes: list[str] = []
+    sounds = song.setdefault("sounds", {}) or {}
+    song["sounds"] = sounds
+    for synth in (1, 2):
+        dump = await backend.call("get_synth_patch", {"synth": synth})
+        if dump.is_error or not isinstance(dump.data, dict) or not dump.data.get("params"):
+            notes.append(f"synth{synth}: Patch nicht lesbar")
+            continue
+        sounds[f"synth{synth}"] = {
+            "name": str(dump.data.get("name") or f"Synth {synth}")[:16],
+            "params": dump.data["params"],
+        }
+        notes.append(f"synth{synth}: {sounds[f'synth{synth}']['name']}")
+    for drum in (1, 2, 3, 4):
+        live = ledger.known.get(f"drum{drum}", {})
+        if live:
+            entry = dict(sounds.get(f"drum{drum}") or {})
+            entry.update({k: int(v) for k, v in live.items() if k in DRUM_FIELDS})
+            sounds[f"drum{drum}"] = entry
+    project = ledger.known.get("project", {})
+    if any(k in project for k in ("synth1_level", "synth2_level", "synth1_pan", "synth2_pan")):
+        mixer = song.setdefault("mixer", {}) or {}
+        song["mixer"] = mixer
+        for synth in ("synth1", "synth2"):
+            entry = dict(mixer.get(synth) or {})
+            if f"{synth}_level" in project:
+                entry["level"] = int(project[f"{synth}_level"])
+            if f"{synth}_pan" in project:
+                entry["pan"] = int(project[f"{synth}_pan"])
+            if entry:
+                mixer[synth] = entry
+    return notes
+
+
 def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
     ledger, backend = bridge.ledger, bridge.backend
 
@@ -116,6 +159,10 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
         if ledger.running and ledger.source == "internal":
             await bridge.dispatch("stop_sequencer", {})
             stopped = True
+        # Capture what the user hears: the synths' current patches and the drum/mixer values set live,
+        # otherwise the export writes the presets the song started with (seen on 2026-09-16).
+        if ledger.song_json is not None:
+            await capture_live_sounds(bridge)
         # The export writes the server's last loaded song; reload ours so step edits are included.
         if ledger.song_json is not None:
             reload = await backend.call("load_song", {"song": copy.deepcopy(ledger.song_json)})
@@ -125,6 +172,9 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
         if result.is_error:
             return f"Speichern fehlgeschlagen: {result.text}"
         ledger.saved(slot)
+        ledger.device_dirty = False
+        if ledger.bpm:
+            ledger.device_bpm[slot] = float(ledger.bpm)
         tail = " Der Sequenzer ist dafür gestoppt; sag Start, oder ich spiele es vom Gerät ab." if stopped else ""
         return f"Gespeichert in Slot {slot} als '{name}'.{tail}"
 

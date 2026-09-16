@@ -21,18 +21,20 @@ def test_profiles_and_aliases():
     creative = {c.name for c in cards_for_profile("creative")}
     assert control < creative
     assert {"compose", "revise", "generate_track", "design_patch"} == creative - control
-    assert {"write_notes", "write_drums", "select_patch", "save_to_device", "set_agent_mode"} <= control
+    assert {"write_notes", "write_drums", "select_patch", "save_to_device", "set_step", "set_drum_sample"} <= control
     assert cards_for_profile("full") == cards_for_profile("creative")
     assert cards_for_profile("perform") == cards_for_profile("control")
 
 
 def test_prompt_carries_the_mode():
-    assert "Steuermodus" in system_instruction("control") and "erfindest keine Musik" in system_instruction("control")
-    assert "Kreativmodus" in system_instruction("creative")
+    assert "nur die direkten Werkzeuge" in system_instruction("control")
+    assert "confirmed=true" in system_instruction("creative") and "bleibst auf Deutsch" in system_instruction(
+        "creative"
+    )
     cfg = Config.from_args([], env={"GEMINI_API_KEY": "k"})
-    assert cfg.tools == "control"
-    text = build_live_config(cfg, [], profile="creative").system_instruction.parts[0].text
-    assert "Kreativmodus" in text
+    assert cfg.tools == "creative"
+    text = build_live_config(cfg, [], profile="control").system_instruction.parts[0].text
+    assert "nur die direkten Werkzeuge" in text
 
 
 @asynccontextmanager
@@ -67,4 +69,4 @@ async def test_mode_switch_reconnects_with_new_tools(server):
         await asyncio.wait_for(session.run(max_connections=2), timeout=3)
     names = [[d.name for d in c.tools[0].function_declarations] for c in connector.configs]
     assert "compose" not in names[0] and "compose" in names[1]
-    assert "Kreativmodus" in connector.configs[1].system_instruction.parts[0].text
+    assert "confirmed=true" in connector.configs[1].system_instruction.parts[0].text

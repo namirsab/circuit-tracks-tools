@@ -38,6 +38,10 @@ async def test_generate_track_validates_retries_and_is_undoable(server):
         await bridge.dispatch("new_song", {"name": "Probe", "bpm": 100})
         await bridge.dispatch("write_drums", {"track": "drum1", "steps": [1, 9]})
         out = await bridge.dispatch("generate_track", {"track": "synth2", "brief": "groovige Bassline"})
+        assert "zehn Sekunden" in out.response["result"]["needs_confirmation"] and model.calls == []
+        out = await bridge.dispatch(
+            "generate_track", {"track": "synth2", "brief": "groovige Bassline", "confirmed": True}
+        )
         assert out.blocking is False
         assert "2 Schritte" in out.response["result"]
         assert len(model.calls) == 2 and "Rejected" in model.calls[1][-1][1]
@@ -53,6 +57,8 @@ async def test_design_patch_and_save_with_confirmation(server):
     patch = {"name": "Warmer Bass", "preset": "bass", "params": {"filter_frequency": 20}}
     async with agent(server, [patch]) as (bridge, ledger, model, midi):
         out = await bridge.dispatch("design_patch", {"synth": 2, "brief": "warmer weicher Bass"})
+        assert "needs_confirmation" in out.response["result"]
+        out = await bridge.dispatch("design_patch", {"synth": 2, "brief": "warmer weicher Bass", "confirmed": True})
         assert "Warmer Bass" in out.response["result"] and "nicht gespeichert" in out.response["result"]
         assert any(m[0] == "sysex" for m in midi.messages), "patch was not sent to the device"
         assert "Reference: patch" in model.calls[0][0][1] or True

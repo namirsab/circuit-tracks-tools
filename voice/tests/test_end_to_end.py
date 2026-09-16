@@ -132,6 +132,8 @@ async def test_compose_loads_and_restarts_and_revise_edits_in_place(server):
         await bridge.dispatch("start_sequencer", {})
         calls.clear()
         out = await bridge.dispatch("compose", {"brief": "Ruhiger Ambient in Moll"})
+        assert "halbe Minute" in out.response["result"]["needs_confirmation"]
+        out = await bridge.dispatch("compose", {"brief": "Ruhiger Ambient in Moll", "confirmed": True})
         assert out.blocking is False
         assert "Fertig gebaut" in out.response["result"] and "emergence" in out.response["result"]
         assert calls[:3] == ["stop_sequencer", "load_song", "start_sequencer"]
@@ -139,10 +141,12 @@ async def test_compose_loads_and_restarts_and_revise_edits_in_place(server):
 
         calls.clear()
         out = await bridge.dispatch("revise", {"instruction": "Kick nur auf der Eins"})
+        assert "needs_confirmation" in out.response["result"] and calls == []
+        out = await bridge.dispatch("revise", {"instruction": "Kick nur auf der Eins", "confirmed": True})
         assert calls == ["set_track"], out.response
         assert "drum1 in emergence" in out.response["result"]
         assert ledger.song_json["patterns"]["emergence"]["tracks"]["drum1"]["steps"] == {"0": {"velocity": 90}}
 
-        out = await bridge.dispatch("compose", {"brief": "Unmöglich"})
+        out = await bridge.dispatch("compose", {"brief": "Unmöglich", "confirmed": True})
         assert "nicht geklappt" in out.response["result"]
         assert ledger.composer_job is None
