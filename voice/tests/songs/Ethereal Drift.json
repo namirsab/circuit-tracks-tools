@@ -1,0 +1,603 @@
+{
+  "name": "Ethereal Drift",
+  "bpm": 65,
+  "scale": { "root": "D", "type": "natural minor" },
+  "swing": 54,
+
+  "sounds": {
+    "synth1": {
+      "name": "Abyss Pad",
+      "preset": "pad",
+      "params": {
+        "polyphony_mode": 2,
+        "portamento_rate": 20,
+        "osc1_wave": 14,
+        "osc1_wave_interpolate": 64,
+        "osc1_pulse_width_index": 50,
+        "osc1_density": 0,
+        "osc1_density_detune": 0,
+        "osc1_semitones": 64,
+        "osc1_cents": 64,
+        "osc2_wave": 1,
+        "osc2_wave_interpolate": 80,
+        "osc2_pulse_width_index": 64,
+        "osc2_density": 30,
+        "osc2_density_detune": 40,
+        "osc2_semitones": 64,
+        "osc2_cents": 67,
+        "osc1_level": 110,
+        "osc2_level": 100,
+        "ring_mod_level": 0,
+        "noise_level": 15,
+        "filter_type": 1,
+        "filter_frequency": 20,
+        "filter_resonance": 5,
+        "filter_tracking": 40,
+        "env2_to_filter_freq": 80,
+        "drive": 10,
+        "drive_type": 1,
+        "env1_velocity": 50,
+        "env1_attack": 80,
+        "env1_decay": 127,
+        "env1_sustain": 127,
+        "env1_release": 90,
+        "env2_attack": 60,
+        "env2_decay": 100,
+        "env2_sustain": 80,
+        "env2_release": 70,
+        "env3_attack": 90,
+        "env3_decay": 110,
+        "env3_sustain": 80,
+        "env3_release": 60,
+        "lfo1_waveform": 0,
+        "lfo1_rate": 20,
+        "lfo1_slew_rate": 64,
+        "lfo1_delay": 30,
+        "lfo2_waveform": 1,
+        "lfo2_rate": 15,
+        "lfo2_slew_rate": 80,
+        "lfo2_delay": 0,
+        "chorus_level": 30,
+        "chorus_type": 1,
+        "chorus_rate": 15,
+        "chorus_mod_depth": 80,
+        "chorus_feedback": 60,
+        "chorus_delay": 70,
+        "distortion_level": 0
+      },
+      "mod_matrix": [
+        { "source1": "LFO 1+/-", "dest": "filter frequency", "depth": 25 },
+        { "source1": "LFO 2+/-", "dest": "osc 1 & 2 pitch", "depth": 5 },
+        { "source1": "env 3", "dest": "osc 1 pulse width / index", "depth": 30 },
+        { "source1": "LFO 1+", "dest": "osc 2 level", "depth": 15 },
+        { "source1": "LFO 2+", "dest": "noise level", "depth": 10 },
+        { "source1": "env filter", "dest": "filter resonance", "depth": 12 }
+      ],
+      "macros": {
+        "1": {
+          "targets": [
+            { "dest": "osc1_wave_interpolate", "start": 0, "end": 127, "depth": 127 },
+            { "dest": "osc2_wave_interpolate", "start": 0, "end": 100, "depth": 100 }
+          ]
+        },
+        "2": {
+          "targets": [
+            { "dest": "osc1_density", "start": 0, "end": 100, "depth": 127 },
+            { "dest": "osc1_density_detune", "start": 0, "end": 100, "depth": 110 }
+          ]
+        },
+        "3": {
+          "targets": [
+            { "dest": "env1_attack", "start": 0, "end": 127, "depth": 127 },
+            { "dest": "env1_release", "start": 0, "end": 127, "depth": 110 }
+          ]
+        },
+        "4": {
+          "targets": [
+            { "dest": "env2_attack", "start": 0, "end": 127, "depth": 127 },
+            { "dest": "env2_decay", "start": 0, "end": 100, "depth": 100 }
+          ]
+        },
+        "5": {
+          "position": 40,
+          "targets": [
+            { "dest": "filter_frequency", "start": 0, "end": 127, "depth": 127 }
+          ]
+        },
+        "6": {
+          "targets": [
+            { "dest": "filter_resonance", "start": 0, "end": 110, "depth": 127 }
+          ]
+        },
+        "7": {
+          "targets": [
+            { "dest": "lfo1_rate", "start": 0, "end": 100, "depth": 127 },
+            { "dest": "chorus_mod_depth", "start": 0, "end": 127, "depth": 100 }
+          ]
+        },
+        "8": {
+          "targets": [
+            { "dest": "chorus_level", "start": 0, "end": 127, "depth": 127 },
+            { "dest": "distortion_level", "start": 0, "end": 80, "depth": 90 }
+          ]
+        }
+      }
+    },
+
+    "synth2": {
+      "name": "Crystal Shim",
+      "preset": "pad",
+      "params": {
+        "polyphony_mode": 2,
+        "portamento_rate": 10,
+        "osc1_wave": 23,
+        "osc1_wave_interpolate": 90,
+        "osc1_pulse_width_index": 40,
+        "osc1_density": 15,
+        "osc1_density_detune": 20,
+        "osc1_semitones": 64,
+        "osc2_wave": 27,
+        "osc2_wave_interpolate": 60,
+        "osc2_pulse_width_index": 64,
+        "osc2_density": 20,
+        "osc2_density_detune": 30,
+        "osc2_semitones": 76,
+        "osc2_cents": 62,
+        "osc1_level": 90,
+        "osc2_level": 70,
+        "ring_mod_level": 20,
+        "noise_level": 10,
+        "filter_type": 2,
+        "filter_frequency": 10,
+        "filter_resonance": 5,
+        "filter_tracking": 60,
+        "env2_to_filter_freq": 90,
+        "drive": 5,
+        "drive_type": 0,
+        "env1_velocity": 60,
+        "env1_attack": 50,
+        "env1_decay": 110,
+        "env1_sustain": 90,
+        "env1_release": 80,
+        "env2_attack": 30,
+        "env2_decay": 90,
+        "env2_sustain": 50,
+        "env2_release": 60,
+        "env3_attack": 70,
+        "env3_decay": 100,
+        "env3_sustain": 60,
+        "env3_release": 50,
+        "lfo1_waveform": 15,
+        "lfo1_rate": 35,
+        "lfo1_slew_rate": 50,
+        "lfo1_delay": 40,
+        "lfo2_waveform": 0,
+        "lfo2_rate": 22,
+        "lfo2_slew_rate": 90,
+        "lfo2_delay": 20,
+        "chorus_level": 20,
+        "chorus_type": 1,
+        "chorus_rate": 25,
+        "chorus_mod_depth": 70,
+        "chorus_feedback": 50,
+        "chorus_delay": 55,
+        "distortion_level": 0
+      },
+      "mod_matrix": [
+        { "source1": "LFO 1+/-", "dest": "filter frequency", "depth": 22 },
+        { "source1": "LFO 2+", "dest": "osc 2 pulse width / index", "depth": 30 },
+        { "source1": "env filter", "dest": "noise level", "depth": 15 },
+        { "source1": "LFO 2+/-", "dest": "osc 1 & 2 pitch", "depth": 3 },
+        { "source1": "env 3", "dest": "filter resonance", "depth": 18 },
+        { "source1": "LFO 1+", "dest": "ring modulation 1*2 level", "depth": 20 }
+      ],
+      "macros": {
+        "1": {
+          "targets": [
+            { "dest": "osc1_wave_interpolate", "start": 0, "end": 127, "depth": 127 },
+            { "dest": "osc2_wave_interpolate", "start": 0, "end": 127, "depth": 110 }
+          ]
+        },
+        "2": {
+          "targets": [
+            { "dest": "osc1_density", "start": 0, "end": 90, "depth": 120 },
+            { "dest": "osc2_density_detune", "start": 0, "end": 100, "depth": 110 }
+          ]
+        },
+        "3": {
+          "targets": [
+            { "dest": "env1_attack", "start": 0, "end": 127, "depth": 127 },
+            { "dest": "env1_release", "start": 0, "end": 127, "depth": 100 }
+          ]
+        },
+        "4": {
+          "targets": [
+            { "dest": "env2_attack", "start": 0, "end": 110, "depth": 120 },
+            { "dest": "env2_decay", "start": 0, "end": 90, "depth": 100 }
+          ]
+        },
+        "5": {
+          "position": 35,
+          "targets": [
+            { "dest": "filter_frequency", "start": 0, "end": 127, "depth": 127 }
+          ]
+        },
+        "6": {
+          "targets": [
+            { "dest": "filter_resonance", "start": 0, "end": 100, "depth": 127 }
+          ]
+        },
+        "7": {
+          "targets": [
+            { "dest": "lfo1_rate", "start": 0, "end": 90, "depth": 120 },
+            { "dest": "chorus_mod_depth", "start": 0, "end": 127, "depth": 100 }
+          ]
+        },
+        "8": {
+          "targets": [
+            { "dest": "chorus_level", "start": 0, "end": 127, "depth": 127 },
+            { "dest": "distortion_level", "start": 0, "end": 60, "depth": 80 }
+          ]
+        }
+      }
+    },
+
+    "drum1": { "sample": 0, "level": 90, "pitch": 58, "decay": 80, "distortion": 10, "eq": 55, "pan": 64 },
+    "drum2": { "sample": 10, "level": 75, "pitch": 70, "decay": 60, "distortion": 5, "eq": 70, "pan": 50 },
+    "drum3": { "sample": 30, "level": 70, "pitch": 80, "decay": 90, "distortion": 15, "eq": 75, "pan": 78 },
+    "drum4": { "sample": 45, "level": 65, "pitch": 64, "decay": 110, "distortion": 0, "eq": 80, "pan": 90 }
+  },
+
+  "fx": {
+    "reverb_preset": 7,
+    "reverb": { "decay": 120, "damping": 40, "type": 5 },
+    "reverb_sends": {
+      "synth1": 110, "synth2": 100,
+      "drum1": 60, "drum2": 80, "drum3": 90, "drum4": 70
+    },
+    "delay_preset": 12,
+    "delay": { "time": 90, "feedback": 85, "slew": 70, "width": 110, "lr_ratio": 6, "sync": 10 },
+    "delay_sends": {
+      "synth1": 70, "synth2": 85,
+      "drum1": 30, "drum2": 55, "drum3": 65, "drum4": 50
+    },
+    "sidechain": {
+      "synth1": { "preset": 2, "source": "drum1", "depth": 30, "attack": 10, "hold": 20, "decay": 60 },
+      "synth2": { "preset": 2, "source": "drum1", "depth": 20, "attack": 15, "hold": 15, "decay": 50 }
+    }
+  },
+
+  "mixer": {
+    "synth1": { "level": 105, "pan": 55 },
+    "synth2": { "level": 95, "pan": 73 }
+  },
+
+  "patterns": {
+    "emergence": {
+      "length": 32,
+      "tracks": {
+        "synth1": {
+          "steps": {
+            "0":  { "note": 38, "velocity": 90, "gate": 16, "tie": true },
+            "8":  { "note": 45, "velocity": 70, "gate": 8, "tie": true },
+            "16": { "note": 38, "velocity": 85, "gate": 16, "tie": true },
+            "24": { "note": 45, "velocity": 65, "gate": 8, "tie": true }
+          },
+          "macros": {
+            "1": { "0": 30, "8": 40, "16": 50, "24": 60 },
+            "5": { "0": 25, "2": 28, "4": 32, "6": 36, "8": 40, "10": 44, "12": 48, "14": 52, "16": 55, "18": 58, "20": 62, "22": 66, "24": 70, "26": 74, "28": 78, "30": 82 },
+            "7": { "0": 20, "4": 25, "8": 30, "12": 35, "16": 30, "20": 25, "24": 20, "28": 30 }
+          }
+        },
+        "synth2": {
+          "steps": {
+            "4":  { "note": 86, "velocity": 40, "gate": 4, "probability": 0.6 },
+            "12": { "note": 81, "velocity": 35, "gate": 3, "probability": 0.5 },
+            "20": { "note": 77, "velocity": 45, "gate": 5, "probability": 0.7 },
+            "28": { "note": 84, "velocity": 30, "gate": 4, "probability": 0.4 }
+          },
+          "macros": {
+            "5": { "0": 30, "8": 40, "16": 50, "24": 45 },
+            "8": { "0": 20, "8": 30, "16": 25, "24": 20 }
+          }
+        },
+        "drum1": {
+          "steps": { "0": { "velocity": 60 }, "16": { "velocity": 55 } }
+        },
+        "drum2": {
+          "steps": {
+            "8":  { "velocity": 40, "probability": 0.6 },
+            "24": { "velocity": 35, "probability": 0.5 }
+          }
+        },
+        "drum3": {
+          "steps": { "12": { "velocity": 30, "probability": 0.4 } },
+          "params": { "decay": { "0": 80, "16": 90 } }
+        },
+        "drum4": {
+          "steps": {
+            "6":  { "velocity": 25, "probability": 0.3 },
+            "22": { "velocity": 30, "probability": 0.4 }
+          },
+          "params": { "pitch": { "0": 60, "16": 68 } }
+        }
+      }
+    },
+
+    "drift": {
+      "length": 32,
+      "tracks": {
+        "synth1": {
+          "steps": {
+            "0":  { "notes": [38, 53, 57], "velocity": 95, "gate": 16, "tie": true },
+            "4":  { "note": 50, "velocity": 75, "gate": 12, "tie": true },
+            "16": { "notes": [38, 53, 57], "velocity": 90, "gate": 16, "tie": true },
+            "20": { "note": 50, "velocity": 70, "gate": 12, "tie": true }
+          },
+          "macros": {
+            "1": { "0": 40, "4": 50, "8": 60, "12": 70, "16": 75, "20": 65, "24": 55, "28": 45 },
+            "2": { "0": 20, "8": 40, "16": 55, "24": 35 },
+            "5": { "0": 35, "2": 40, "4": 50, "6": 55, "8": 65, "10": 70, "12": 75, "14": 80, "16": 85, "18": 80, "20": 75, "22": 70, "24": 65, "26": 60, "28": 55, "30": 50 },
+            "6": { "0": 10, "8": 25, "16": 35, "24": 20 }
+          }
+        },
+        "synth2": {
+          "steps": {
+            "0":  { "note": 74, "velocity": 55, "gate": 6 },
+            "4":  { "note": 77, "velocity": 50, "gate": 4 },
+            "8":  { "note": 81, "velocity": 60, "gate": 8, "tie": true },
+            "12": { "note": 84, "velocity": 45, "gate": 3, "probability": 0.7 },
+            "16": { "note": 86, "velocity": 55, "gate": 6 },
+            "20": { "note": 81, "velocity": 50, "gate": 4 },
+            "24": { "note": 77, "velocity": 60, "gate": 8, "tie": true },
+            "28": { "note": 74, "velocity": 40, "gate": 3, "probability": 0.6 }
+          },
+          "macros": {
+            "1": { "0": 30, "8": 50, "16": 65, "24": 45 },
+            "5": { "0": 40, "4": 50, "8": 60, "12": 70, "16": 65, "20": 55, "24": 45, "28": 35 },
+            "7": { "0": 25, "8": 40, "16": 50, "24": 35 },
+            "8": { "0": 30, "8": 45, "16": 55, "24": 40 }
+          }
+        },
+        "drum1": {
+          "steps": {
+            "0":  { "velocity": 70 },
+            "8":  { "velocity": 55 },
+            "16": { "velocity": 65 },
+            "24": { "velocity": 50, "probability": 0.7 }
+          },
+          "params": { "pitch": { "0": 55, "8": 58, "16": 55, "24": 60 } }
+        },
+        "drum2": {
+          "steps": {
+            "4":  { "velocity": 50 },
+            "12": { "velocity": 45 },
+            "20": { "velocity": 50 },
+            "28": { "velocity": 40 }
+          },
+          "params": {
+            "decay": { "0": 60, "8": 70, "16": 65, "24": 75 },
+            "pan": { "0": 45, "8": 55, "16": 40, "24": 60 }
+          }
+        },
+        "drum3": {
+          "steps": {
+            "2":  { "velocity": 40 },
+            "6":  { "velocity": 35, "probability": 0.6 },
+            "10": { "velocity": 45 },
+            "14": { "velocity": 30, "probability": 0.5 },
+            "18": { "velocity": 40 },
+            "22": { "velocity": 35, "probability": 0.6 },
+            "26": { "velocity": 45 },
+            "30": { "velocity": 30, "probability": 0.5 }
+          },
+          "params": {
+            "pitch": { "0": 75, "4": 80, "8": 85, "12": 78, "16": 82, "20": 77, "24": 83, "28": 79 },
+            "decay": { "0": 85, "8": 95, "16": 90, "24": 100 }
+          }
+        },
+        "drum4": {
+          "steps": {
+            "6":  { "velocity": 40 },
+            "14": { "velocity": 35, "probability": 0.7 },
+            "22": { "velocity": 45 },
+            "30": { "velocity": 30, "probability": 0.5 }
+          },
+          "params": {
+            "pitch": { "0": 55, "8": 65, "16": 70, "24": 60 },
+            "decay": { "0": 100, "8": 110, "16": 105, "24": 115 }
+          }
+        }
+      }
+    },
+
+    "apex": {
+      "length": 32,
+      "tracks": {
+        "synth1": {
+          "steps": {
+            "0":  { "notes": [38, 45, 50, 53], "velocity": 100, "gate": 16, "tie": true },
+            "8":  { "notes": [33, 45, 50], "velocity": 85, "gate": 8, "tie": true },
+            "16": { "notes": [38, 45, 50, 57], "velocity": 95, "gate": 16, "tie": true },
+            "24": { "notes": [38, 50, 57], "velocity": 80, "gate": 8, "tie": true }
+          },
+          "macros": {
+            "1": { "0": 50, "2": 55, "4": 65, "6": 75, "8": 85, "10": 90, "12": 95, "14": 100, "16": 100, "18": 95, "20": 85, "22": 75, "24": 65, "26": 55, "28": 50, "30": 50 },
+            "2": { "0": 30, "4": 45, "8": 60, "12": 75, "16": 80, "20": 70, "24": 55, "28": 40 },
+            "5": { "0": 50, "1": 53, "2": 56, "3": 60, "4": 64, "5": 68, "6": 72, "7": 76, "8": 80, "9": 83, "10": 86, "11": 89, "12": 92, "13": 95, "14": 98, "15": 100, "16": 100, "17": 97, "18": 94, "19": 91, "20": 88, "21": 85, "22": 82, "23": 79, "24": 76, "25": 73, "26": 70, "27": 67, "28": 64, "29": 60, "30": 56, "31": 52 },
+            "6": { "0": 15, "4": 25, "8": 40, "12": 50, "16": 55, "20": 45, "24": 30, "28": 20 },
+            "7": { "0": 30, "4": 40, "8": 55, "12": 65, "16": 60, "20": 50, "24": 40, "28": 35 },
+            "8": { "0": 40, "4": 50, "8": 60, "12": 70, "16": 65, "20": 55, "24": 45, "28": 40 }
+          },
+          "mixer": {
+            "reverb_send": { "0": 100, "8": 110, "16": 120, "24": 110 },
+            "delay_send": { "0": 60, "8": 75, "16": 85, "24": 70 }
+          }
+        },
+        "synth2": {
+          "steps": {
+            "0":  { "note": 86, "velocity": 65, "gate": 4 },
+            "2":  { "note": 81, "velocity": 55, "gate": 3 },
+            "4":  { "note": 77, "velocity": 60, "gate": 4 },
+            "6":  { "note": 74, "velocity": 50, "gate": 3, "probability": 0.8 },
+            "8":  { "note": 86, "velocity": 70, "gate": 6, "tie": true },
+            "10": { "note": 84, "velocity": 55, "gate": 3 },
+            "12": { "note": 81, "velocity": 60, "gate": 4 },
+            "14": { "note": 77, "velocity": 45, "gate": 3, "probability": 0.7 },
+            "16": { "note": 89, "velocity": 65, "gate": 5 },
+            "18": { "note": 86, "velocity": 55, "gate": 3 },
+            "20": { "note": 81, "velocity": 60, "gate": 6, "tie": true },
+            "22": { "note": 77, "velocity": 50, "gate": 3, "probability": 0.8 },
+            "24": { "note": 84, "velocity": 70, "gate": 4 },
+            "26": { "note": 81, "velocity": 50, "gate": 3 },
+            "28": { "note": 86, "velocity": 55, "gate": 5 },
+            "30": { "note": 74, "velocity": 40, "gate": 3, "probability": 0.6 }
+          },
+          "macros": {
+            "1": { "0": 40, "4": 55, "8": 70, "12": 80, "16": 85, "20": 75, "24": 60, "28": 45 },
+            "5": { "0": 50, "2": 55, "4": 65, "6": 70, "8": 80, "10": 85, "12": 90, "14": 95, "16": 90, "18": 85, "20": 75, "22": 65, "24": 60, "26": 55, "28": 50, "30": 45 },
+            "6": { "0": 20, "4": 30, "8": 45, "12": 55, "16": 50, "20": 40, "24": 30, "28": 20 },
+            "7": { "0": 35, "4": 50, "8": 60, "12": 70, "16": 65, "20": 55, "24": 45, "28": 35 },
+            "8": { "0": 40, "4": 55, "8": 65, "12": 75, "16": 70, "20": 60, "24": 50, "28": 40 }
+          },
+          "mixer": {
+            "reverb_send": { "0": 90, "8": 100, "16": 110, "24": 100 },
+            "delay_send": { "0": 70, "8": 85, "16": 95, "24": 80 }
+          }
+        },
+        "drum1": {
+          "steps": {
+            "0":  { "velocity": 75 },
+            "4":  { "velocity": 45, "probability": 0.5 },
+            "8":  { "velocity": 65 },
+            "12": { "velocity": 40, "probability": 0.6 },
+            "16": { "velocity": 70 },
+            "20": { "velocity": 50, "probability": 0.5 },
+            "24": { "velocity": 60 },
+            "28": { "velocity": 45, "probability": 0.6 }
+          },
+          "params": {
+            "pitch": { "0": 54, "4": 58, "8": 56, "12": 60, "16": 55, "20": 59, "24": 57, "28": 61 },
+            "decay": { "0": 75, "8": 85, "16": 80, "24": 90 }
+          }
+        },
+        "drum2": {
+          "steps": {
+            "2":  { "velocity": 55 },
+            "4":  { "velocity": 40, "probability": 0.6 },
+            "6":  { "velocity": 50 },
+            "10": { "velocity": 55 },
+            "12": { "velocity": 40, "probability": 0.6 },
+            "14": { "velocity": 50 },
+            "18": { "velocity": 55 },
+            "20": { "velocity": 40, "probability": 0.6 },
+            "22": { "velocity": 50 },
+            "26": { "velocity": 55 },
+            "28": { "velocity": 40, "probability": 0.6 },
+            "30": { "velocity": 50 }
+          },
+          "params": {
+            "pan": { "0": 35, "4": 55, "8": 40, "12": 60, "16": 38, "20": 58, "24": 42, "28": 55 },
+            "decay": { "0": 55, "8": 65, "16": 60, "24": 70 }
+          }
+        },
+        "drum3": {
+          "steps": {
+            "1":  { "velocity": 45 },
+            "3":  { "velocity": 35, "probability": 0.7 },
+            "5":  { "velocity": 50 },
+            "7":  { "velocity": 35, "probability": 0.6 },
+            "9":  { "velocity": 45 },
+            "11": { "velocity": 35, "probability": 0.7 },
+            "13": { "velocity": 50 },
+            "15": { "velocity": 35, "probability": 0.6 },
+            "17": { "velocity": 45 },
+            "19": { "velocity": 35, "probability": 0.7 },
+            "21": { "velocity": 50 },
+            "23": { "velocity": 35, "probability": 0.6 },
+            "25": { "velocity": 45 },
+            "27": { "velocity": 35, "probability": 0.7 },
+            "29": { "velocity": 50 },
+            "31": { "velocity": 35, "probability": 0.6 }
+          },
+          "params": {
+            "pitch": { "0": 70, "4": 78, "8": 85, "12": 75, "16": 80, "20": 73, "24": 82, "28": 76 },
+            "distortion": { "0": 10, "8": 20, "16": 25, "24": 15 }
+          }
+        },
+        "drum4": {
+          "steps": {
+            "3":  { "velocity": 45 },
+            "7":  { "velocity": 40, "probability": 0.7 },
+            "11": { "velocity": 50 },
+            "15": { "velocity": 35, "probability": 0.6 },
+            "19": { "velocity": 45 },
+            "23": { "velocity": 40, "probability": 0.7 },
+            "27": { "velocity": 50 },
+            "31": { "velocity": 35, "probability": 0.6 }
+          },
+          "params": {
+            "pitch": { "0": 50, "4": 60, "8": 70, "12": 65, "16": 55, "20": 68, "24": 72, "28": 58 },
+            "decay": { "0": 100, "8": 115, "16": 120, "24": 108 }
+          }
+        }
+      }
+    },
+
+    "dissolve": {
+      "length": 32,
+      "tracks": {
+        "synth1": {
+          "steps": {
+            "0":  { "note": 38, "velocity": 80, "gate": 16, "tie": true },
+            "16": { "note": 38, "velocity": 60, "gate": 16, "tie": true }
+          },
+          "macros": {
+            "1": { "0": 50, "8": 40, "16": 30, "24": 20 },
+            "2": { "0": 40, "8": 30, "16": 20, "24": 10 },
+            "5": { "0": 70, "2": 65, "4": 60, "6": 55, "8": 50, "10": 45, "12": 40, "14": 35, "16": 32, "18": 28, "20": 25, "22": 22, "24": 20, "26": 18, "28": 16, "30": 14 },
+            "8": { "0": 50, "8": 60, "16": 70, "24": 80 }
+          },
+          "mixer": {
+            "reverb_send": { "0": 110, "8": 115, "16": 120, "24": 125 }
+          }
+        },
+        "synth2": {
+          "steps": {
+            "8":  { "note": 86, "velocity": 30, "gate": 8, "probability": 0.5 },
+            "24": { "note": 81, "velocity": 25, "gate": 6, "probability": 0.4 }
+          },
+          "macros": {
+            "5": { "0": 40, "8": 30, "16": 25, "24": 20 },
+            "8": { "0": 30, "8": 45, "16": 55, "24": 65 }
+          }
+        },
+        "drum1": {
+          "steps": {
+            "0":  { "velocity": 45 },
+            "16": { "velocity": 35, "probability": 0.6 }
+          }
+        },
+        "drum2": {
+          "steps": { "8": { "velocity": 30, "probability": 0.4 } }
+        },
+        "drum3": {
+          "steps": {
+            "12": { "velocity": 25, "probability": 0.3 },
+            "28": { "velocity": 20, "probability": 0.3 }
+          },
+          "params": { "decay": { "0": 100, "16": 120 } }
+        },
+        "drum4": {
+          "steps": { "20": { "velocity": 30, "probability": 0.4 } },
+          "params": {
+            "pitch": { "0": 50, "16": 45 },
+            "decay": { "0": 120, "16": 127 }
+          }
+        }
+      }
+    }
+  },
+
+  "song": ["emergence", "emergence", "drift", "drift", "apex", "apex", "drift", "dissolve"]
+}

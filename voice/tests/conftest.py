@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 
@@ -10,6 +12,7 @@ class MockMidi:
 
     def __init__(self):
         self.messages: list[tuple] = []
+        self.clock_times: list[float] = []
         self.is_connected = False
         self.has_input = True
         self.port_name = None
@@ -46,6 +49,7 @@ class MockMidi:
 
     def send_clock(self):
         self.messages.append(("clock",))
+        self.clock_times.append(time.perf_counter())
 
     def all_notes_off(self, channel):
         self.messages.append(("all_notes_off", channel))

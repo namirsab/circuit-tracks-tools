@@ -112,6 +112,8 @@ class Bridge:
             log.warning("model called a tool outside the profile: %s", name)
             return Dispatch(name, {"error": f"Das Werkzeug {name} gibt es nicht."}, True)
         try:
+            if c.fill is not None:
+                args = c.fill(args, self.ledger)
             if c.normalise is not None:
                 args = c.normalise(args)
         except ArgumentError as e:

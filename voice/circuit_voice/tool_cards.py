@@ -31,6 +31,8 @@ class ToolCard:
     read_only: bool = False
     schema: dict[str, Any] | None = None  # overrides the server's inputSchema
     normalise: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    # (args, ledger) -> args with defaults filled from what the agent knows
+    fill: Callable[[dict[str, Any], Any], dict[str, Any]] | None = None
     # (spoken args, tool result) -> what the model gets back; default: the result itself
     summarise: Callable[[dict[str, Any], Any], Any] | None = None
     profiles: tuple[str, ...] = PROFILES
@@ -50,6 +52,18 @@ def _select_patch(args: dict[str, Any]) -> dict[str, Any]:
     synth = _int_in_range(args, "synth", 1, 2, "Der Synth")
     number = _int_in_range(args, "number", 1, 64, "Die Patch-Nummer")
     return {"synth": synth, "patch_number": number - 1}
+
+
+def _fill_start(args: dict[str, Any], ledger: Any) -> dict[str, Any]:
+    out = dict(args)
+    if not out.get("pattern"):
+        first = ledger.first_pattern()
+        if first is None:
+            raise ArgumentError("Es ist kein Song geladen. Lade erst einen Song oder lass einen bauen.")
+        out["pattern"] = first
+    if not out.get("bpm"):
+        out["bpm"] = ledger.bpm or 120
+    return out
 
 
 def _obj(props: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -86,6 +100,7 @@ CARDS: list[ToolCard] = [
             },
             [],
         ),
+        fill=_fill_start,
     ),
     ToolCard("stop_sequencer", "Stop the internal sequencer immediately (all notes off).", mcp_tool="stop_sequencer"),
     ToolCard(
@@ -162,6 +177,32 @@ CARDS: list[ToolCard] = [
         mcp_tool="get_synth_patch",
         blocking=False,
         read_only=True,
+    ),
+    # --- songs on disk and on the device ---
+    ToolCard(
+        "list_saved_songs",
+        "List the saved songs the user can load by name ('Welche Songs gibt es?').",
+        schema=_obj({}, []),
+        read_only=True,
+    ),
+    ToolCard(
+        "load_saved_song",
+        "Load a saved song by its spoken name into the internal sequencer (does not start playback).",
+        schema=_obj({"name": {"type": "string"}}, ["name"]),
+    ),
+    ToolCard(
+        "save_to_device",
+        "Save the loaded song into a project slot (1-64) on the Circuit Tracks, overwriting that slot. Call it "
+        "first without confirmed; it returns the German question to ask. After the user says yes, call it again "
+        "with confirmed=true. name defaults to the song name (max 16 characters).",
+        schema=_obj(
+            {
+                "slot": {"type": "integer", "minimum": 1, "maximum": 64},
+                "name": {"type": "string"},
+                "confirmed": {"type": "boolean", "default": False},
+            },
+            ["slot"],
+        ),
     ),
     # --- virtual tools (harness) ---
     ToolCard(

@@ -319,6 +319,57 @@
     "behavior": "NON_BLOCKING"
   },
   {
+    "description": "List the saved songs the user can load by name ('Welche Songs gibt es?').",
+    "name": "list_saved_songs",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Load a saved song by its spoken name into the internal sequencer (does not start playback).",
+    "name": "load_saved_song",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Save the loaded song into a project slot (1-64) on the Circuit Tracks, overwriting that slot. Call it first without confirmed; it returns the German question to ask. After the user says yes, call it again with confirmed=true. name defaults to the song name (max 16 characters).",
+    "name": "save_to_device",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "slot": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "name": {
+          "type": "string"
+        },
+        "confirmed": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "slot"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
     "description": "What the agent knows: playback source, loaded song, tempo, mutes, unsaved changes, last change. Cheap; never touches the device.",
     "name": "get_state",
     "parameters_json_schema": {
