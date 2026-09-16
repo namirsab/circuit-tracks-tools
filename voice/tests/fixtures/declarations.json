@@ -1,0 +1,352 @@
+[
+  {
+    "description": "Read the internal sequencer state: running, current pattern and step, BPM, muted tracks, pattern queue, patterns defined. Use it to answer 'Was läuft gerade?' before speaking about state.",
+    "name": "get_sequencer_status",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {}
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Start the internal sequencer looping a pattern. Omit pattern and bpm to use the loaded song's first pattern and tempo. Stops the device transport first if it is running.",
+    "name": "start_sequencer",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "pattern name; default: first pattern of the song"
+        },
+        "bpm": {
+          "type": "number",
+          "description": "tempo; default: the loaded song's tempo"
+        }
+      },
+      "required": []
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Stop the internal sequencer immediately (all notes off).",
+    "name": "stop_sequencer",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {}
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Change the internal sequencer tempo while it plays. For 'schneller'/'langsamer' without a number, change by about 5 BPM ('viel' 15) from the current BPM.",
+    "name": "set_bpm",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "bpm": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "bpm"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Mute or unmute one track: synth1, synth2, drum1..drum4, midi1, midi2. 'Drums' or 'Schlagzeug' means all four drum tracks (call once per track). muted=false unmutes.",
+    "name": "mute_track",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "track": {
+          "type": "string",
+          "enum": [
+            "synth1",
+            "synth2",
+            "drum1",
+            "drum2",
+            "drum3",
+            "drum4",
+            "midi1",
+            "midi2"
+          ]
+        },
+        "muted": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "required": [
+        "track"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Queue patterns to play after the current one, in order (song structure by voice).",
+    "name": "queue_patterns",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "patterns": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "patterns"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Replace the whole pattern queue with this ordered list of patterns.",
+    "name": "set_song",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "patterns": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "patterns"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Clear the pattern queue so the current pattern loops.",
+    "name": "clear_queue",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {}
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "List the pattern names of the loaded song.",
+    "name": "list_patterns",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {}
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Set synth parameters on synth 1 or 2 while playing. Common params (0-127): filter_frequency (Filter/Cutoff auf=higher), filter_resonance, osc1_wave/osc2_wave, osc1_level/osc2_level, osc2_pitch_coarse, amp_env_attack/amp_env_decay/amp_env_sustain/amp_env_release (Hüllkurve), filter_env_attack/filter_env_decay/filter_env_sustain/filter_env_release, filter_env_depth, lfo1_rate/lfo1_wave, distortion_level, chorus_level, portamento, voice_mode. Without a number, move about 20 steps ('etwas' 10, 'viel' 40).",
+    "name": "set_synth_params",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "synth": {
+          "type": "integer"
+        },
+        "params": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "synth",
+        "params"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Set drum parameters on drum 1-4 (0-127): level (leiser/lauter), pitch, decay, distortion, eq, pan.",
+    "name": "set_drum_params",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "drum": {
+          "type": "integer"
+        },
+        "params": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "drum",
+        "params"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Set project-wide parameters (0-127): reverb_synth1_send/reverb_synth2_send/reverb_drum1_send.. (Hall), delay_*_send (Echo/Delay), synth1_level/synth2_level/synth1_pan/synth2_pan (Mixer), master_filter_frequency/master_filter_resonance, reverb_decay, delay_time, delay_feedback.",
+    "name": "set_project_params",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "params": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "params"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Turn a macro knob (1-8) on synth 1 or 2 to a value 0-127. 1=Oscillator 2=OscMod 3=AmpEnv 4=FilterEnv 5=FilterFreq 6=Resonance 7=Modulation 8=FX.",
+    "name": "set_macro",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "synth": {
+          "type": "integer"
+        },
+        "macro": {
+          "type": "integer"
+        },
+        "value": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "synth",
+        "macro",
+        "value"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Select a synth patch by its number as shown on the device (1-64) on synth 1 or 2.",
+    "name": "select_patch",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "synth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        }
+      },
+      "required": [
+        "synth",
+        "number"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Audition notes: play MIDI notes on channel 0 (synth 1) or 1 (synth 2) for duration_ms.",
+    "name": "play_notes",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "integer"
+        },
+        "notes": {
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "velocity": {
+          "default": 100,
+          "type": "integer"
+        },
+        "duration_ms": {
+          "default": 500,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "channel",
+        "notes"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Audition one drum hit (drum 1-4).",
+    "name": "play_drum",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "drum": {
+          "type": "integer"
+        },
+        "velocity": {
+          "default": 100,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "drum"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Read the current patch of synth 1 or 2 from the device (name and parameters). Slow: a SysEx round trip.",
+    "name": "get_synth_patch",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "synth": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "synth"
+      ]
+    },
+    "behavior": "NON_BLOCKING"
+  },
+  {
+    "description": "What the agent knows: playback source, loaded song, tempo, mutes, unsaved changes, last change. Cheap; never touches the device.",
+    "name": "get_state",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Switch how the agent listens: 'ptt' (hold the key), 'toggle' (press to start and stop), 'open' (always listening, headphones recommended).",
+    "name": "set_listening",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "ptt",
+            "toggle",
+            "open"
+          ]
+        }
+      },
+      "required": [
+        "mode"
+      ]
+    },
+    "behavior": "BLOCKING"
+  }
+]

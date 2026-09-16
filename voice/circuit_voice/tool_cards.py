@@ -1,0 +1,192 @@
+"""The curated tools the voice agent exposes to the model.
+
+A card is data: which MCP tool it maps to (or none for a virtual tool the
+harness implements), a voice-oriented description, whether the model must wait
+for the result (BLOCKING) or may keep talking (NON_BLOCKING), an optional
+schema override, an argument normaliser (spoken 1-based numbers → MIDI 0-based),
+and which profiles include it. German aliases live in the system instruction,
+not here; the model reads these descriptions in English.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
+PROFILES = ("full", "perform")
+TRACKS = ["synth1", "synth2", "drum1", "drum2", "drum3", "drum4", "midi1", "midi2"]
+
+
+class ArgumentError(ValueError):
+    """Bad spoken argument; the message is German and goes back to the model."""
+
+
+@dataclass(frozen=True)
+class ToolCard:
+    name: str
+    description: str
+    mcp_tool: str | None = None  # None: virtual tool, handled by the harness
+    blocking: bool = True
+    read_only: bool = False
+    schema: dict[str, Any] | None = None  # overrides the server's inputSchema
+    normalise: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    # (spoken args, tool result) -> what the model gets back; default: the result itself
+    summarise: Callable[[dict[str, Any], Any], Any] | None = None
+    profiles: tuple[str, ...] = PROFILES
+
+
+def _int_in_range(args: dict[str, Any], key: str, lo: int, hi: int, label: str) -> int:
+    try:
+        value = int(args[key])
+    except (KeyError, TypeError, ValueError) as e:
+        raise ArgumentError(f"{label} fehlt oder ist keine Zahl.") from e
+    if not lo <= value <= hi:
+        raise ArgumentError(f"{label} muss zwischen {lo} und {hi} liegen.")
+    return value
+
+
+def _select_patch(args: dict[str, Any]) -> dict[str, Any]:
+    synth = _int_in_range(args, "synth", 1, 2, "Der Synth")
+    number = _int_in_range(args, "number", 1, 64, "Die Patch-Nummer")
+    return {"synth": synth, "patch_number": number - 1}
+
+
+def _obj(props: dict[str, Any], required: list[str]) -> dict[str, Any]:
+    return {"type": "object", "properties": props, "required": required}
+
+
+SYNTH_PARAM_HINTS = (
+    "Common params (0-127): filter_frequency (Filter/Cutoff auf=higher), filter_resonance, "
+    "osc1_wave/osc2_wave, osc1_level/osc2_level, osc2_pitch_coarse, "
+    "amp_env_attack/amp_env_decay/amp_env_sustain/amp_env_release (Hüllkurve), "
+    "filter_env_attack/filter_env_decay/filter_env_sustain/filter_env_release, filter_env_depth, "
+    "lfo1_rate/lfo1_wave, distortion_level, chorus_level, portamento, voice_mode. "
+    "Without a number, move about 20 steps ('etwas' 10, 'viel' 40)."
+)
+
+CARDS: list[ToolCard] = [
+    # --- internal sequencer (workflow A) ---
+    ToolCard(
+        "get_sequencer_status",
+        "Read the internal sequencer state: running, current pattern and step, BPM, muted tracks, pattern queue, "
+        "patterns defined. Use it to answer 'Was läuft gerade?' before speaking about state.",
+        mcp_tool="get_sequencer_status",
+        read_only=True,
+    ),
+    ToolCard(
+        "start_sequencer",
+        "Start the internal sequencer looping a pattern. Omit pattern and bpm to use the loaded song's first pattern "
+        "and tempo. Stops the device transport first if it is running.",
+        mcp_tool="start_sequencer",
+        schema=_obj(
+            {
+                "pattern": {"type": "string", "description": "pattern name; default: first pattern of the song"},
+                "bpm": {"type": "number", "description": "tempo; default: the loaded song's tempo"},
+            },
+            [],
+        ),
+    ),
+    ToolCard("stop_sequencer", "Stop the internal sequencer immediately (all notes off).", mcp_tool="stop_sequencer"),
+    ToolCard(
+        "set_bpm",
+        "Change the internal sequencer tempo while it plays. For 'schneller'/'langsamer' without a number, "
+        "change by about 5 BPM ('viel' 15) from the current BPM.",
+        mcp_tool="set_bpm",
+    ),
+    ToolCard(
+        "mute_track",
+        "Mute or unmute one track: synth1, synth2, drum1..drum4, midi1, midi2. 'Drums' or 'Schlagzeug' means all four "
+        "drum tracks (call once per track). muted=false unmutes.",
+        mcp_tool="mute_track",
+        schema=_obj(
+            {"track": {"type": "string", "enum": TRACKS}, "muted": {"type": "boolean", "default": True}},
+            ["track"],
+        ),
+    ),
+    ToolCard(
+        "queue_patterns",
+        "Queue patterns to play after the current one, in order (song structure by voice).",
+        mcp_tool="queue_patterns",
+    ),
+    ToolCard("set_song", "Replace the whole pattern queue with this ordered list of patterns.", mcp_tool="set_song"),
+    ToolCard("clear_queue", "Clear the pattern queue so the current pattern loops.", mcp_tool="clear_queue"),
+    ToolCard("list_patterns", "List the pattern names of the loaded song.", mcp_tool="list_patterns", read_only=True),
+    # --- sounds (both workflows) ---
+    ToolCard(
+        "set_synth_params",
+        "Set synth parameters on synth 1 or 2 while playing. " + SYNTH_PARAM_HINTS,
+        mcp_tool="set_synth_params",
+    ),
+    ToolCard(
+        "set_drum_params",
+        "Set drum parameters on drum 1-4 (0-127): level (leiser/lauter), pitch, decay, distortion, eq, pan.",
+        mcp_tool="set_drum_params",
+    ),
+    ToolCard(
+        "set_project_params",
+        "Set project-wide parameters (0-127): reverb_synth1_send/reverb_synth2_send/reverb_drum1_send.. (Hall), "
+        "delay_*_send (Echo/Delay), synth1_level/synth2_level/synth1_pan/synth2_pan (Mixer), "
+        "master_filter_frequency/master_filter_resonance, reverb_decay, delay_time, delay_feedback.",
+        mcp_tool="set_project_params",
+    ),
+    ToolCard(
+        "set_macro",
+        "Turn a macro knob (1-8) on synth 1 or 2 to a value 0-127. 1=Oscillator 2=OscMod 3=AmpEnv 4=FilterEnv "
+        "5=FilterFreq 6=Resonance 7=Modulation 8=FX.",
+        mcp_tool="set_macro",
+    ),
+    ToolCard(
+        "select_patch",
+        "Select a synth patch by its number as shown on the device (1-64) on synth 1 or 2.",
+        mcp_tool="select_patch",
+        schema=_obj(
+            {
+                "synth": {"type": "integer", "minimum": 1, "maximum": 2},
+                "number": {"type": "integer", "minimum": 1, "maximum": 64},
+            },
+            ["synth", "number"],
+        ),
+        normalise=_select_patch,
+        summarise=lambda a, r: f"Patch {a['number']} auf Synth {a['synth']} gewählt",
+    ),
+    ToolCard(
+        "play_notes",
+        "Audition notes: play MIDI notes on channel 0 (synth 1) or 1 (synth 2) for duration_ms.",
+        mcp_tool="play_notes",
+    ),
+    ToolCard("play_drum", "Audition one drum hit (drum 1-4).", mcp_tool="play_drum"),
+    ToolCard(
+        "get_synth_patch",
+        "Read the current patch of synth 1 or 2 from the device (name and parameters). Slow: a SysEx round trip.",
+        mcp_tool="get_synth_patch",
+        blocking=False,
+        read_only=True,
+    ),
+    # --- virtual tools (harness) ---
+    ToolCard(
+        "get_state",
+        "What the agent knows: playback source, loaded song, tempo, mutes, unsaved changes, last change. "
+        "Cheap; never touches the device.",
+        schema=_obj({}, []),
+        read_only=True,
+    ),
+    ToolCard(
+        "set_listening",
+        "Switch how the agent listens: 'ptt' (hold the key), 'toggle' (press to start and stop), 'open' (always "
+        "listening, headphones recommended).",
+        schema=_obj({"mode": {"type": "string", "enum": ["ptt", "toggle", "open"]}}, ["mode"]),
+    ),
+]
+
+_BY_NAME = {c.name: c for c in CARDS}
+
+
+def card(name: str) -> ToolCard | None:
+    return _BY_NAME.get(name)
+
+
+def cards_for_profile(profile: str) -> list[ToolCard]:
+    if profile not in PROFILES:
+        raise ValueError(f"unknown tool profile {profile!r}")
+    return [c for c in CARDS if profile in c.profiles]
