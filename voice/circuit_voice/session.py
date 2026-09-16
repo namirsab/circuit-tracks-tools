@@ -54,7 +54,9 @@ def build_live_config(
                 silence_duration_ms=config.silence_ms,
             )
         )
-        proactivity = types.ProactivityConfig(proactive_audio=True)
+        # proactive audio (ProactivityConfig) is rejected at setup by gemini-3.8-live
+        # on v1beta as of 2026-09-16 ("Unknown name proactivity"); revisit later.
+        proactivity = None
     else:
         realtime = types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(disabled=True)

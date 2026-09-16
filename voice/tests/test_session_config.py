@@ -42,7 +42,7 @@ def test_manual_modes_disable_vad_and_open_mode_uses_silence():
     open_ = build_live_config(cfg("open", **{"--silence-ms": 1500}), DECL)
     vad = open_.realtime_input_config.automatic_activity_detection
     assert vad.disabled is False and vad.silence_duration_ms == 1500
-    assert open_.proactivity.proactive_audio is True
+    assert open_.proactivity is None  # rejected by the API today
 
 
 def test_resumption_handle_and_text_mode():

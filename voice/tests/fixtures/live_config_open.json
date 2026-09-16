@@ -45,8 +45,5 @@
   "context_window_compression": {
     "trigger_tokens": 100000,
     "sliding_window": {}
-  },
-  "proactivity": {
-    "proactive_audio": true
   }
 }

@@ -56,3 +56,14 @@ def test_module_imports_without_sounddevice(monkeypatch):
     importlib.reload(audio)
     assert audio.IN_RATE == 16000
     importlib.reload(audio)
+
+
+def test_player_speaking_flag_has_a_tail():
+    p = Player(rate=OUT_RATE, stream_factory=lambda **kw: None)
+    assert p.speaking(now=1000.0) is False
+    p.play(np.ones(10, dtype=np.int16).tobytes())
+    assert p.speaking() is True
+    p.pull(10)
+    assert p.speaking() is True  # within the tail
+    p.tail_s = 0.0
+    assert p.speaking(now=p._last_output + 1) is False

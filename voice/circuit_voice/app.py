@@ -24,8 +24,10 @@ from .ui import TerminalUI
 
 def _connect_factory(config: Config) -> Callable[..., Any]:
     from google import genai  # noqa: PLC0415
+    from google.genai import types  # noqa: PLC0415
 
-    client = genai.Client(api_key=config.api_key)
+    # proactive audio and affective dialog live on v1beta
+    client = genai.Client(api_key=config.api_key, http_options=types.HttpOptions(api_version="v1beta"))
     model = config.model
 
     def connect(*, config):
@@ -69,7 +71,12 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
         listen = ListenController(config.mode, key=config.ptt_key, max_utterance_s=config.max_utterance_s)
         player = Player(device=config.output_device)
         player.start()
-        mic = MicStream(device=config.input_device, gate=lambda: listen.forwarding)
+        # Half-duplex in open mode: the mic must not hear the agent's own voice,
+        # otherwise the model answers itself in a loop (seen on 2026-09-16).
+        mic = MicStream(
+            device=config.input_device,
+            gate=lambda: listen.forwarding and not (config.mode == "open" and player.speaking()),
+        )
         mic.start()
         session = Session(
             config,

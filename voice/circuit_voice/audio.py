@@ -14,6 +14,7 @@ import asyncio
 import collections
 import math
 import sys
+import time
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 
@@ -85,6 +86,8 @@ class Player:
         self._queue: collections.deque[np.ndarray] = collections.deque()
         self._stream_factory = stream_factory
         self._stream: Any = None
+        self._last_output = 0.0
+        self.tail_s = 0.4  # how long after the last sample we still count as speaking
 
     def start(self) -> None:
         factory = self._stream_factory or self._default_stream
@@ -116,9 +119,16 @@ class Player:
     def queued_samples(self) -> int:
         return sum(len(a) for a in self._queue)
 
+    def speaking(self, now: float | None = None) -> bool:
+        """True while audio is queued or was played within the last ``tail_s`` seconds."""
+        now = time.monotonic() if now is None else now
+        return bool(self._queue) or (now - self._last_output) < self.tail_s
+
     def pull(self, n: int) -> np.ndarray:
         """Take n samples from the queue, zero-padded when it runs dry."""
         out = np.zeros(n, dtype=np.int16)
+        if self._queue:
+            self._last_output = time.monotonic()
         pos = 0
         while pos < n and self._queue:
             head = self._queue[0]
