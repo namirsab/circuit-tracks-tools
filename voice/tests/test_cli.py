@@ -30,7 +30,7 @@ def test_flags_override_defaults():
             "--voice",
             "Puck",
             "--tools",
-            "perform",
+            "creative",
             "--no-log",
             "--song",
             "x.json",
