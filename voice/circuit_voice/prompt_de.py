@@ -79,5 +79,6 @@ PARAM_ALIASES_DE: dict[str, str] = {
 }
 
 GREETING_DE = "Bereit. Halte die Taste und sprich."
+GREETING_TOGGLE_DE = "Bereit. Drück die Taste, sprich, und drück sie nochmal."
 GREETING_OPEN_DE = "Bereit. Ich höre zu; am besten mit Kopfhörern."
 GOODBYE_DE = "Die Zeit ist um. Bis zum nächsten Mal."

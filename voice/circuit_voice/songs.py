@@ -109,11 +109,18 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
                 "needs_confirmation": f"Slot {slot} wird überschrieben, Song '{name}'. Speichern?",
                 "hint": "Ask the user; on 'ja' call save_to_device again with confirmed=true.",
             }
+        # The device hangs when project SysEx blocks interleave with clock and notes
+        # (seen on 2026-09-16): stop the internal sequencer before writing.
+        stopped = False
+        if ledger.running and ledger.source == "internal":
+            await bridge.dispatch("stop_sequencer", {})
+            stopped = True
         result = await backend.call("export_song_to_project", {"slot": slot - 1, "name": name})
         if result.is_error:
             return f"Speichern fehlgeschlagen: {result.text}"
         ledger.saved(slot)
-        return f"Gespeichert in Slot {slot} als '{name}'. Soll ich es vom Gerät abspielen?"
+        tail = " Der Sequenzer ist dafür gestoppt; sag Start, oder ich spiele es vom Gerät ab." if stopped else ""
+        return f"Gespeichert in Slot {slot} als '{name}'.{tail}"
 
     bridge.register_virtual("list_saved_songs", list_saved_songs)
     bridge.register_virtual("load_saved_song", load_saved_song)

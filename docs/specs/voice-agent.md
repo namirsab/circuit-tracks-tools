@@ -432,8 +432,10 @@ in the prompt: one source at a time. Starting the internal sequencer while the
 device transport runs first sends `transport("stop")`; starting the device
 transport while the internal engine runs first calls `stop_sequencer`. The
 agent says so in half a sentence ("Ich stoppe das Gerät und starte den
-Song."). `save_to_device` needs no stop. After a save, "Spiel es vom Gerät"
-stops the internal engine, selects the slot and starts the device transport.
+Song."). `save_to_device` stops the internal engine before writing: on
+2026-09-16 a save during playback hung the device (project SysEx blocks
+interleaved with clock and notes) until a hard restart. After a save, "Spiel
+es vom Gerät" selects the slot and starts the device transport.
 
 ### Milestones
 

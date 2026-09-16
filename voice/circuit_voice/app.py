@@ -16,7 +16,7 @@ from .composer import Composer, GeminiComposer
 from .events import EventLog
 from .listen import ListenController
 from .mcp_client import McpBackend, MidiNotFound
-from .prompt_de import GREETING_DE, GREETING_OPEN_DE
+from .prompt_de import GREETING_DE, GREETING_OPEN_DE, GREETING_TOGGLE_DE
 from .session import Session, run_text_turn
 from .songs import SongLibrary, register_song_tools
 from .ui import TerminalUI
@@ -69,6 +69,8 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
                 return 3
         bridge = await build_bridge(config, backend)
         listen = ListenController(config.mode, key=config.ptt_key, max_utterance_s=config.max_utterance_s)
+        if config.key_source == "terminal" and listen.mode == "ptt":
+            listen.mode = "toggle"  # a terminal cannot report key releases
         player = Player(device=config.output_device)
         player.start()
         # Half-duplex in open mode: the mic must not hear the agent's own voice,
@@ -86,7 +88,7 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
             connect=connect or _connect_factory(config),
             mic=mic,
             on_event=on_event,
-            greeting=GREETING_OPEN_DE if config.mode == "open" else GREETING_DE,
+            greeting={"open": GREETING_OPEN_DE, "toggle": GREETING_TOGGLE_DE}.get(listen.mode, GREETING_DE),
         )
 
         async def set_listening(args: dict[str, Any]) -> str:
