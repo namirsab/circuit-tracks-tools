@@ -260,7 +260,7 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "The patch names on the device with their numbers, optionally filtered by a word ('bass'). Needs one scan_patches first; say so if the names are unknown.",
+    "description": "The patch names on the device with their numbers, optionally filtered by a word ('bass'). Always try this first; it says when the names still need scan_patches.",
     "name": "list_patches",
     "parameters_json_schema": {
       "type": "object",
@@ -274,7 +274,7 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Read the names of all 64 patches from the device (about ten seconds, only while nothing plays; the selected patch changes during the scan and is restored). Do it when the user asks which patches exist and the names are unknown.",
+    "description": "Read the names of all 64 patches from the device (a few seconds, only while nothing plays; the selected patch changes during the scan and is restored). Only after list_patches said the names are unknown.",
     "name": "scan_patches",
     "parameters_json_schema": {
       "type": "object",
