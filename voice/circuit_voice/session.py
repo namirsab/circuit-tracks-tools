@@ -88,7 +88,10 @@ class Session:
         on_event: Callable[[dict[str, Any]], None] | None = None,
         backoff: tuple[float, float] = (1.0, 10.0),
         clock: Callable[[], float] = time.monotonic,
+        greeting: str | None = None,
     ):
+        self.greeting = greeting
+        self._greeted = False
         self.config = config
         self.bridge = bridge
         self.listen = listen
@@ -178,6 +181,12 @@ class Session:
         async with self.connect(config=config) as live:
             self._live = live
             self.emit("connected", handle=self.resumption_handle)
+            if self.greeting and not self._greeted:
+                self._greeted = True
+                prompt = f"(Systemhinweis: Die Sitzung beginnt. Sag der Person kurz auf Deutsch: {self.greeting})"
+                await live.send_client_content(
+                    turns=types.Content(role="user", parts=[types.Part(text=prompt)]), turn_complete=True
+                )
             send_task = asyncio.ensure_future(self._send_loop(live))
             tick_task = asyncio.ensure_future(self._tick_loop())
             try:

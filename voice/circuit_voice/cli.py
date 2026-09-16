@@ -137,5 +137,10 @@ def main(argv: list[str] | None = None) -> None:
 
         print(sd.query_devices())
         return
-    print("circuit-voice: the voice loop is not implemented yet (see tasks/plan.md).", file=sys.stderr)
-    sys.exit(1)
+    from .app import main_async  # noqa: PLC0415 - keep --help fast
+
+    try:
+        sys.exit(main_async(cfg))
+    except KeyboardInterrupt:
+        print("\ncircuit-voice: beendet.", file=sys.stderr)
+        sys.exit(0)
