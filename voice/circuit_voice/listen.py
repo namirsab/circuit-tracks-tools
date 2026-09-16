@@ -121,8 +121,6 @@ class ListenController:
         if self.mode == "open" and self._listener_factory is None:
             return None
         factory = self._listener_factory or self._pynput_factory
-        if self._listener_factory is None and not self.process_trusted():
-            return PERMISSION_HINT_DE
         try:
             self._listener = factory(
                 on_press=lambda k: self.key_down(key_name(k)), on_release=lambda k: self.key_up(key_name(k))
@@ -132,7 +130,12 @@ class ListenController:
         except Exception:  # noqa: BLE001 - permissions or no display; report, keep running
             self._listener = None
             return PERMISSION_HINT_DE
-        return None
+        # The AX check can be false for a child of a trusted terminal while events still
+        # arrive, so it is a warning, not a gate. pynput exposes its own verdict too.
+        trusted = getattr(self._listener, "IS_TRUSTED", True) and (
+            self._listener_factory is not None or self.process_trusted()
+        )
+        return None if trusted else PERMISSION_HINT_DE + " (Falls die Töne beim Drücken kommen, ignoriere das.)"
 
     @staticmethod
     def process_trusted() -> bool:
