@@ -11,6 +11,8 @@ the session uses for earcons, activity signals and the terminal view.
 
 from __future__ import annotations
 
+import ctypes
+import sys
 import time
 from collections.abc import Callable
 from typing import Any
@@ -111,6 +113,8 @@ class ListenController:
         if self.mode == "open" and self._listener_factory is None:
             return None
         factory = self._listener_factory or self._pynput_factory
+        if self._listener_factory is None and not self.process_trusted():
+            return PERMISSION_HINT_DE
         try:
             self._listener = factory(
                 on_press=lambda k: self.key_down(key_name(k)), on_release=lambda k: self.key_up(key_name(k))
@@ -121,6 +125,19 @@ class ListenController:
             self._listener = None
             return PERMISSION_HINT_DE
         return None
+
+    @staticmethod
+    def process_trusted() -> bool:
+        """macOS: can this process see global key events? (Accessibility permission)"""
+        if sys.platform != "darwin":
+            return True
+        try:
+            lib = ctypes.cdll.LoadLibrary(
+                "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices"
+            )
+            return bool(lib.AXIsProcessTrusted())
+        except Exception:  # noqa: BLE001
+            return True
 
     @staticmethod
     def _pynput_factory(**kw):

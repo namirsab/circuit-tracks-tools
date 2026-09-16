@@ -185,7 +185,10 @@ class Session:
             self.emit("connected", handle=self.resumption_handle)
             if self.greeting and not self._greeted:
                 self._greeted = True
-                prompt = f"(Systemhinweis: Die Sitzung beginnt. Sag der Person kurz auf Deutsch: {self.greeting})"
+                prompt = (
+                    f"(Systemhinweis: Die Sitzung beginnt. Sag der Person kurz auf Deutsch: {self.greeting} "
+                    "Kein Werkzeug nötig.)"
+                )
                 await live.send_client_content(
                     turns=types.Content(role="user", parts=[types.Part(text=prompt)]), turn_complete=True
                 )
@@ -222,23 +225,38 @@ class Session:
                 await live.send_realtime_input(audio=types.Blob(data=frame, mime_type=AUDIO_MIME))
 
     async def _receive_loop(self, live: Any) -> None:
-        async for msg in live.receive():
-            update = msg.session_resumption_update
-            if update is not None and update.resumable and update.new_handle:
-                self.resumption_handle = update.new_handle
-            if msg.go_away is not None:
-                self.emit("go_away", time_left=str(msg.go_away.time_left))
-            if msg.server_content is not None:
-                self._handle_content(msg.server_content)
-            if msg.tool_call is not None:
-                for fc in msg.tool_call.function_calls or []:
-                    await self._handle_tool_call(live, fc)
-            if msg.tool_call_cancellation is not None:
-                for cid in msg.tool_call_cancellation.ids or []:
-                    task = self._tasks.pop(cid, None)
-                    if task is not None:
-                        task.cancel()
-                        self.emit("tool_cancelled", id=cid)
+        # The SDK's receive() ends after each model turn; keep reading until the
+        # socket closes (an empty pass) or we are asked to stop.
+        while not self._stop:
+            got_any = False
+            try:
+                async for msg in live.receive():
+                    got_any = True
+                    await self._handle_message(live, msg)
+            except Exception as e:  # noqa: BLE001 - a close after our own stop is not an error
+                if self._stop or "1000" in str(e):
+                    return
+                raise
+            if not got_any:
+                return
+
+    async def _handle_message(self, live: Any, msg: Any) -> None:
+        update = msg.session_resumption_update
+        if update is not None and update.resumable and update.new_handle:
+            self.resumption_handle = update.new_handle
+        if msg.go_away is not None:
+            self.emit("go_away", time_left=str(msg.go_away.time_left))
+        if msg.server_content is not None:
+            self._handle_content(msg.server_content)
+        if msg.tool_call is not None:
+            for fc in msg.tool_call.function_calls or []:
+                await self._handle_tool_call(live, fc)
+        if msg.tool_call_cancellation is not None:
+            for cid in msg.tool_call_cancellation.ids or []:
+                task = self._tasks.pop(cid, None)
+                if task is not None:
+                    task.cancel()
+                    self.emit("tool_cancelled", id=cid)
 
     def _handle_content(self, sc: types.LiveServerContent) -> None:
         if sc.interrupted:

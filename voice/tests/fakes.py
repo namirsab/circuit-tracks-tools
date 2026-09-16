@@ -24,12 +24,24 @@ class FakeLiveSession:
             await asyncio.sleep(0.01)
 
     async def receive(self):
-        for msg in self.script:
+        """Like the SDK: yields until a turn completes; a later call continues the script.
+
+        Once the script is exhausted it waits ``tail`` seconds (for background
+        tools) and then returns without yielding, which the session reads as a
+        closed socket.
+        """
+        while self.script:
             if self.closed:
                 return
+            msg = self.script.pop(0)
             yield msg
             await self._sleep(self.gap)
-        await self._sleep(self.tail)
+            sc = msg.server_content
+            if sc is not None and sc.turn_complete:
+                return
+        if self.tail:
+            await self._sleep(self.tail)
+            self.tail = 0
 
     async def send_tool_response(self, *, function_responses):
         self.tool_responses.extend(function_responses)

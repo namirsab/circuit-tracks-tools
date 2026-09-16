@@ -138,9 +138,15 @@ class Player:
 class MicStream:
     """Async iterator of 20 ms int16 frames at 16 kHz from the default or given input device."""
 
-    def __init__(self, device: Any = None, loop: asyncio.AbstractEventLoop | None = None):
+    def __init__(
+        self,
+        device: Any = None,
+        loop: asyncio.AbstractEventLoop | None = None,
+        gate: Callable[[], bool] | None = None,
+    ):
         self.device = device
         self._loop = loop
+        self._gate = gate or (lambda: True)
         self._queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=200)
         self._stream: Any = None
         self._rate = IN_RATE
@@ -173,11 +179,19 @@ class MicStream:
         samples = indata[:, 0].copy()
         if self._rate != IN_RATE:
             samples = resample(samples, self._rate, IN_RATE)
+        if not self._gate():
+            self._framer.buffer = b""
+            return
         for frame in self._framer.push(samples.tobytes()):
             try:
-                self._loop.call_soon_threadsafe(self._queue.put_nowait, frame)
+                self._loop.call_soon_threadsafe(self._enqueue, frame)
             except RuntimeError:
                 return
+
+    def _enqueue(self, frame: bytes) -> None:
+        if self._queue.full():
+            self._queue.get_nowait()  # drop the oldest frame rather than raise
+        self._queue.put_nowait(frame)
 
     def __aiter__(self) -> AsyncIterator[bytes]:
         return self

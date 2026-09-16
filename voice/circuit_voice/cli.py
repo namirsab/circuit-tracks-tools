@@ -140,7 +140,12 @@ def main(argv: list[str] | None = None) -> None:
     from .app import main_async  # noqa: PLC0415 - keep --help fast
 
     try:
-        sys.exit(main_async(cfg))
+        code = main_async(cfg)
     except KeyboardInterrupt:
         print("\ncircuit-voice: beendet.", file=sys.stderr)
-        sys.exit(0)
+        code = 0
+    # Audio and MIDI libraries leave non-daemon threads behind; the session has
+    # already shut everything down cleanly, so leave without waiting for them.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)

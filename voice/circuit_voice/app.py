@@ -69,7 +69,7 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
         listen = ListenController(config.mode, key=config.ptt_key, max_utterance_s=config.max_utterance_s)
         player = Player(device=config.output_device)
         player.start()
-        mic = MicStream(device=config.input_device)
+        mic = MicStream(device=config.input_device, gate=lambda: listen.forwarding)
         mic.start()
         session = Session(
             config,
