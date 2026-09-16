@@ -1,0 +1,15 @@
+{"brief": "Bau mir einen langsamen Techno-Beat in Moll, 118 BPM.", "bpm": 118, "tracks": ["drum1", "synth2"], "min_patterns": 2}
+{"brief": "Ein ruhiger Ambient-Track, sehr langsam, ohne Schlagzeug.", "bpm_max": 90, "no_tracks": ["drum1", "drum2"], "min_patterns": 2}
+{"brief": "Schneller House-Groove mit Bassline und Hi-Hats, 126 BPM.", "bpm": 126, "tracks": ["drum1", "drum3", "synth2"], "min_patterns": 2}
+{"brief": "Ein Dub-Groove in D-Moll mit viel Hall, 75 BPM.", "bpm": 75, "tracks": ["drum1", "synth2"], "min_patterns": 2}
+{"brief": "Minimaler Beat nur mit Kick und Snare, 100 BPM.", "bpm": 100, "tracks": ["drum1", "drum2"], "min_patterns": 1}
+{"brief": "Eine fröhliche Melodie in C-Dur mit Akkorden und Beat, 110 BPM.", "bpm": 110, "tracks": ["synth1", "drum1"], "min_patterns": 2}
+{"brief": "Düsterer Drum-and-Bass-Track, 170 BPM.", "bpm": 170, "tracks": ["drum1", "synth2"], "min_patterns": 2}
+{"brief": "Ein Song mit Intro, Hauptteil und Outro, Lo-Fi, 85 BPM.", "bpm": 85, "min_patterns": 3, "song_order_min": 3}
+{"brief": "Acid-Line mit viel Resonanz und Kick auf jedem Schlag, 130 BPM.", "bpm": 130, "tracks": ["synth2", "drum1"], "min_patterns": 1}
+{"brief": "Ein Pad, das langsam den Filter öffnet, ohne Drums, 70 BPM.", "bpm": 70, "no_tracks": ["drum1"], "min_patterns": 1}
+{"revise": "Die Hi-Hats leiser.", "base": "Ethereal Drift", "untouched": ["synth1", "synth2", "drum1", "drum2"]}
+{"revise": "Füg eine Bassline auf Synth zwei dazu.", "base": "Minimal", "untouched": ["drum1"], "tracks": ["synth2"]}
+{"revise": "Mach das Tempo 80.", "base": "Ethereal Drift", "bpm": 80}
+{"revise": "Nimm die Kick raus.", "base": "Ethereal Drift", "no_tracks": ["drum1"], "untouched": ["synth1", "synth2"]}
+{"revise": "Häng ein Outro-Pattern an, ruhiger als der Rest.", "base": "Minimal", "min_patterns": 2, "untouched": ["drum1"]}
