@@ -63,3 +63,25 @@ jobs:
 
       - name: Run webapp tests
         run: cd webapp && node --test tests/*.test.mjs
+
+  voice:
+    name: Circuit Voice tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install PortAudio (sounddevice)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 libasound2-dev
+
+      - name: Install the library and the voice package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[mcp]"
+          pip install -e "./voice[dev]"
+
+      - name: Run voice tests (no network, no devices; evals are opt-in)
+        run: pytest voice/tests

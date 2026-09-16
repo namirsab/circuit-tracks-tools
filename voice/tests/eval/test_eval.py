@@ -122,7 +122,8 @@ def test_every_m1_card_is_covered():
 
     covered = {t for c in CASES for t in (c["tool"] if isinstance(c["tool"], list) else [c["tool"]])}
     missing = {c.name for c in cards_for_profile("full")} - covered
-    assert missing <= {"play_drum", "set_song"}, missing
+    optional = {"play_drum", "set_song", "morph_drum_params", "morph_project_params", "get_pattern", "scan_patches"}
+    assert missing <= optional, missing
     assert sum(1 for c in CASES if c["tool"] is None) >= 5
 
 

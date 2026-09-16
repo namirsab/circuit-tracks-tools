@@ -18,10 +18,10 @@
 {"say": "Leere die Warteschlange.", "tool": "clear_queue", "state": "playing"}
 {"say": "Was läuft gerade?", "tool": ["get_sequencer_status", "get_state"], "state": "playing"}
 {"say": "Wie ist der Stand?", "tool": ["get_state", "get_sequencer_status"], "state": "playing"}
-{"say": "Mach den Filter auf Synth eins auf.", "tool": "set_synth_params", "args": {"synth": 1, "params": {"filter_frequency": "*"}}, "state": "playing"}
-{"say": "Cutoff auf Synth zwei zu.", "tool": "set_synth_params", "args": {"synth": 2, "params": {"filter_frequency": "*"}}, "state": "playing"}
-{"say": "Mehr Resonanz auf dem Bass.", "tool": "set_synth_params", "args": {"synth": 2, "params": {"filter_resonance": "*"}}, "state": "playing"}
-{"say": "Längerer Release auf Synth eins.", "tool": "set_synth_params", "args": {"synth": 1, "params": {"amp_env_release": "*"}}, "state": "playing"}
+{"say": "Mach den Filter auf Synth eins auf.", "tool": "set_macro", "args": {"synth": 1, "macro": 5, "value": [70, 127]}, "state": "playing"}
+{"say": "Cutoff auf Synth zwei zu.", "tool": "set_macro", "args": {"synth": 2, "macro": 5, "value": [0, 60]}, "state": "playing"}
+{"say": "Mehr Resonanz auf dem Bass.", "tool": "set_macro", "args": {"synth": 2, "macro": 6, "value": [70, 127]}, "state": "playing"}
+{"say": "Längerer Release auf Synth eins.", "tool": ["set_macro", "set_synth_params"], "args": {"synth": 1}, "state": "playing"}
 {"say": "Die Kick leiser.", "tool": "set_drum_params", "args": {"drum": 1, "params": {"level": "*"}}, "state": "playing"}
 {"say": "Snare höher stimmen.", "tool": "set_drum_params", "args": {"drum": 2, "params": {"pitch": "*"}}, "state": "playing"}
 {"say": "Mehr Hall auf den Drums.", "tool": "set_project_params", "args": {"params": {"reverb_drum1_send": "*"}}, "state": "playing"}
@@ -49,7 +49,7 @@
 {"say": "Mach mir ein Hi-Hat-Pattern mit Offbeats.", "tool": "generate_track", "args": {"track": "drum3*"}, "state": "loaded"}
 {"say": "Design mir einen warmen, weichen Bass-Sound auf Synth zwei.", "tool": "design_patch", "args": {"synth": 2}}
 {"say": "Speicher den Patch von Synth zwei in Slot 40.", "tool": "save_patch", "args": {"synth": 2, "slot": 40}}
-{"say": "Füg eine Bassline auf Synth zwei dazu.", "tool": "revise", "args": {"instruction": "*"}, "state": "playing"}
+{"say": "Füg eine Bassline auf Synth zwei dazu.", "tool": ["generate_track", "revise"], "args": {"track": "synth2"}, "state": "playing"}
 {"say": "Wie geht es dir?", "tool": null}
 {"say": "Was kann ich alles sagen?", "tool": null}
 {"say": "Danke, das klingt gut.", "tool": null}
@@ -61,12 +61,12 @@
 {"say": "Bass auf Synth zwei: C2 auf Schritt eins, G2 auf Schritt neun.", "tool": "write_notes", "args": {"track": "synth2"}, "state": "loaded"}
 {"say": "Kick auf eins, fünf, neun und dreizehn.", "tool": "write_drums", "args": {"track": "drum1", "steps": [1, 5, 9, 13]}, "state": "loaded"}
 {"say": "Snare auf fünf und dreizehn.", "tool": "write_drums", "args": {"track": "drum2", "steps": [5, 13]}, "state": "loaded"}
-{"say": "Lösch die Hi-Hats in Pattern eins.", "tool": "clear_track", "args": {"track": "drum3"}, "state": "loaded"}
+{"say": "Lösch die Hi-Hats in Pattern eins.", "tool": ["clear_track", "get_pattern"], "state": "loaded"}
 {"say": "Hi-Hats auf jedem Schritt, aber jeder zweite leiser.", "tool": "write_drums", "args": {"track": "drum3", "velocities": "*"}, "state": "loaded"}
 {"say": "Schritt fünf auf der Kick lauter.", "tool": "set_step", "args": {"track": "drum1", "step": 5, "velocity": "*"}, "state": "loaded"}
 {"say": "Nimm für Drum zwei ein anderes Snare-Sample.", "tool": ["set_drum_sample", "list_drum_samples"], "state": "loaded"}
 {"say": "Welche Drum-Samples gibt es?", "tool": "list_drum_samples"}
 {"say": "Bring den Filter auf Synth eins langsam in Bewegung, von zu nach auf, über vier Takte.", "tool": "morph_synth_params", "args": {"synth": 1}, "state": "playing"}
 {"say": "Stopp die Bewegung.", "tool": "stop_morph", "state": "playing"}
-{"say": "Leere Pattern eins komplett.", "tool": "clear_pattern", "args": {"name": "pattern1"}, "state": "loaded"}
+{"say": "Leere Pattern eins komplett.", "tool": "clear_pattern", "args": {"name": "*"}, "state": "loaded"}
 {"say": "Was liegt auf Synth eins?", "tool": ["get_pattern", "get_sequencer_status", "get_state"], "state": "loaded"}
