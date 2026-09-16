@@ -33,9 +33,38 @@ STATUS_RESULT = {
 GATE = 0.9
 
 
+def _num(x):
+    return float(x) if isinstance(x, int | float) and not isinstance(x, bool) else x
+
+
 def args_match(expected, actual) -> bool:
     if expected is None:
         return True
+    for key, want in expected.items():
+        got = actual.get(key)
+        if isinstance(want, dict):
+            if not isinstance(got, dict) or not args_match(want, got):
+                return False
+        elif (
+            isinstance(want, list)
+            and len(want) == 2
+            and all(isinstance(x, int | float) for x in want)
+            and isinstance(got, int | float)
+        ):
+            if not want[0] <= got <= want[1]:  # a numeric range
+                return False
+        elif isinstance(want, list):
+            if not isinstance(got, list) or [_num(x) for x in got] != [_num(x) for x in want]:
+                return False
+        elif want == "*":
+            if got is None:
+                return False
+        elif isinstance(want, str) and want.endswith("*"):
+            if not isinstance(got, str) or not got.startswith(want[:-1]):
+                return False
+        elif _num(got) != _num(want):
+            return False
+    return True
     for key, want in expected.items():
         got = actual.get(key)
         if isinstance(want, dict):
