@@ -108,3 +108,21 @@ async def test_edits_reach_the_device_on_save(server, monkeypatch):
         assert pat.tracks["synth1"]["steps"]["8"]["note"] == 67
         assert "0" in pat.tracks["drum1"]["steps"]
         assert ledger.running is False
+
+
+async def test_step_edits_are_undoable(server):
+    async with agent(server) as (bridge, ledger, midi):
+        await bridge.dispatch("new_song", {"name": "Probe", "bpm": 100})
+        await bridge.dispatch("write_drums", {"track": "drum1", "steps": [1, 5]})
+        await bridge.dispatch("write_drums", {"track": "drum1", "steps": [9, 13]})
+        out = await bridge.dispatch("undo_last", {})
+        assert "drum1 in pattern1 ist wieder wie vorher" in out.response["result"]
+        assert set(ledger.song_json["patterns"]["pattern1"]["tracks"]["drum1"]["steps"]) == {"0", "4"}
+        engine = await bridge.backend.call("get_pattern", {"name": "pattern1"})
+        assert set(engine.data["tracks"]["drum1"]["steps"]) == {"0", "4"}
+        await bridge.dispatch("undo_last", {})
+        assert "drum1" not in ledger.song_json["patterns"]["pattern1"]["tracks"]
+        await bridge.dispatch("write_notes", {"track": "synth1", "notes": "C3 D3"})
+        await bridge.dispatch("clear_track", {"track": "synth1"})
+        await bridge.dispatch("undo_last", {})
+        assert list(ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]) == ["0", "4"]

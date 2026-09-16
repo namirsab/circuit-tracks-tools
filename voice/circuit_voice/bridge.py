@@ -48,6 +48,7 @@ class Bridge:
         self.ledger = ledger if ledger is not None else Ledger()
         self.cards: dict[str, ToolCard] = {c.name: c for c in cards_for_profile(profile)}
         self._virtual: dict[str, VirtualHandler] = {}
+        self._internal: dict[str, VirtualHandler] = {}  # undo handlers not exposed as tools
         self._declarations: list[types.FunctionDeclaration] = []
         if "get_state" in self.cards:
             self._virtual["get_state"] = self._get_state
@@ -68,8 +69,9 @@ class Bridge:
             return "Es gibt nichts, was ich rückgängig machen kann."
         if change.revert is None:
             return f"Die letzte Änderung ({change.text_de}) kann ich nicht rückgängig machen."
-        if change.tool in self._virtual:
-            out = await self._virtual[change.tool](dict(change.revert))
+        handler = self._virtual.get(change.tool) or self._internal.get(change.tool)
+        if handler is not None:
+            out = await handler(dict(change.revert))
             return f"Rückgängig: {out}" if isinstance(out, str) else f"Rückgängig: {change.text_de}."
         result = await self.backend.call(change.tool, change.revert)
         if result.is_error:
@@ -101,6 +103,10 @@ class Bridge:
     def is_blocking(self, name: str) -> bool:
         c = self.cards.get(name)
         return True if c is None else c.blocking
+
+    def register_internal(self, name: str, handler: VirtualHandler) -> None:
+        """A handler only ``undo_last`` can reach (e.g. restoring a track's steps)."""
+        self._internal[name] = handler
 
     def register_virtual(self, name: str, handler: VirtualHandler) -> None:
         if name not in self.cards or self.cards[name].mcp_tool is not None:

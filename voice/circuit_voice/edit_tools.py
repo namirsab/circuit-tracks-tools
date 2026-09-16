@@ -15,6 +15,7 @@ import re
 from typing import Any
 
 from .bridge import Bridge
+from .ledger import Change
 from .tool_cards import ArgumentError, _int_in_range
 
 NOTE_OFFSETS = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11, "H": 11}
@@ -95,14 +96,36 @@ def register_edit_tools(bridge: Bridge) -> None:
                 raise ArgumentError(f"Das Pattern {name} gibt es nicht. Vorhanden: {', '.join(patterns)}.")
         return key, patterns[key]
 
-    async def push(pattern_name: str, track: str, steps: dict[str, Any]) -> str | None:
+    async def push(
+        pattern_name: str, track: str, steps: dict[str, Any], previous: dict[str, Any] | None = None
+    ) -> str | None:
         result = await backend.call(
             "set_track", {"pattern_name": pattern_name, "track": track, "steps": steps, "clear_existing": True}
         )
         if result.is_error:
             return f"Das Schreiben ging nicht: {result.text}"
         ledger.unsaved = True
+        if previous is not None:
+            ledger.history.append(
+                Change(
+                    "restore_track",
+                    {"pattern": pattern_name, "track": track},
+                    {"pattern": pattern_name, "track": track, "steps": previous},
+                    f"{track} in {pattern_name} wie vorher",
+                )
+            )
         return None
+
+    async def restore_track(args: dict[str, Any]) -> str:
+        name, pat = pattern(args["pattern"])
+        track, steps = args["track"], dict(args.get("steps") or {})
+        tracks = pat.setdefault("tracks", {})
+        if steps:
+            tracks[track] = {"steps": steps}
+        else:
+            tracks.pop(track, None)
+        error = await push(name, track, steps)
+        return error or f"{track} in {name} ist wieder wie vorher."
 
     async def new_song(args: dict[str, Any]) -> str:
         name = str(args.get("name") or "Neuer Song").strip()
@@ -130,7 +153,8 @@ def register_edit_tools(bridge: Bridge) -> None:
         name, pat = pattern(args.get("pattern"))
         length = int(pat.get("length", DEFAULT_LENGTH))
         tracks = pat.setdefault("tracks", {})
-        steps: dict[str, Any] = dict((tracks.get(track) or {}).get("steps") or {})
+        before = copy.deepcopy((tracks.get(track) or {}).get("steps") or {})
+        steps: dict[str, Any] = dict(before)
         if args.get("replace"):
             steps = {}
         if args.get("start_step") is not None:
@@ -146,7 +170,7 @@ def register_edit_tools(bridge: Bridge) -> None:
             steps[str(idx)] = {"note": note, "velocity": velocity, "gate": gate}
             placed += 1
         tracks[track] = {"steps": steps}
-        error = await push(name, track, steps)
+        error = await push(name, track, steps, previous=before)
         if error:
             return error
         skipped = f" {len(notes) - placed} Noten passten nicht mehr rein." if placed < len(notes) else ""
@@ -166,12 +190,13 @@ def register_edit_tools(bridge: Bridge) -> None:
         name, pat = pattern(args.get("pattern"))
         length = int(pat.get("length", DEFAULT_LENGTH))
         tracks = pat.setdefault("tracks", {})
-        steps: dict[str, Any] = {} if args.get("replace") else dict((tracks.get(track) or {}).get("steps") or {})
+        before = copy.deepcopy((tracks.get(track) or {}).get("steps") or {})
+        steps: dict[str, Any] = {} if args.get("replace") else dict(before)
         for item in raw:
             n = _int_in_range({"n": item}, "n", 1, length, "Der Schritt")
             steps[str(n - 1)] = {"velocity": velocity}
         tracks[track] = {"steps": steps}
-        error = await push(name, track, steps)
+        error = await push(name, track, steps, previous=before)
         if error:
             return error
         spoken = ", ".join(str(int(k) + 1) for k in sorted(steps, key=int))
@@ -182,12 +207,14 @@ def register_edit_tools(bridge: Bridge) -> None:
         if track not in SYNTH_TRACKS + DRUM_TRACKS:
             raise ArgumentError("Welche Spur? synth1, synth2, drum1 bis drum4, midi1 oder midi2.")
         name, pat = pattern(args.get("pattern"))
+        before = copy.deepcopy((pat.get("tracks") or {}).get(track, {}).get("steps") or {})
         pat.setdefault("tracks", {}).pop(track, None)
-        error = await push(name, track, {})
+        error = await push(name, track, {}, previous=before)
         if error:
             return error
         return f"{track} in {name} ist leer."
 
+    bridge.register_internal("restore_track", restore_track)
     bridge.register_virtual("new_song", new_song)
     bridge.register_virtual("write_notes", write_notes)
     bridge.register_virtual("write_drums", write_drums)
