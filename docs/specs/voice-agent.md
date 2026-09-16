@@ -448,6 +448,19 @@ Song."). `save_to_device` stops the internal engine before writing: on
 interleaved with clock and notes) until a hard restart. After a save, "Spiel
 es vom Gerät" selects the slot and starts the device transport.
 
+### Agent modes (added 2026-09-16 after the third hardware session)
+
+Two modes, switchable by voice ("Steuermodus" / "Kreativmodus") and by
+`--tools`, default `control`:
+
+| Mode | Tools the model sees | Prompt rule |
+| --- | --- | --- |
+| `control` | Every direct, instant tool: notes, hits, tempo, mutes, macros, patches, projects, save, undo | Never invents music; answers "bau mir …" with a pointer to the creative mode or asks for exact notes and steps |
+| `creative` | The same plus `generate_track`, `design_patch`, `compose`, `revise` | Says a model job takes a few seconds, stays responsive, summarises |
+
+Switching rebuilds the declarations and reconnects the Live session with the
+resumption handle, so the conversation continues.
+
 ### Milestones
 
 Reprioritised on 2026-09-16 after the first hardware session: M1b (precise

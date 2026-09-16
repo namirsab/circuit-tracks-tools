@@ -74,9 +74,44 @@ class FakeComposer:
         return self.answers.pop(0)
 
 
+def _macro_targets_ok(sounds: dict[str, Any]) -> list[str]:
+    """Macro targets and mod-matrix names must be ones the patch builder knows (load_song rejects others)."""
+    from circuit_tracks.patch_builder import MACRO_DEST_BY_NAME, _resolve_mod_dest, _resolve_mod_source  # noqa: PLC0415
+
+    problems: list[str] = []
+    for synth, cfg in (sounds or {}).items():
+        if not isinstance(cfg, dict):
+            continue
+        for macro, mcfg in (cfg.get("macros") or {}).items():
+            for target in (mcfg or {}).get("targets") or []:
+                param = target.get("param") if isinstance(target, dict) else None
+                if isinstance(param, str) and param not in MACRO_DEST_BY_NAME:
+                    problems.append(
+                        f"{synth} macro {macro}: unknown target {param!r}; valid targets are patch parameter names "
+                        f"such as {', '.join(list(MACRO_DEST_BY_NAME)[:6])}"
+                    )
+        for entry in cfg.get("mod_matrix") or []:
+            if not isinstance(entry, dict):
+                continue
+            for key in ("source", "source1", "source2"):
+                if isinstance(entry.get(key), str):
+                    try:
+                        _resolve_mod_source(entry[key])
+                    except ValueError as e:
+                        problems.append(f"{synth} mod matrix: {str(e)[:160]}")
+            dest = entry.get("dest", entry.get("destination"))
+            if isinstance(dest, str):
+                try:
+                    _resolve_mod_dest(dest)
+                except ValueError as e:
+                    problems.append(f"{synth} mod matrix: {str(e)[:160]}")
+    return problems
+
+
 def check_house_rules(song: dict[str, Any]) -> list[str]:
     """Rules SongSchema does not enforce; empty list means fine."""
     problems: list[str] = []
+    problems.extend(_macro_targets_ok(song.get("sounds") or {}))
     patterns = song.get("patterns") or {}
     if not patterns:
         problems.append("the song has no patterns")
