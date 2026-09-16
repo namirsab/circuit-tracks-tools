@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "circuit-voice"
+version = "0.1.0"
+description = "German voice control for the Novation Circuit Tracks: a Gemini Live agent driving the circuit-tracks MCP tools."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Namir Sayed-Ahmad Baraza" }]
+dependencies = [
+    "google-genai>=2.23",
+    "mcp>=2,<3",
+    "circuit-tracks-tools[mcp]>=0.3.1",
+    "sounddevice>=0.5",
+    "numpy>=1.26",
+    "pynput>=1.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+
+[project.scripts]
+circuit-voice = "circuit_voice.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["circuit_voice"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

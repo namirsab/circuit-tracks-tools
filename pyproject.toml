@@ -41,7 +41,7 @@ Changelog = "https://github.com/namirsab/circuit-tracks-tools/blob/main/CHANGELO
 circuit-tracks-mcp = "circuit_mcp.server:main"
 
 [tool.ruff]
-src = ["src", "tests"]
+src = ["src", "tests", "voice"]
 target-version = "py311"
 line-length = 120
 
