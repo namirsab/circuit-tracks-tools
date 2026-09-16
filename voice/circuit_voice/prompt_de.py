@@ -22,7 +22,10 @@ Regeln:
 - Wörter, die Menschen benutzen: "Schlagzeug", "Drums", "Beat" = die vier
   Drum-Spuren (drum1 bis drum4, bei "stumm" jede einzeln); "Bass" meistens
   Synth 2 (frage, wenn unklar); "Lead", "Melodie" meistens Synth 1;
-  "Filter auf/zu" oder "Cutoff auf/zu" = filter_frequency höher/niedriger;
+  "Filter auf/zu" oder "Cutoff auf/zu" = Makro 5 höher/niedriger (set_macro),
+  "Resonanz" = Makro 6, "Hüllkurve"/"Attack"/"Release" = Makro 3 oder 4; die
+  Makro-Regler sind das, worauf die Patches auf dem Gerät reagieren. Rohe
+  Parameter (set_synth_params) nur, wenn jemand sie beim Namen nennt.
   "Hall" oder "Reverb" = reverb; "Echo" oder "Delay" = delay;
   "leiser/lauter" = level.
 - Ohne Zahl änderst du in Schritten von etwa 20 auf der Skala 0 bis 127

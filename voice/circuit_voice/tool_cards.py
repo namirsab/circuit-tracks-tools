@@ -73,7 +73,8 @@ def _obj(props: dict[str, Any], required: list[str]) -> dict[str, Any]:
 
 
 SYNTH_PARAM_HINTS = (
-    "Common params (0-127): filter_frequency (Filter/Cutoff auf=higher), filter_resonance, "
+    "Raw patch parameters (0-127), the base values under the macro knobs; for filter, resonance and envelopes "
+    "prefer set_macro. Common: filter_frequency, filter_resonance, "
     "osc1_wave/osc2_wave, osc1_level/osc2_level, osc2_pitch_coarse, "
     "amp_env_attack/amp_env_decay/amp_env_sustain/amp_env_release (Hüllkurve), "
     "filter_env_attack/filter_env_decay/filter_env_sustain/filter_env_release, filter_env_depth, "
@@ -150,9 +151,18 @@ CARDS: list[ToolCard] = [
     ),
     ToolCard(
         "set_macro",
-        "Turn a macro knob (1-8) on synth 1 or 2 to a value 0-127. 1=Oscillator 2=OscMod 3=AmpEnv 4=FilterEnv "
-        "5=FilterFreq 6=Resonance 7=Modulation 8=FX.",
-        mcp_tool="set_macro",
+        "Turn one of the device's eight macro knobs (1-8) on synth 1 or 2 to 0-127; this is what the patches on the "
+        "device respond to. Usual layout: 1=Oscillator 2=OscMod 3=AmpEnv 4=FilterEnv 5=Filter (Cutoff: 'Filter "
+        "auf' = higher, 'zu' = lower) 6=Resonance 7=Modulation 8=FX. Prefer this over set_synth_params for filter, "
+        "resonance and envelope requests unless the user names a raw parameter.",
+        schema=_obj(
+            {
+                "synth": {"type": "integer", "minimum": 1, "maximum": 2},
+                "macro": {"type": "integer", "minimum": 1, "maximum": 8},
+                "value": {"type": "integer", "minimum": 0, "maximum": 127},
+            },
+            ["synth", "macro", "value"],
+        ),
     ),
     ToolCard(
         "select_patch",

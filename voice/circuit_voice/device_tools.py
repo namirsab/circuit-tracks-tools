@@ -148,6 +148,18 @@ def register_device_tools(bridge: Bridge) -> None:
         )
         return f"{name} ist jetzt {'stumm' if muted else 'wieder an'} (Lautstärke {level})."
 
+    async def set_macro(args: dict[str, Any]) -> str:
+        synth = _int_in_range(args, "synth", 1, 2, "Der Synth")
+        macro = _int_in_range(args, "macro", 1, 8, "Die Makro-Nummer")
+        value = _int_in_range(args, "value", 0, 127, "Der Wert")
+        # CC 80-87 move the hardware knobs themselves; the server's set_macro only emulates them.
+        result = await backend.call("set_synth_params", {"synth": synth, "params": {f"macro_knob{macro}": value}})
+        if result.is_error:
+            return f"Makro {macro} ging nicht: {result.text}"
+        ledger.observe("set_macro", {"synth": synth, "macro": macro, "value": value}, result.data)
+        return f"Makro {macro} auf Synth {synth} steht auf {value}."
+
+    bridge.register_virtual("set_macro", set_macro)
     bridge.register_virtual("mute_track", mute_track)
     bridge.register_virtual("transport", transport)
     bridge.register_virtual("set_tempo", set_tempo)

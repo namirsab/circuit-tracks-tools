@@ -172,3 +172,17 @@ async def test_start_sequencer_stops_the_device_first(server, monkeypatch):
         await bridge.dispatch("select_project", {"number": 2})
         out = await bridge.dispatch("get_state", {})
         assert "Projekt 2" in out.response["result"]
+
+
+async def test_set_macro_moves_the_hardware_knob(server):
+    from circuit_tracks.constants import SYNTH_CC
+
+    async with agent(server) as (bridge, ledger, midi):
+        out = await bridge.dispatch("set_macro", {"synth": 1, "macro": 5, "value": 0})
+        assert ("cc", 0, SYNTH_CC["macro_knob5"], 0) in midi.messages
+        assert "Makro 5" in out.response["result"]
+        await bridge.dispatch("set_macro", {"synth": 1, "macro": 5, "value": 90})
+        midi.messages.clear()
+        out = await bridge.dispatch("undo_last", {})
+        assert ("cc", 0, SYNTH_CC["macro_knob5"], 0) in midi.messages
+        assert "Rückgängig" in out.response["result"]

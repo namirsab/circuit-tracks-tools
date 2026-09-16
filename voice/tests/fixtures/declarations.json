@@ -139,7 +139,7 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Set synth parameters on synth 1 or 2 while playing. Common params (0-127): filter_frequency (Filter/Cutoff auf=higher), filter_resonance, osc1_wave/osc2_wave, osc1_level/osc2_level, osc2_pitch_coarse, amp_env_attack/amp_env_decay/amp_env_sustain/amp_env_release (Hüllkurve), filter_env_attack/filter_env_decay/filter_env_sustain/filter_env_release, filter_env_depth, lfo1_rate/lfo1_wave, distortion_level, chorus_level, portamento, voice_mode. Without a number, move about 20 steps ('etwas' 10, 'viel' 40).",
+    "description": "Set synth parameters on synth 1 or 2 while playing. Raw patch parameters (0-127), the base values under the macro knobs; for filter, resonance and envelopes prefer set_macro. Common: filter_frequency, filter_resonance, osc1_wave/osc2_wave, osc1_level/osc2_level, osc2_pitch_coarse, amp_env_attack/amp_env_decay/amp_env_sustain/amp_env_release (Hüllkurve), filter_env_attack/filter_env_decay/filter_env_sustain/filter_env_release, filter_env_depth, lfo1_rate/lfo1_wave, distortion_level, chorus_level, portamento, voice_mode. Without a number, move about 20 steps ('etwas' 10, 'viel' 40).",
     "name": "set_synth_params",
     "parameters_json_schema": {
       "type": "object",
@@ -204,19 +204,25 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Turn a macro knob (1-8) on synth 1 or 2 to a value 0-127. 1=Oscillator 2=OscMod 3=AmpEnv 4=FilterEnv 5=FilterFreq 6=Resonance 7=Modulation 8=FX.",
+    "description": "Turn one of the device's eight macro knobs (1-8) on synth 1 or 2 to 0-127; this is what the patches on the device respond to. Usual layout: 1=Oscillator 2=OscMod 3=AmpEnv 4=FilterEnv 5=Filter (Cutoff: 'Filter auf' = higher, 'zu' = lower) 6=Resonance 7=Modulation 8=FX. Prefer this over set_synth_params for filter, resonance and envelope requests unless the user names a raw parameter.",
     "name": "set_macro",
     "parameters_json_schema": {
       "type": "object",
       "properties": {
         "synth": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
         },
         "macro": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
         },
         "value": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
         }
       },
       "required": [
