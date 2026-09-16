@@ -30,6 +30,10 @@
 {"say": "Dreh Makro fünf auf Synth eins auf achtzig.", "tool": "set_macro", "args": {"synth": 1, "macro": 5, "value": 80}, "state": "playing"}
 {"say": "Makro acht auf Synth zwei auf hundert Prozent.", "tool": "set_macro", "args": {"synth": 2, "macro": 8, "value": 127}, "state": "playing"}
 {"say": "Nimm Patch zwölf auf Synth zwei.", "tool": "select_patch", "args": {"synth": 2, "number": 12}}
+{"say": "Welche Patches gibt es?", "tool": ["list_patches", "scan_patches"]}
+{"say": "Gibt es einen Bass-Patch?", "tool": "list_patches", "args": {"filter": "*"}}
+{"say": "Nimm den Patch Bassix auf Synth eins.", "tool": "select_patch", "args": {"synth": 1, "name": "*"}}
+{"say": "Lies die Patch-Namen ein.", "tool": "scan_patches"}
 {"say": "Patch eins auf Synth eins.", "tool": "select_patch", "args": {"synth": 1, "number": 1}}
 {"say": "Wie heißt der Patch auf Synth eins?", "tool": "get_synth_patch", "args": {"synth": 1}}
 {"say": "Spiel mal ein C.", "tool": "play_notes"}

@@ -40,6 +40,7 @@ class Config:
     tools: str = "full"
     song: str | None = None
     songs_dir: str | None = None
+    patch_cache: Path | None = Path.home() / ".circuit-voice" / "patches.json"
     output_device: str | None = None
     input_device: str | None = None
     log_path: Path | None = DEFAULT_LOG
@@ -80,6 +81,7 @@ class Config:
             tools=ns.tools,
             song=ns.song,
             songs_dir=ns.songs_dir,
+            patch_cache=Path(ns.patch_cache) if ns.patch_cache else None,
             output_device=ns.output_device,
             input_device=ns.input_device,
             log_path=log_path,
@@ -126,6 +128,9 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--tools", default="full", help="tool profile: full or perform (no composer)")
     g.add_argument("--song", help="song JSON file to load at start")
     g.add_argument("--songs-dir", help="folder of song JSON files the user can load by voice")
+    g.add_argument(
+        "--patch-cache", default=str(Path.home() / ".circuit-voice" / "patches.json"), help="cached patch names"
+    )
 
     g = p.add_argument_group("session")
     g.add_argument("--log", default=str(DEFAULT_LOG), help="events log (JSON lines)")

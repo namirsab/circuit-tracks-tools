@@ -47,6 +47,7 @@ class Ledger:
     device_project: int | None = None  # 1-based
     device_bpm: dict[int, float] = field(default_factory=dict)  # tempo per device project, once read
     device_dirty: bool = False  # sounds changed since the project was selected
+    selected_patch: dict[int, int] = field(default_factory=dict)  # synth -> 1-based patch number
     running: bool = False
     bpm: float | None = None
     mutes: dict[str, bool] = field(default_factory=dict)

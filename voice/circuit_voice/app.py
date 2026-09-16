@@ -18,6 +18,7 @@ from .edit_tools import register_edit_tools
 from .events import EventLog
 from .listen import ListenController
 from .mcp_client import McpBackend, MidiNotFound
+from .patch_tools import PatchCatalog, register_patch_tools
 from .prompt_de import GREETING_DE, GREETING_OPEN_DE, GREETING_TOGGLE_DE
 from .session import Session, run_text_turn
 from .songs import SongLibrary, register_song_tools
@@ -44,6 +45,7 @@ async def build_bridge(config: Config, backend: McpBackend) -> Bridge:
     register_song_tools(bridge, SongLibrary(config.songs_dir))
     register_device_tools(bridge)
     register_edit_tools(bridge)
+    register_patch_tools(bridge, PatchCatalog(config.patch_cache))
     if "compose" in bridge.cards:
         composer = Composer(GeminiComposer(config.api_key or "", config.composer_model), backend=backend)
         await composer.prepare()

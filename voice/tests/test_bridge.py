@@ -9,6 +9,7 @@ from pathlib import Path
 
 from circuit_voice.bridge import Bridge
 from circuit_voice.mcp_client import McpBackend
+from circuit_voice.patch_tools import PatchCatalog, register_patch_tools
 from circuit_voice.tool_cards import CARDS, cards_for_profile
 
 GOLDEN = Path(__file__).parent / "fixtures" / "declarations.json"
@@ -19,6 +20,7 @@ async def make_bridge(server, profile="full"):
     async with McpBackend("inproc") as backend:
         b = Bridge(backend, profile=profile)
         await b.prepare()
+        register_patch_tools(b, PatchCatalog(None))
         yield b, server[1]
 
 

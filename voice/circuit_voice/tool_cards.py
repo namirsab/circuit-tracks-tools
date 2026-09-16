@@ -166,17 +166,31 @@ CARDS: list[ToolCard] = [
     ),
     ToolCard(
         "select_patch",
-        "Select a synth patch by its number as shown on the device (1-64) on synth 1 or 2.",
-        mcp_tool="select_patch",
+        "Select a synth patch on synth 1 or 2 by its number as shown on the device (1-64) or by its name "
+        "(needs the names read in once with scan_patches).",
         schema=_obj(
             {
                 "synth": {"type": "integer", "minimum": 1, "maximum": 2},
                 "number": {"type": "integer", "minimum": 1, "maximum": 64},
+                "name": {"type": "string"},
             },
-            ["synth", "number"],
+            ["synth"],
         ),
-        normalise=_select_patch,
-        summarise=lambda a, r: f"Patch {a['number']} auf Synth {a['synth']} gewählt",
+    ),
+    ToolCard(
+        "list_patches",
+        "The patch names on the device with their numbers, optionally filtered by a word ('bass'). Needs one "
+        "scan_patches first; say so if the names are unknown.",
+        schema=_obj({"filter": {"type": "string"}}, []),
+        read_only=True,
+    ),
+    ToolCard(
+        "scan_patches",
+        "Read the names of all 64 patches from the device (about ten seconds, only while nothing plays; the "
+        "selected patch changes during the scan and is restored). Do it when the user asks which patches exist "
+        "and the names are unknown.",
+        schema=_obj({"synth": {"type": "integer", "minimum": 1, "maximum": 2, "default": 2}}, []),
+        blocking=False,
     ),
     ToolCard(
         "play_notes",
