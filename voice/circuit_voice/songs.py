@@ -10,6 +10,7 @@ to pass ``confirmed=true`` after asking the user, because it overwrites a slot.
 
 from __future__ import annotations
 
+import copy
 import difflib
 import json
 import unicodedata
@@ -59,7 +60,7 @@ class SongLibrary:
     def load(path: Path) -> dict[str, Any]:
         """Read and validate a song file; returns the plain dict for ``load_song``."""
         data = json.loads(Path(path).read_text())
-        SongSchema.model_validate(data)
+        SongSchema.model_validate(copy.deepcopy(data))  # validation mutates its input
         return data
 
 
