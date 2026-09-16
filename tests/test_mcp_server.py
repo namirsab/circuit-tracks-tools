@@ -91,21 +91,25 @@ def server():
     original_midi = srv._midi
     original_engine = srv._engine
     original_morph = srv._morph
+    original_clock = srv._clock
 
     srv._midi = mock_midi
     # Re-create engine and morph with mock midi
     from circuit_tracks.morph import MorphEngine
-    from circuit_tracks.sequencer import SequencerEngine
+    from circuit_tracks.sequencer import ClockGenerator, SequencerEngine
 
     srv._engine = SequencerEngine(mock_midi)
     srv._morph = MorphEngine(mock_midi)
+    srv._clock = ClockGenerator(mock_midi)
 
     yield srv, mock_midi
 
     # Restore
+    srv._clock.stop()
     srv._midi = original_midi
     srv._engine = original_engine
     srv._morph = original_morph
+    srv._clock = original_clock
 
 
 # ---------------------------------------------------------------------------
@@ -630,3 +634,34 @@ class TestSequencerStatus:
         result = srv.get_sequencer_status()
         assert "running" in result
         assert result["running"] is False
+
+
+# ---------------------------------------------------------------------------
+# MIDI clock tools
+# ---------------------------------------------------------------------------
+
+
+class TestClock:
+    def test_set_clock_bpm_retunes_running_clock_without_restart(self, server):
+        srv, _ = server
+        srv.start_clock(120)
+        thread = srv._clock._thread
+        result = srv.set_clock_bpm(90)
+        assert "90" in result
+        assert srv._clock._bpm == 90
+        assert srv._clock._thread is thread  # no restart
+        assert srv._clock.is_running
+        srv.stop_clock()
+
+    def test_set_clock_bpm_when_stopped(self, server):
+        srv, _ = server
+        result = srv.set_clock_bpm(100)
+        assert "not running" in result.lower()
+        assert srv._clock._bpm == 100
+
+    def test_set_clock_bpm_rejects_out_of_range(self, server):
+        srv, _ = server
+        with pytest.raises(ValueError):
+            srv.set_clock_bpm(10)
+        with pytest.raises(ValueError):
+            srv.set_clock_bpm(400)

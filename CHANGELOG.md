@@ -117,6 +117,14 @@ and round-trips of all tested factory/user projects are now byte-exact.
   (e.g. `"Hall"`, `"8th Ping Pong"`) raised `KeyError` because the name tables
   were empty. Both tables now hold the Components / Web Tracks preset names.
 
+## [0.3.1] — 2026-09-16
+
+### Added
+
+- `set_clock_bpm(bpm)` MCP tool: changes the tempo of the running MIDI clock
+  without restarting it, so the Circuit Tracks follows a tempo change with no
+  gap. `start_clock` on a running clock still restarts the clock thread.
+
 ## [0.3.0] — 2026-08-11
 
 ### Changed
@@ -129,6 +137,7 @@ and round-trips of all tested factory/user projects are now byte-exact.
   validation behave the same on the new API. Verified against hardware:
   full song load, sequencer playback, and NCS project export over SysEx.
 
+[0.3.1]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/namirsab/circuit-tracks-tools/compare/v0.1.1...v0.2.0

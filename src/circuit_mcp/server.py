@@ -868,6 +868,25 @@ def stop_clock() -> str:
     return "Clock stopped"
 
 
+@mcp.tool()
+def set_clock_bpm(bpm: float) -> str:
+    """Change the tempo of the MIDI clock without restarting it.
+
+    Use this to change the tempo while the Circuit Tracks is playing from our
+    clock (after transport("start") or start_clock). Unlike start_clock, the
+    clock keeps running with no gap, so the device follows smoothly.
+
+    Args:
+        bpm: New tempo in beats per minute (20-300).
+    """
+    if not 20 <= bpm <= 300:
+        raise ValueError(f"Invalid BPM {bpm}. Must be between 20 and 300.")
+    _clock.set_bpm(bpm)
+    if not _clock.is_running:
+        return f"Clock BPM set to {bpm} (clock is not running; it will apply on the next start)"
+    return f"Clock BPM set to {bpm}"
+
+
 # --- Info / Reference ---
 
 
