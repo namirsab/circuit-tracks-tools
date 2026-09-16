@@ -172,6 +172,11 @@ CARDS: list[ToolCard] = [
         read_only=True,
     ),
     ToolCard(
+        "undo_last",
+        "Revert the last parameter, tempo or mute change ('Rückgängig'). Says when nothing can be undone.",
+        schema=_obj({}, []),
+    ),
+    ToolCard(
         "set_listening",
         "Switch how the agent listens: 'ptt' (hold the key), 'toggle' (press to start and stop), 'open' (always "
         "listening, headphones recommended).",

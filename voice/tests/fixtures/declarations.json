@@ -329,6 +329,16 @@
     "behavior": "BLOCKING"
   },
   {
+    "description": "Revert the last parameter, tempo or mute change ('Rückgängig'). Says when nothing can be undone.",
+    "name": "undo_last",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    },
+    "behavior": "BLOCKING"
+  },
+  {
     "description": "Switch how the agent listens: 'ptt' (hold the key), 'toggle' (press to start and stop), 'open' (always listening, headphones recommended).",
     "name": "set_listening",
     "parameters_json_schema": {

@@ -17,6 +17,7 @@ from typing import Any
 
 from google.genai import types
 
+from .ledger import Ledger
 from .mcp_client import McpBackend
 from .tool_cards import ArgumentError, ToolCard, cards_for_profile
 
@@ -42,11 +43,35 @@ def strip_titles(schema: Any) -> Any:
 
 
 class Bridge:
-    def __init__(self, backend: McpBackend, profile: str = "full"):
+    def __init__(self, backend: McpBackend, profile: str = "full", ledger: Ledger | None = None):
         self.backend = backend
+        self.ledger = ledger if ledger is not None else Ledger()
         self.cards: dict[str, ToolCard] = {c.name: c for c in cards_for_profile(profile)}
         self._virtual: dict[str, VirtualHandler] = {}
         self._declarations: list[types.FunctionDeclaration] = []
+        if "get_state" in self.cards:
+            self._virtual["get_state"] = self._get_state
+        if "undo_last" in self.cards:
+            self._virtual["undo_last"] = self._undo_last
+
+    async def _get_state(self, args: dict[str, Any]) -> str:
+        status = None
+        if self.ledger.source == "internal":
+            result = await self.backend.call("get_sequencer_status", {})
+            if not result.is_error and isinstance(result.data, dict):
+                status = result.data
+        return self.ledger.summary_de(status)
+
+    async def _undo_last(self, args: dict[str, Any]) -> str:
+        change = self.ledger.undo()
+        if change is None:
+            return "Es gibt nichts, was ich rückgängig machen kann."
+        if change.revert is None:
+            return f"Die letzte Änderung ({change.text_de}) kann ich nicht rückgängig machen."
+        result = await self.backend.call(change.tool, change.revert)
+        if result.is_error:
+            return f"Rückgängig fehlgeschlagen: {result.text}"
+        return f"Rückgängig: {change.text_de}."
 
     async def prepare(self) -> None:
         decls = []
@@ -103,5 +128,6 @@ class Bridge:
         result = await self.backend.call(c.mcp_tool, args)
         if result.is_error:
             return Dispatch(name, {"error": result.text}, c.blocking)
+        self.ledger.observe(name, args, result.data)
         data = c.summarise(spoken, result.data) if c.summarise is not None else result.data
         return Dispatch(name, {"result": data}, c.blocking)
