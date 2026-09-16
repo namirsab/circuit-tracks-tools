@@ -41,6 +41,7 @@ class Ledger:
     song_bpm: float | None = None
     patterns: list[str] = field(default_factory=list)
     song_order: list[str] = field(default_factory=list)
+    song_json: dict[str, Any] | None = None  # the loaded song as load_song took it
     unsaved: bool = False
     slot: int | None = None  # 1-based, last slot saved to
     device_project: int | None = None  # 1-based

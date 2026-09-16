@@ -204,6 +204,24 @@ CARDS: list[ToolCard] = [
             ["slot"],
         ),
     ),
+    # --- composer step (separate model) ---
+    ToolCard(
+        "compose",
+        "Build a new song from a German brief (style, tempo, key, mood, instruments). Runs in the background for "
+        "about half a minute: say you are working on it, stay responsive, and summarise when the result arrives. "
+        "Replaces the loaded song.",
+        schema=_obj({"brief": {"type": "string"}}, ["brief"]),
+        blocking=False,
+        profiles=("full",),
+    ),
+    ToolCard(
+        "revise",
+        "Change the loaded song by instruction ('Hi-Hats leiser', 'Bassline auf Synth 2 dazu', 'Chorus doppelt so "
+        "lang'). Runs in the background; keeps the music playing where possible.",
+        schema=_obj({"instruction": {"type": "string"}}, ["instruction"]),
+        blocking=False,
+        profiles=("full",),
+    ),
     # --- virtual tools (harness) ---
     ToolCard(
         "get_state",

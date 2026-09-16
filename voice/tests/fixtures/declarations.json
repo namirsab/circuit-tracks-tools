@@ -370,6 +370,38 @@
     "behavior": "BLOCKING"
   },
   {
+    "description": "Build a new song from a German brief (style, tempo, key, mood, instruments). Runs in the background for about half a minute: say you are working on it, stay responsive, and summarise when the result arrives. Replaces the loaded song.",
+    "name": "compose",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "brief": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "brief"
+      ]
+    },
+    "behavior": "NON_BLOCKING"
+  },
+  {
+    "description": "Change the loaded song by instruction ('Hi-Hats leiser', 'Bassline auf Synth 2 dazu', 'Chorus doppelt so lang'). Runs in the background; keeps the music playing where possible.",
+    "name": "revise",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "instruction": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "instruction"
+      ]
+    },
+    "behavior": "NON_BLOCKING"
+  },
+  {
     "description": "What the agent knows: playback source, loaded song, tempo, mutes, unsaved changes, last change. Cheap; never touches the device.",
     "name": "get_state",
     "parameters_json_schema": {

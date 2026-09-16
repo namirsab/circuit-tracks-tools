@@ -74,7 +74,7 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
         return "Gespeicherte Songs: " + ", ".join(names) + "."
 
     async def load_song_dict(data: dict[str, Any], label: str) -> str:
-        result = await backend.call("load_song", {"song": data})
+        result = await backend.call("load_song", {"song": copy.deepcopy(data)})  # the server mutates its input
         if result.is_error:
             return f"Der Song {label} konnte nicht geladen werden: {result.text}"
         info = result.data if isinstance(result.data, dict) else {}
@@ -83,6 +83,7 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
             name, float(info.get("bpm") or data.get("bpm") or 120), info.get("patterns", []), info.get("song_order", [])
         )
         ledger.source = "internal"
+        ledger.song_json = data
         patterns = ", ".join(ledger.patterns)
         return f"Song {name} geladen, {int(ledger.bpm)} BPM, Patterns: {patterns}."
 

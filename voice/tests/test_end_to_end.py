@@ -102,3 +102,45 @@ async def test_clock_times_helper_exists(server):
     t = time.perf_counter()
     midi.send_clock()
     assert midi.clock_times[-1] >= t
+
+
+async def test_compose_loads_and_restarts_and_revise_edits_in_place(server):
+    import copy
+    import json
+
+    from circuit_voice.compose_tools import register_compose_tools
+    from circuit_voice.composer import Composer, FakeComposer
+
+    song = json.loads((SONGS / "Ethereal Drift.json").read_text())
+    revised = copy.deepcopy(song)
+    revised["patterns"]["emergence"]["tracks"]["drum1"]["steps"] = {"0": {"velocity": 90}}
+    fake = FakeComposer([song, revised, {"patterns": {}}, {"patterns": {}}, {"patterns": {}}])
+    async with agent(server) as (bridge, ledger, midi):
+        calls = []
+        real_call = bridge.backend.call
+
+        async def recording_call(name, args=None):
+            calls.append(name)
+            return await real_call(name, args)
+
+        bridge.backend.call = recording_call  # type: ignore[method-assign]
+        register_compose_tools(bridge, Composer(fake, max_retries=2))
+
+        await bridge.dispatch("load_saved_song", {"name": "Minimal"})
+        await bridge.dispatch("start_sequencer", {})
+        calls.clear()
+        out = await bridge.dispatch("compose", {"brief": "Ruhiger Ambient in Moll"})
+        assert out.blocking is False
+        assert "Fertig gebaut" in out.response["result"] and "emergence" in out.response["result"]
+        assert calls[:3] == ["stop_sequencer", "load_song", "start_sequencer"]
+        assert ledger.running is True and ledger.bpm == 65 and ledger.unsaved is True
+
+        calls.clear()
+        out = await bridge.dispatch("revise", {"instruction": "Kick nur auf der Eins"})
+        assert calls == ["set_track"], out.response
+        assert "drum1 in emergence" in out.response["result"]
+        assert ledger.song_json["patterns"]["emergence"]["tracks"]["drum1"]["steps"] == {"0": {"velocity": 90}}
+
+        out = await bridge.dispatch("compose", {"brief": "Unmöglich"})
+        assert "nicht geklappt" in out.response["result"]
+        assert ledger.composer_job is None
