@@ -100,3 +100,17 @@ def test_side_variant_keys_match_the_plain_name():
     ctl2.key = "space"
     ctl2.key_down("space")
     assert events2 == ["listen_start"]
+
+
+def test_terminal_source_toggles_on_the_key(tmp_path):
+    import io
+    import time
+
+    ctl, events = make("ptt")
+    ctl.key = "space"
+    stream = io.StringIO("x  ")
+    hint = ctl.start_terminal(stream)
+    assert "Terminalfenster" in hint and ctl.mode == "toggle"
+    time.sleep(0.2)
+    assert events == ["listen_start", "listen_stop"]
+    ctl.stop()

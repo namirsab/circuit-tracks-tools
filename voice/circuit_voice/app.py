@@ -98,9 +98,10 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
             return f"Ich höre jetzt so zu: {names[mode]}.{warn}"
 
         bridge.register_virtual("set_listening", set_listening)
-        hint = listen.start()
+        hint = listen.start_terminal() if config.key_source == "terminal" else listen.start()
         if hint:
             on_event({"type": "hint", "text": hint})
+        ui.state.mode = listen.mode
         try:
             await session.run()
         finally:

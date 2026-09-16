@@ -53,6 +53,8 @@ class ListenController:
         self._clock = clock
         self._listener_factory = listener_factory
         self._listener: Any = None
+        self._terminal_thread: Any = None
+        self._terminal_stop: Any = None
         self._listening = False
         self._key_held = False
         self._started_at = 0.0
@@ -137,6 +139,50 @@ class ListenController:
         )
         return None if trusted else PERMISSION_HINT_DE + " (Falls die Töne beim Drücken kommen, ignoriere das.)"
 
+    def start_terminal(self, stream: Any = None) -> str | None:
+        """Read the key from the terminal itself (no Accessibility permission needed).
+
+        A terminal cannot report key releases, so ptt becomes toggle: press to
+        start, press again to stop. Needs the terminal window to have focus.
+        """
+        import threading  # noqa: PLC0415
+
+        stream = stream or sys.stdin
+        if self.mode == "ptt":
+            self.mode = "toggle"
+        wanted = {"space": " ", "enter": "\n", "return": "\n", "tab": "\t"}.get(self.key, self.key)
+
+        def reader() -> None:
+            fd = None
+            old = None
+            try:
+                import termios  # noqa: PLC0415
+                import tty  # noqa: PLC0415
+
+                fd = stream.fileno()
+                old = termios.tcgetattr(fd)
+                tty.setcbreak(fd)
+            except Exception:  # noqa: BLE001 - not a tty (tests): read lines instead
+                fd = None
+            try:
+                while not self._terminal_stop.is_set():
+                    ch = stream.read(1)
+                    if not ch:
+                        return
+                    if ch == wanted or (ch == "\r" and wanted == "\n"):
+                        self.key_down(self.key)
+                        self.key_up(self.key)
+            finally:
+                if fd is not None and old is not None:
+                    import termios  # noqa: PLC0415
+
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+        self._terminal_stop = threading.Event()
+        self._terminal_thread = threading.Thread(target=reader, daemon=True, name="terminal-key")
+        self._terminal_thread.start()
+        return f"Taste {self.key} im Terminalfenster: einmal drücken zum Sprechen, nochmal zum Beenden."
+
     @staticmethod
     def process_trusted() -> bool:
         """macOS: can this process see global key events? (Accessibility permission)"""
@@ -157,6 +203,8 @@ class ListenController:
         return keyboard.Listener(**kw)
 
     def stop(self) -> None:
+        if self._terminal_stop is not None:
+            self._terminal_stop.set()
         if self._listener is not None:
             try:
                 self._listener.stop()

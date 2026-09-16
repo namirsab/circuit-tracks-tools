@@ -33,6 +33,7 @@ class Config:
     ptt_key: str = "alt_r"
     silence_ms: int = 1200
     max_utterance_s: int = 20
+    key_source: str = "global"
     mcp: str = "inproc"
     midi_port: str | None = None
     no_midi: bool = False
@@ -55,6 +56,8 @@ class Config:
             raise ConfigError(f"--mode must be one of {', '.join(MODES)}")
         if ns.tools not in TOOL_PROFILES:
             raise ConfigError(f"--tools must be one of {', '.join(TOOL_PROFILES)}")
+        if ns.key_source not in ("global", "terminal"):
+            raise ConfigError("--key-source must be global or terminal")
         if not 500 <= ns.silence_ms <= 3000:
             raise ConfigError("--silence-ms must be between 500 and 3000")
         api_key = env.get("GEMINI_API_KEY") or None
@@ -70,6 +73,7 @@ class Config:
             ptt_key=ns.ptt_key,
             silence_ms=ns.silence_ms,
             max_utterance_s=ns.max_utterance,
+            key_source=ns.key_source,
             mcp=ns.mcp,
             midi_port=ns.midi_port,
             no_midi=ns.no_midi,
@@ -100,6 +104,11 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--ptt-key", default="alt_r", help="key for ptt/toggle modes (pynput name, e.g. alt_r, f13, space)")
     g.add_argument("--silence-ms", type=int, default=1200, help="end-of-speech silence for open mode (500-3000)")
     g.add_argument("--max-utterance", type=int, default=20, help="auto-stop seconds for toggle mode")
+    g.add_argument(
+        "--key-source",
+        default="global",
+        help="global (hotkey via Accessibility permission) or terminal (key read from this window; toggle only)",
+    )
 
     g = p.add_argument_group("audio")
     g.add_argument("--input-device", help="microphone name or index (default: system default)")
