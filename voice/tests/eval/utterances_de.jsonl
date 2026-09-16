@@ -45,6 +45,10 @@
 {"say": "Bau mir einen langsamen Techno-Beat in Moll.", "tool": "compose", "args": {"brief": "*"}}
 {"say": "Mach mir einen fröhlichen House-Track mit 126 BPM.", "tool": "compose", "args": {"brief": "*"}}
 {"say": "Die Hi-Hats leiser.", "tool": ["revise", "set_drum_params"], "state": "playing"}
+{"say": "Bau mir eine groovige Bassline auf Synth zwei.", "tool": "generate_track", "args": {"track": "synth2"}, "state": "loaded"}
+{"say": "Mach mir ein Hi-Hat-Pattern mit Offbeats.", "tool": "generate_track", "args": {"track": "drum3*"}, "state": "loaded"}
+{"say": "Design mir einen warmen, weichen Bass-Sound auf Synth zwei.", "tool": "design_patch", "args": {"synth": 2}}
+{"say": "Speicher den Patch von Synth zwei in Slot 40.", "tool": "save_patch", "args": {"synth": 2, "slot": 40}}
 {"say": "Füg eine Bassline auf Synth zwei dazu.", "tool": "revise", "args": {"instruction": "*"}, "state": "playing"}
 {"say": "Wie geht es dir?", "tool": null}
 {"say": "Was kann ich alles sagen?", "tool": null}

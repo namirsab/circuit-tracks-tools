@@ -315,6 +315,42 @@ CARDS: list[ToolCard] = [
         schema=_obj({"number": {"type": "integer", "minimum": 1, "maximum": 64}}, ["number"]),
         blocking=False,
     ),
+    # --- small model jobs: one track, one patch ---
+    ToolCard(
+        "generate_track",
+        "Have a musical idea written for ONE track by a text model (a few seconds): 'groovige Bassline auf Synth 2', "
+        "'Hi-Hat-Pattern mit Offbeats auf drum3'. Replaces that track only; the rest of the song stays. Say you are "
+        "working on it and stay responsive.",
+        schema=_obj(
+            {"pattern": {"type": "string"}, "track": {"type": "string"}, "brief": {"type": "string"}},
+            ["track", "brief"],
+        ),
+        blocking=False,
+        profiles=("full",),
+    ),
+    ToolCard(
+        "design_patch",
+        "Design a new synth sound from a description ('warmer, weicher Bass mit langsamem Filter') and load it into "
+        "synth 1 or 2 (working memory, not saved). Takes a few seconds; stay responsive.",
+        schema=_obj(
+            {"synth": {"type": "integer", "minimum": 1, "maximum": 2}, "brief": {"type": "string"}}, ["synth", "brief"]
+        ),
+        blocking=False,
+        profiles=("full",),
+    ),
+    ToolCard(
+        "save_patch",
+        "Save the current sound of synth 1 or 2 into a patch slot (1-64) on the device, overwriting it. Call first "
+        "without confirmed to get the question; after a clear yes call again with confirmed=true.",
+        schema=_obj(
+            {
+                "synth": {"type": "integer", "minimum": 1, "maximum": 2},
+                "slot": {"type": "integer", "minimum": 1, "maximum": 64},
+                "confirmed": {"type": "boolean", "default": False},
+            },
+            ["synth", "slot"],
+        ),
+    ),
     # --- composer step (separate model) ---
     ToolCard(
         "compose",

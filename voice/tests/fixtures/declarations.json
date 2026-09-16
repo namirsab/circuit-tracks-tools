@@ -634,6 +634,79 @@
     "behavior": "NON_BLOCKING"
   },
   {
+    "description": "Have a musical idea written for ONE track by a text model (a few seconds): 'groovige Bassline auf Synth 2', 'Hi-Hat-Pattern mit Offbeats auf drum3'. Replaces that track only; the rest of the song stays. Say you are working on it and stay responsive.",
+    "name": "generate_track",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string"
+        },
+        "track": {
+          "type": "string"
+        },
+        "brief": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "track",
+        "brief"
+      ]
+    },
+    "behavior": "NON_BLOCKING"
+  },
+  {
+    "description": "Design a new synth sound from a description ('warmer, weicher Bass mit langsamem Filter') and load it into synth 1 or 2 (working memory, not saved). Takes a few seconds; stay responsive.",
+    "name": "design_patch",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "synth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "brief": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "synth",
+        "brief"
+      ]
+    },
+    "behavior": "NON_BLOCKING"
+  },
+  {
+    "description": "Save the current sound of synth 1 or 2 into a patch slot (1-64) on the device, overwriting it. Call first without confirmed to get the question; after a clear yes call again with confirmed=true.",
+    "name": "save_patch",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "synth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "slot": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "confirmed": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "synth",
+        "slot"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
     "description": "Build a new song from a German brief (style, tempo, key, mood, instruments). Runs in the background for about half a minute: say you are working on it, stay responsive, and summarise when the result arrives. Replaces the loaded song.",
     "name": "compose",
     "parameters_json_schema": {
