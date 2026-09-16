@@ -42,14 +42,21 @@ changes.
 
 ### Workflows
 
-**A. Compose, perform, save (primary).** The song lives in the MCP server's
-internal sequencer, which plays the Circuit's synths and drums over MIDI and
-sends clock so the device display follows.
+**A. Build step by step, perform, save (primary).** The song lives in the MCP
+server's internal sequencer, which plays the Circuit's synths and drums over
+MIDI and sends clock so the device display follows. Priority set by the owner
+on 2026-09-16: exact, incremental building by voice ("C3 E3 G3 auf Synth 1
+in Pattern 1", "Kick auf 1, 5, 9, 13") and control of the device matter more
+than one-shot composition; the composer is the secondary path.
 
-1. Start from nothing ("Bau mir einen langsamen Techno-Beat in Moll") or from
-   a saved song file ("Lade den Song Nachtfahrt").
-2. The composer step produces or changes the song and loads it with
-   `load_song` / `set_track`; the live agent announces the result.
+1. Start from nothing with an empty song ("Neuer Song, 120 BPM"), from a
+   saved song file ("Lade den Song Nachtfahrt"), or, secondary, from a brief
+   for the composer ("Bau mir einen langsamen Techno-Beat in Moll").
+2. Build precisely with direct tools: `write_notes` (note names or numbers
+   spread over steps on a synth track), `write_drums` (hits on named steps),
+   `clear_track`, `new_song`. These are deterministic MCP calls, instant, no
+   model in between. The composer step (`compose`/`revise`) handles fuzzy
+   requests and loads its result with `load_song` / `set_track`.
 3. Perform: start, stop, tempo, mute and unmute tracks, queue patterns, shape
    sounds and FX, ask what is playing. All of this is real state the internal
    engine reports, which is exactly the readback blind users need.
@@ -375,7 +382,11 @@ and how the result is summarised for the ledger.
 
 | Spoken concept | Tool the model sees | Backed by | Notes |
 | --- | --- | --- | --- |
-| Build a song | `compose(brief)` | virtual → composer step → `load_song` | NON_BLOCKING; agent announces work, result interrupts with a summary. |
+| Empty song | `new_song(name, bpm)` | virtual → `load_song` with a blank 32-step pattern, chromatic scale, preset sounds | Starting point for step-by-step building. |
+| Notes on a synth track | `write_notes(pattern, track, notes, start_step, spacing, gate, velocity)` | virtual → `set_track` + song JSON | "C3 E3 G3 auf Synth 1 in Pattern 1". Note names as the device labels them (C3 = MIDI 60). Appends by default, `replace=true` clears first. |
+| Drum hits | `write_drums(pattern, track, steps, velocity)` | virtual → `set_track` + song JSON | "Kick auf 1, 5, 9, 13" (spoken 1-based steps). |
+| Clear a track | `clear_track(pattern, track)` | virtual → `set_track` with no steps | |
+| Build a song (secondary) | `compose(brief)` | virtual → composer step → `load_song` | NON_BLOCKING; agent announces work, result interrupts with a summary. |
 | Change the song | `revise(instruction)` | virtual → composer step → `set_track` / `set_pattern` / `load_song` | Incremental edits while running where possible; new layers as new patterns plus `queue_patterns`. |
 | Saved songs | `list_saved_songs()`, `load_saved_song(name)` | virtual over `--songs-dir` → `load_song` | Song JSON files, the same format Claude Code produced so far. |
 | Play, stop | `start_sequencer(pattern?, bpm?)`, `stop_sequencer()` | same | Clock sent so the device display follows. |
@@ -439,11 +450,15 @@ es vom Gerät" selects the slot and starts the device transport.
 
 ### Milestones
 
+Reprioritised on 2026-09-16 after the first hardware session: M1b (precise
+editing) is required before M4; M2 (composer) is done but secondary.
+
 | Milestone | Delivers | Acceptance |
 | --- | --- | --- |
 | **M0 Library 0.3.1** | `set_clock_bpm` tool, tests, changelog, release | `pytest` green; tempo change on a running clock audible on the device |
 | **M1 Voice loop + internal sequencer + save** | `voice/` package: audio, PTT, session with resumption, bridge, ledger, workflow A tools without the composer, `--song`/`--songs-dir`, `save_to_device`, terminal UI | By voice: load a saved song, perform it (start, stop, tempo, mutes, queue, sound tweaks), ask what plays, save it to a named slot, hear it from the device. German eval set for these tools ≥ 90%. |
-| **M2 Composer step** | `composer` module, `compose`/`revise` tools, NON_BLOCKING flow, validation and retries, composer eval on German briefs | "Bau mir …" produces a valid, playing song in ≤ 30 s p50; revisions change only what was asked; failure is reported in one sentence |
+| **M1b Precise editing by voice** | `new_song`, `write_notes`, `write_drums`, `clear_track`; song JSON kept in sync so saves include the edits | "Neuer Song", "C3 E3 G3 auf Synth 1", "Kick auf 1, 5, 9, 13", start, save → the device plays exactly those notes |
+| **M2 Composer step (secondary)** | `composer` module, `compose`/`revise` tools, NON_BLOCKING flow, validation and retries, composer eval on German briefs | "Bau mir …" produces a valid, playing song in ≤ 30 s p50; revisions change only what was asked; failure is reported in one sentence |
 | **M3 Device projects** | Workflow B tools, BPM cache, virtual mute, playback-source rule, `import_project` | Select and perform stored projects by voice, switch between workflows without audio pile-ups |
 | **M4 Hardening** | Accessibility checklist, README with switch mapping and permissions, events log review, CI job | All "must" items in Appendix B pass; setup ≤ 10 min by a helper |
 

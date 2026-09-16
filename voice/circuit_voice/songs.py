@@ -115,6 +115,11 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
         if ledger.running and ledger.source == "internal":
             await bridge.dispatch("stop_sequencer", {})
             stopped = True
+        # The export writes the server's last loaded song; reload ours so step edits are included.
+        if ledger.song_json is not None:
+            reload = await backend.call("load_song", {"song": copy.deepcopy(ledger.song_json)})
+            if reload.is_error:
+                return f"Speichern fehlgeschlagen, der Song ist nicht mehr gültig: {reload.text[:200]}"
         result = await backend.call("export_song_to_project", {"slot": slot - 1, "name": name})
         if result.is_error:
             return f"Speichern fehlgeschlagen: {result.text}"

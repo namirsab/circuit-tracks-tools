@@ -181,6 +181,53 @@ CARDS: list[ToolCard] = [
         blocking=False,
         read_only=True,
     ),
+    # --- precise, step-by-step building (no model in between) ---
+    ToolCard(
+        "new_song",
+        "Start an empty song: one 32-step pattern ('pattern1'), chromatic scale, lead on synth1 and bass on synth2. "
+        "Use it when the user wants to build from nothing ('Neuer Song', 'fang neu an').",
+        schema=_obj({"name": {"type": "string"}, "bpm": {"type": "number", "minimum": 40, "maximum": 240}}, []),
+    ),
+    ToolCard(
+        "write_notes",
+        "Put exact notes on a synth track, one per step: notes as names the device uses (C3 = middle, F#4, Bb2, "
+        "German H) or MIDI numbers, e.g. 'C3 E3 G3'. spacing = steps between notes (4 = every beat), start_step "
+        "is spoken 1-based; without it the notes are appended after the last one. gate defaults to the spacing. "
+        "replace=true clears the track first.",
+        schema=_obj(
+            {
+                "pattern": {"type": "string", "description": "pattern name; default: the first pattern"},
+                "track": {"type": "string", "enum": ["synth1", "synth2", "midi1", "midi2"]},
+                "notes": {"type": "string", "description": "space-separated note names or numbers"},
+                "start_step": {"type": "integer", "minimum": 1, "maximum": 32},
+                "spacing": {"type": "integer", "minimum": 1, "maximum": 32, "default": 4},
+                "gate": {"type": "number", "minimum": 0.25, "maximum": 16},
+                "velocity": {"type": "integer", "minimum": 1, "maximum": 127, "default": 100},
+                "replace": {"type": "boolean", "default": False},
+            },
+            ["track", "notes"],
+        ),
+    ),
+    ToolCard(
+        "write_drums",
+        "Put drum hits on exact steps (spoken 1-based, 1-32) of drum1..drum4, e.g. kick on [1, 5, 9, 13]. "
+        "Adds to existing hits unless replace=true.",
+        schema=_obj(
+            {
+                "pattern": {"type": "string"},
+                "track": {"type": "string", "enum": ["drum1", "drum2", "drum3", "drum4"]},
+                "steps": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 32}},
+                "velocity": {"type": "integer", "minimum": 1, "maximum": 127, "default": 100},
+                "replace": {"type": "boolean", "default": False},
+            },
+            ["track", "steps"],
+        ),
+    ),
+    ToolCard(
+        "clear_track",
+        "Remove every note or hit from one track of a pattern.",
+        schema=_obj({"pattern": {"type": "string"}, "track": {"type": "string"}}, ["track"]),
+    ),
     # --- songs on disk and on the device ---
     ToolCard(
         "list_saved_songs",

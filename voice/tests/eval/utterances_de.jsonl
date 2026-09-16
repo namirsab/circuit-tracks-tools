@@ -47,3 +47,10 @@
 {"say": "Danke, das klingt gut.", "tool": null}
 {"say": "Erzähl mir was über Techno.", "tool": null}
 {"say": "Ja.", "tool": null}
+{"say": "Neuer Song mit 100 BPM.", "tool": "new_song", "args": {"bpm": 100}}
+{"say": "Fang einen neuen Song an.", "tool": "new_song"}
+{"say": "Schreib C3, E3, G3 auf Synth eins in Pattern eins.", "tool": "write_notes", "args": {"track": "synth1", "notes": "*"}, "state": "loaded"}
+{"say": "Bass auf Synth zwei: C2 auf Schritt eins, G2 auf Schritt neun.", "tool": "write_notes", "args": {"track": "synth2"}, "state": "loaded"}
+{"say": "Kick auf eins, fünf, neun und dreizehn.", "tool": "write_drums", "args": {"track": "drum1", "steps": [1, 5, 9, 13]}, "state": "loaded"}
+{"say": "Snare auf fünf und dreizehn.", "tool": "write_drums", "args": {"track": "drum2", "steps": [5, 13]}, "state": "loaded"}
+{"say": "Lösch die Hi-Hats in Pattern eins.", "tool": "clear_track", "args": {"track": "drum3"}, "state": "loaded"}
