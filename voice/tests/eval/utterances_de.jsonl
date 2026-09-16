@@ -1,0 +1,45 @@
+{"say": "Welche Songs gibt es?", "tool": "list_saved_songs"}
+{"say": "Lade den Song Nachtfahrt.", "tool": "load_saved_song", "args": {"name": "Nachtfahrt"}}
+{"say": "Spiel den Song Ethereal Drift.", "tool": "load_saved_song", "args": {"name": "Ethereal Drift"}}
+{"say": "Start.", "tool": "start_sequencer", "state": "loaded"}
+{"say": "Los geht's.", "tool": "start_sequencer", "state": "loaded"}
+{"say": "Stopp.", "tool": "stop_sequencer", "state": "playing"}
+{"say": "Halt, aus.", "tool": "stop_sequencer", "state": "playing"}
+{"say": "Tempo auf 118.", "tool": "set_bpm", "args": {"bpm": 118}, "state": "playing"}
+{"say": "Etwas schneller.", "tool": "set_bpm", "args": {"bpm": [121, 130]}, "state": "playing"}
+{"say": "Viel langsamer.", "tool": "set_bpm", "args": {"bpm": [95, 110]}, "state": "playing"}
+{"say": "Schalte die Kick stumm.", "tool": "mute_track", "args": {"track": "drum1", "muted": true}, "state": "playing"}
+{"say": "Drum zwei wieder an.", "tool": "mute_track", "args": {"track": "drum2", "muted": false}, "state": "playing"}
+{"say": "Synth eins stumm.", "tool": "mute_track", "args": {"track": "synth1", "muted": true}, "state": "playing"}
+{"say": "Schalte die Drums stumm.", "tool": "mute_track", "args": {"track": "drum*", "muted": true}, "state": "playing"}
+{"say": "Welche Patterns gibt es?", "tool": "list_patterns", "state": "loaded"}
+{"say": "Nach dem aktuellen Pattern den Chorus spielen.", "tool": "queue_patterns", "args": {"patterns": ["chorus"]}, "state": "playing"}
+{"say": "Spiel Intro, dann Chorus, dann Outro.", "tool": "set_song", "args": {"patterns": ["intro", "chorus", "outro"]}, "state": "playing"}
+{"say": "Leere die Warteschlange.", "tool": "clear_queue", "state": "playing"}
+{"say": "Was läuft gerade?", "tool": ["get_sequencer_status", "get_state"], "state": "playing"}
+{"say": "Wie ist der Stand?", "tool": ["get_state", "get_sequencer_status"], "state": "playing"}
+{"say": "Mach den Filter auf Synth eins auf.", "tool": "set_synth_params", "args": {"synth": 1, "params": {"filter_frequency": "*"}}, "state": "playing"}
+{"say": "Cutoff auf Synth zwei zu.", "tool": "set_synth_params", "args": {"synth": 2, "params": {"filter_frequency": "*"}}, "state": "playing"}
+{"say": "Mehr Resonanz auf dem Bass.", "tool": "set_synth_params", "args": {"synth": 2, "params": {"filter_resonance": "*"}}, "state": "playing"}
+{"say": "Längerer Release auf Synth eins.", "tool": "set_synth_params", "args": {"synth": 1, "params": {"amp_env_release": "*"}}, "state": "playing"}
+{"say": "Die Kick leiser.", "tool": "set_drum_params", "args": {"drum": 1, "params": {"level": "*"}}, "state": "playing"}
+{"say": "Snare höher stimmen.", "tool": "set_drum_params", "args": {"drum": 2, "params": {"pitch": "*"}}, "state": "playing"}
+{"say": "Mehr Hall auf den Drums.", "tool": "set_project_params", "args": {"params": {"reverb_drum1_send": "*"}}, "state": "playing"}
+{"say": "Delay auf Synth zwei aus.", "tool": "set_project_params", "args": {"params": {"delay_synth2_send": 0}}, "state": "playing"}
+{"say": "Synth eins leiser.", "tool": "set_project_params", "args": {"params": {"synth1_level": "*"}}, "state": "playing"}
+{"say": "Dreh Makro fünf auf Synth eins auf achtzig.", "tool": "set_macro", "args": {"synth": 1, "macro": 5, "value": 80}, "state": "playing"}
+{"say": "Makro acht auf Synth zwei auf hundert Prozent.", "tool": "set_macro", "args": {"synth": 2, "macro": 8, "value": 127}, "state": "playing"}
+{"say": "Nimm Patch zwölf auf Synth zwei.", "tool": "select_patch", "args": {"synth": 2, "number": 12}}
+{"say": "Patch eins auf Synth eins.", "tool": "select_patch", "args": {"synth": 1, "number": 1}}
+{"say": "Wie heißt der Patch auf Synth eins?", "tool": "get_synth_patch", "args": {"synth": 1}}
+{"say": "Spiel mal ein C.", "tool": "play_notes"}
+{"say": "Rückgängig.", "tool": "undo_last", "state": "playing"}
+{"say": "Das war falsch, mach es rückgängig.", "tool": "undo_last", "state": "playing"}
+{"say": "Speicher das in Slot fünf als Nachtfahrt.", "tool": "save_to_device", "args": {"slot": 5, "name": "Nachtfahrt"}, "state": "loaded"}
+{"say": "Speichern in Slot 64.", "tool": "save_to_device", "args": {"slot": 64}, "state": "loaded"}
+{"say": "Hör immer zu.", "tool": "set_listening", "args": {"mode": "open"}}
+{"say": "Wie geht es dir?", "tool": null}
+{"say": "Was kann ich alles sagen?", "tool": null}
+{"say": "Danke, das klingt gut.", "tool": null}
+{"say": "Erzähl mir was über Techno.", "tool": null}
+{"say": "Ja.", "tool": null}

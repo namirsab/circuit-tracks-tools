@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
-from conftest import FakeConnector, FakeLiveSession
+from fakes import FakeConnector, FakeLiveSession
 from google.genai import types
 
 from circuit_voice.audio import Player

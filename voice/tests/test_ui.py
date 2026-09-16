@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from conftest import FakeConnector, FakeLiveSession
+from fakes import FakeConnector, FakeLiveSession
 from google.genai import types
 
 from circuit_voice import app
