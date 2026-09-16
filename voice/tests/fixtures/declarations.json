@@ -854,6 +854,178 @@
     "behavior": "NON_BLOCKING"
   },
   {
+    "description": "Sweep synth parameters over time ('Filter langsam von zu nach auf', 'in Bewegung bringen'): start and target values per parameter, duration in bars, optional ping_pong to go back and forth. Runs in the background until stop_morph.",
+    "name": "morph_synth_params",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "synth": {
+          "type": "integer"
+        },
+        "start": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "duration_bars": {
+          "default": 4,
+          "type": "number"
+        },
+        "ping_pong": {
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "synth",
+        "start",
+        "target"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Sweep drum parameters (level, pitch, decay, ...) over time for drum 1-4; same shape as morph_synth_params.",
+    "name": "morph_drum_params",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "drum": {
+          "type": "integer"
+        },
+        "start": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "duration_bars": {
+          "default": 4,
+          "type": "number"
+        },
+        "ping_pong": {
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "drum",
+        "start",
+        "target"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Sweep project parameters (reverb/delay sends, mixer, master filter) over time; same shape as morph_synth_params.",
+    "name": "morph_project_params",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "duration_bars": {
+          "default": 4,
+          "type": "number"
+        },
+        "ping_pong": {
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "target"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Stop running parameter sweeps (all, by name, or by synth).",
+    "name": "stop_morph",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "default": "",
+          "type": "string"
+        },
+        "synth": {
+          "default": 0,
+          "type": "integer"
+        }
+      }
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Remove every step from every track of a pattern ('Pattern eins leeren').",
+    "name": "clear_pattern",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "The steps of a pattern per track, to answer 'Was liegt auf Synth eins?'.",
+    "name": "get_pattern",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
     "description": "What the agent knows: playback source, loaded song, tempo, mutes, unsaved changes, last change. Cheap; never touches the device. Only when the user asks about the state, never before a change.",
     "name": "get_state",
     "parameters_json_schema": {

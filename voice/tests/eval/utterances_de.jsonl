@@ -66,3 +66,7 @@
 {"say": "Schritt fünf auf der Kick lauter.", "tool": "set_step", "args": {"track": "drum1", "step": 5, "velocity": "*"}, "state": "loaded"}
 {"say": "Nimm für Drum zwei ein anderes Snare-Sample.", "tool": ["set_drum_sample", "list_drum_samples"], "state": "loaded"}
 {"say": "Welche Drum-Samples gibt es?", "tool": "list_drum_samples"}
+{"say": "Bring den Filter auf Synth eins langsam in Bewegung, von zu nach auf, über vier Takte.", "tool": "morph_synth_params", "args": {"synth": 1}, "state": "playing"}
+{"say": "Stopp die Bewegung.", "tool": "stop_morph", "state": "playing"}
+{"say": "Leere Pattern eins komplett.", "tool": "clear_pattern", "args": {"name": "pattern1"}, "state": "loaded"}
+{"say": "Was liegt auf Synth eins?", "tool": ["get_pattern", "get_sequencer_status", "get_state"], "state": "loaded"}

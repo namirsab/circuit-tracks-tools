@@ -421,6 +421,37 @@ CARDS: list[ToolCard] = [
         blocking=False,
         profiles=("creative",),
     ),
+    # --- movement over time and housekeeping ---
+    ToolCard(
+        "morph_synth_params",
+        "Sweep synth parameters over time ('Filter langsam von zu nach auf', 'in Bewegung bringen'): start and "
+        "target values per parameter, duration in bars, optional ping_pong to go back and forth. Runs in the "
+        "background until stop_morph.",
+        mcp_tool="morph_synth_params",
+    ),
+    ToolCard(
+        "morph_drum_params",
+        "Sweep drum parameters (level, pitch, decay, ...) over time for drum 1-4; same shape as morph_synth_params.",
+        mcp_tool="morph_drum_params",
+    ),
+    ToolCard(
+        "morph_project_params",
+        "Sweep project parameters (reverb/delay sends, mixer, master filter) over time; same shape as "
+        "morph_synth_params.",
+        mcp_tool="morph_project_params",
+    ),
+    ToolCard("stop_morph", "Stop running parameter sweeps (all, by name, or by synth).", mcp_tool="stop_morph"),
+    ToolCard(
+        "clear_pattern",
+        "Remove every step from every track of a pattern ('Pattern eins leeren').",
+        mcp_tool="clear_pattern",
+    ),
+    ToolCard(
+        "get_pattern",
+        "The steps of a pattern per track, to answer 'Was liegt auf Synth eins?'.",
+        mcp_tool="get_pattern",
+        read_only=True,
+    ),
     # --- virtual tools (harness) ---
     ToolCard(
         "get_state",
