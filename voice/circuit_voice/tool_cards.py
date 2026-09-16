@@ -204,6 +204,43 @@ CARDS: list[ToolCard] = [
             ["slot"],
         ),
     ),
+    # --- projects stored on the device (workflow B) ---
+    ToolCard(
+        "transport",
+        "Start, stop or continue the project playing on the Circuit Tracks itself (its own patterns, our MIDI "
+        "clock). Stops the internal sequencer first if it runs. bpm is optional; the device's project tempo is "
+        "used otherwise.",
+        schema=_obj(
+            {"action": {"type": "string", "enum": ["start", "stop", "continue"]}, "bpm": {"type": "number"}}, ["action"]
+        ),
+    ),
+    ToolCard(
+        "set_tempo",
+        "Change the tempo (20-300 BPM) while the device plays from our clock. For the internal sequencer use "
+        "set_bpm instead.",
+        schema=_obj({"bpm": {"type": "number", "minimum": 20, "maximum": 300}}, ["bpm"]),
+    ),
+    ToolCard(
+        "select_project",
+        "Select a project stored on the device by its number (1-64). While playing it switches at the end of "
+        "the pattern unless immediate=true. Returns a German question when sounds were changed since the last "
+        "project select; ask the user and call again with confirmed=true after a clear yes.",
+        schema=_obj(
+            {
+                "number": {"type": "integer", "minimum": 1, "maximum": 64},
+                "immediate": {"type": "boolean", "default": False},
+                "confirmed": {"type": "boolean", "default": False},
+            },
+            ["number"],
+        ),
+    ),
+    ToolCard(
+        "import_project",
+        "Read a project (1-64) from the device into the internal sequencer as a song, so it can be revised and "
+        "saved again. Slow (SysEx).",
+        schema=_obj({"number": {"type": "integer", "minimum": 1, "maximum": 64}}, ["number"]),
+        blocking=False,
+    ),
     # --- composer step (separate model) ---
     ToolCard(
         "compose",

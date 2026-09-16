@@ -13,6 +13,7 @@ from .bridge import Bridge
 from .cli import Config
 from .compose_tools import register_compose_tools
 from .composer import Composer, GeminiComposer
+from .device_tools import register_device_tools
 from .events import EventLog
 from .listen import ListenController
 from .mcp_client import McpBackend, MidiNotFound
@@ -40,6 +41,7 @@ async def build_bridge(config: Config, backend: McpBackend) -> Bridge:
     bridge = Bridge(backend, profile=config.tools)
     await bridge.prepare()
     register_song_tools(bridge, SongLibrary(config.songs_dir))
+    register_device_tools(bridge)
     if "compose" in bridge.cards:
         composer = Composer(GeminiComposer(config.api_key or "", config.composer_model), backend=backend)
         await composer.prepare()

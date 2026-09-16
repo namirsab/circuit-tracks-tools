@@ -370,6 +370,92 @@
     "behavior": "BLOCKING"
   },
   {
+    "description": "Start, stop or continue the project playing on the Circuit Tracks itself (its own patterns, our MIDI clock). Stops the internal sequencer first if it runs. bpm is optional; the device's project tempo is used otherwise.",
+    "name": "transport",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "start",
+            "stop",
+            "continue"
+          ]
+        },
+        "bpm": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Change the tempo (20-300 BPM) while the device plays from our clock. For the internal sequencer use set_bpm instead.",
+    "name": "set_tempo",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "bpm": {
+          "type": "number",
+          "minimum": 20,
+          "maximum": 300
+        }
+      },
+      "required": [
+        "bpm"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Select a project stored on the device by its number (1-64). While playing it switches at the end of the pattern unless immediate=true. Returns a German question when sounds were changed since the last project select; ask the user and call again with confirmed=true after a clear yes.",
+    "name": "select_project",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "immediate": {
+          "type": "boolean",
+          "default": false
+        },
+        "confirmed": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "number"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
+    "description": "Read a project (1-64) from the device into the internal sequencer as a song, so it can be revised and saved again. Slow (SysEx).",
+    "name": "import_project",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        }
+      },
+      "required": [
+        "number"
+      ]
+    },
+    "behavior": "NON_BLOCKING"
+  },
+  {
     "description": "Build a new song from a German brief (style, tempo, key, mood, instruments). Runs in the background for about half a minute: say you are working on it, stay responsive, and summarise when the result arrives. Replaces the loaded song.",
     "name": "compose",
     "parameters_json_schema": {

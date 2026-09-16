@@ -45,6 +45,8 @@ class Ledger:
     unsaved: bool = False
     slot: int | None = None  # 1-based, last slot saved to
     device_project: int | None = None  # 1-based
+    device_bpm: dict[int, float] = field(default_factory=dict)  # tempo per device project, once read
+    device_dirty: bool = False  # sounds changed since the project was selected
     running: bool = False
     bpm: float | None = None
     mutes: dict[str, bool] = field(default_factory=dict)
@@ -103,6 +105,7 @@ class Ledger:
             self._param_change(key, params, tool, {"synth": args["synth"]}, f"Makro auf Synth {args['synth']}")
         elif tool == "select_patch":
             self.unsaved = True
+            self.device_dirty = True
 
     def _param_change(self, scope: str, params: dict[str, Any], tool: str, base: dict[str, Any], text: str) -> None:
         known = self.known.setdefault(scope, {})
@@ -121,6 +124,7 @@ class Ledger:
         self.history.append(Change(tool, {**base, "params": params}, revert, f"{text}: {shown}"))
         if scope != "tempo":
             self.unsaved = True
+            self.device_dirty = True
 
     def undo(self) -> Change | None:
         """Pop the last change; None when there is nothing to undo."""
