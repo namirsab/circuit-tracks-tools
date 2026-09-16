@@ -89,3 +89,14 @@ def test_check_permissions_reports_failure():
     msg = ctl.start()
     assert msg is not None and "Bedienungshilfen" in msg
     ctl.stop()
+
+
+def test_side_variant_keys_match_the_plain_name():
+    ctl, events = make("ptt")
+    ctl.key_down("alt")
+    ctl.key_up("alt")
+    assert events == ["listen_start", "listen_stop"]
+    ctl2, events2 = make("ptt")
+    ctl2.key = "space"
+    ctl2.key_down("space")
+    assert events2 == ["listen_start"]

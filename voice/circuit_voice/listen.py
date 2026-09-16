@@ -83,8 +83,16 @@ class ListenController:
 
     # --- key events (any thread) ---
 
+    def _matches(self, name: str | None) -> bool:
+        if name is None:
+            return False
+        if name == self.key:
+            return True
+        # macOS reports the right Option/Command/Shift keys as alt_r sometimes and as alt otherwise
+        return self.key.endswith(("_r", "_l")) and name == self.key[:-2]
+
     def key_down(self, name: str | None) -> None:
-        if name != self.key or self.mode == "open" or self._key_held:
+        if not self._matches(name) or self.mode == "open" or self._key_held:
             return
         self._key_held = True
         if self.mode == "ptt":
@@ -95,7 +103,7 @@ class ListenController:
             self._start()
 
     def key_up(self, name: str | None) -> None:
-        if name != self.key or self.mode == "open":
+        if not self._matches(name) or self.mode == "open":
             return
         self._key_held = False
         if self.mode == "ptt":
