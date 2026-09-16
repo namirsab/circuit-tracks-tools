@@ -25,7 +25,7 @@ from .audio import Player
 from .bridge import Bridge
 from .cli import Config
 from .listen import ListenController
-from .prompt_de import GOODBYE_DE, SYSTEM_INSTRUCTION_DE
+from .prompt_de import GOODBYE_DE, system_instruction
 
 log = logging.getLogger("circuit_voice.session")
 
@@ -38,6 +38,7 @@ def build_live_config(
     declarations: list[types.FunctionDeclaration],
     resumption_handle: str | None = None,
     text_only: bool = False,
+    profile: str | None = None,
 ) -> types.LiveConnectConfig:
     """Live config for the configured listening mode (see the spec, Listening modes).
 
@@ -64,7 +65,9 @@ def build_live_config(
         proactivity = None
     return types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
-        system_instruction=types.Content(parts=[types.Part(text=SYSTEM_INSTRUCTION_DE)], role="user"),
+        system_instruction=types.Content(
+            parts=[types.Part(text=system_instruction(profile or config.tools))], role="user"
+        ),
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=config.voice))
         ),
@@ -113,6 +116,7 @@ class Session:
         self._tasks: dict[str, asyncio.Task] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self._listen_stop_at: float | None = None
+        self._reconnect = False
         listen._on_event = self._listen_event  # events arrive from the hotkey thread
 
     # --- events ---
@@ -143,6 +147,13 @@ class Session:
 
     def stop(self) -> None:
         self._stop = True
+
+    async def request_reconnect(self) -> None:
+        """Reopen the session with the current declarations (after a mode switch)."""
+        self._reconnect = True
+        if self._live is not None:
+            with contextlib.suppress(Exception):
+                await self._live.close()
 
     def _time_left(self) -> float | None:
         if self.deadline_s is None:
@@ -181,7 +192,9 @@ class Session:
             self.emit("goodbye", text=GOODBYE_DE)
 
     async def _run_once(self) -> None:
-        config = build_live_config(self.config, self.bridge.declarations(), self.resumption_handle)
+        config = build_live_config(
+            self.config, self.bridge.declarations(), self.resumption_handle, profile=self.bridge.profile
+        )
         async with self.connect(config=config) as live:
             self._live = live
             self.emit("connected", handle=self.resumption_handle)
@@ -236,10 +249,12 @@ class Session:
                     got_any = True
                     await self._handle_message(live, msg)
             except Exception as e:  # noqa: BLE001 - a close after our own stop is not an error
-                if self._stop or "1000" in str(e):
+                if self._stop or self._reconnect or "1000" in str(e):
+                    self._reconnect = False
                     return
                 raise
-            if not got_any:
+            if not got_any or self._reconnect:
+                self._reconnect = False
                 return
 
     async def _handle_message(self, live: Any, msg: Any) -> None:
@@ -309,7 +324,7 @@ async def run_text_turn(
     config: Config, bridge: Bridge, connect: Callable[..., Any], text: str, timeout: float = 60.0
 ) -> dict[str, Any]:
     """Send one text turn to a TEXT-modality session; returns tool calls and the reply (``--dry-run``)."""
-    live_config = build_live_config(config, bridge.declarations(), text_only=True)
+    live_config = build_live_config(config, bridge.declarations(), text_only=True, profile=bridge.profile)
     calls: list[dict[str, Any]] = []
     reply: list[str] = []
 

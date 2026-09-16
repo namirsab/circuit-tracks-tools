@@ -136,7 +136,7 @@ def register_edit_tools(bridge: Bridge) -> None:
             await bridge.dispatch("stop_sequencer", {})
         data = empty_song(name, bpm)
         text = await bridge.load_song_dict(copy.deepcopy(data), name)  # type: ignore[attr-defined]
-        if ledger.song_json is None:
+        if not ledger.last_load_ok:
             return text
         ledger.song_json = data
         return f"Neuer Song {name}, {int(bpm)} BPM, ein leeres Pattern mit 32 Schritten. Sag mir, was rein soll."

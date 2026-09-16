@@ -15,7 +15,7 @@ from pathlib import Path
 from . import __version__
 
 MODES = ("ptt", "toggle", "open")
-TOOL_PROFILES = ("full", "perform")
+TOOL_PROFILES = ("control", "creative", "full", "perform")
 DEFAULT_LOG = Path.home() / ".circuit-voice" / "events.jsonl"
 
 
@@ -37,7 +37,7 @@ class Config:
     mcp: str = "inproc"
     midi_port: str | None = None
     no_midi: bool = False
-    tools: str = "full"
+    tools: str = "control"
     song: str | None = None
     songs_dir: str | None = None
     patch_cache: Path | None = Path.home() / ".circuit-voice" / "patches.json"
@@ -78,7 +78,7 @@ class Config:
             mcp=ns.mcp,
             midi_port=ns.midi_port,
             no_midi=ns.no_midi,
-            tools=ns.tools,
+            tools={"full": "creative", "perform": "control"}.get(ns.tools, ns.tools),
             song=ns.song,
             songs_dir=ns.songs_dir,
             patch_cache=Path(ns.patch_cache) if ns.patch_cache else None,
@@ -125,7 +125,9 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--mcp", default="inproc", help="inproc (default), stdio:<command> or an http(s) MCP URL")
     g.add_argument("--midi-port", help="MIDI port name (default: first port containing 'Circuit Tracks')")
     g.add_argument("--no-midi", action="store_true", help="skip the MIDI connection (development)")
-    g.add_argument("--tools", default="full", help="tool profile: full or perform (no composer)")
+    g.add_argument(
+        "--tools", default="control", help="agent mode: control (exact commands only) or creative (adds model jobs)"
+    )
     g.add_argument("--song", help="song JSON file to load at start")
     g.add_argument("--songs-dir", help="folder of song JSON files the user can load by voice")
     g.add_argument(

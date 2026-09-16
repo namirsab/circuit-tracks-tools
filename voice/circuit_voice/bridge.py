@@ -19,7 +19,7 @@ from google.genai import types
 
 from .ledger import Ledger
 from .mcp_client import McpBackend
-from .tool_cards import ArgumentError, ToolCard, cards_for_profile
+from .tool_cards import ArgumentError, ToolCard, cards_for_profile, normalise_profile
 
 log = logging.getLogger("circuit_voice.bridge")
 
@@ -46,7 +46,8 @@ class Bridge:
     def __init__(self, backend: McpBackend, profile: str = "full", ledger: Ledger | None = None):
         self.backend = backend
         self.ledger = ledger if ledger is not None else Ledger()
-        self.cards: dict[str, ToolCard] = {c.name: c for c in cards_for_profile(profile)}
+        self.profile = normalise_profile(profile)
+        self.cards: dict[str, ToolCard] = {c.name: c for c in cards_for_profile(self.profile)}
         self._virtual: dict[str, VirtualHandler] = {}
         self._internal: dict[str, VirtualHandler] = {}  # undo handlers not exposed as tools
         self._declarations: list[types.FunctionDeclaration] = []
@@ -97,6 +98,12 @@ class Bridge:
             )
         self._declarations = decls
 
+    async def set_profile(self, profile: str) -> None:
+        """Switch the tool surface (control/creative); handlers stay registered, declarations are rebuilt."""
+        self.profile = normalise_profile(profile)
+        self.cards = {c.name: c for c in cards_for_profile(self.profile)}
+        await self.prepare()
+
     def declarations(self) -> list[types.FunctionDeclaration]:
         return list(self._declarations)
 
@@ -109,9 +116,7 @@ class Bridge:
         self._internal[name] = handler
 
     def register_virtual(self, name: str, handler: VirtualHandler) -> None:
-        if name not in self.cards or self.cards[name].mcp_tool is not None:
-            raise ValueError(f"{name} is not a virtual tool in this profile")
-        self._virtual[name] = handler
+        self._virtual[name] = handler  # cards decide what the model may call; handlers may outlive a profile
 
     async def dispatch(self, name: str, args: dict[str, Any] | None) -> Dispatch:
         spoken = dict(args or {})

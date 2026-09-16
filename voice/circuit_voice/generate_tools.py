@@ -23,7 +23,8 @@ from .tool_cards import ArgumentError, _int_in_range
 
 TRACK_RULES = """\
 You write one track of a step sequencer pattern for a Novation Circuit Tracks.
-Answer with JSON only: {"steps": {"<step index as string, 0-based>": {...}}}.
+Answer with JSON only: {"steps": {"<whole-number step index as string, 0-based>": {...}}}.
+Step indices are whole numbers only (no "2.5").
 Synth/MIDI steps: {"note": <MIDI 0-127>, "velocity": 1-127, "gate": 0.25-16 (steps)}.
 Drum steps: {"velocity": 1-127}. Use only step indices below the pattern length.
 Fit the song's tempo and key; leave space; make it loop well. No prose.
@@ -39,6 +40,30 @@ macro should sweep it up). Use the standard macro layout as orientation:
 5 Filter Frequency, 6 Resonance, 7 Modulation, 8 FX. Give macro 5 a filter
 frequency target with a low base so the player can open the filter by hand.
 """
+
+
+STEP_FIELDS = {"note", "notes", "velocity", "gate", "tie", "probability"}
+DRUM_STEP_FIELDS = {"velocity", "probability", "sample"}
+
+
+def sanitize_steps(steps: Any, drum: bool) -> dict[str, Any] | None:
+    """Keep whole-number step keys and the fields set_track accepts."""
+    if not isinstance(steps, dict):
+        return None
+    allowed = DRUM_STEP_FIELDS if drum else STEP_FIELDS
+    out: dict[str, Any] = {}
+    for key, value in steps.items():
+        try:
+            index = int(float(key))
+        except (TypeError, ValueError):
+            continue
+        if index < 0 or float(key) != index or not isinstance(value, dict):
+            continue
+        cleaned = {k: v for k, v in value.items() if k in allowed and v is not None}
+        if not drum and "note" not in cleaned and "notes" not in cleaned:
+            continue
+        out[str(index)] = cleaned
+    return out
 
 
 def _track_schema() -> dict[str, Any]:
@@ -106,7 +131,7 @@ def register_generate_tools(bridge: Bridge, model: ComposerModel, patch_schema: 
         try:
             for _attempt in range(3):
                 answer = await model.generate(TRACK_RULES, messages, track_schema)
-                steps = answer.get("steps") if isinstance(answer, dict) else None
+                steps = sanitize_steps(answer.get("steps"), track in DRUM_TRACKS) if isinstance(answer, dict) else None
                 candidate = copy.deepcopy(song)
                 candidate["patterns"][key].setdefault("tracks", {})[track] = {"steps": steps or {}}
                 ok, error = validate_song(candidate)

@@ -759,6 +759,26 @@
     "behavior": "BLOCKING"
   },
   {
+    "description": "Switch between 'control' (Steuermodus: only exact, instant commands; the agent never invents music) and 'creative' (Kreativmodus: additionally generate_track, design_patch, compose, revise). Takes a moment; the session reconnects.",
+    "name": "set_agent_mode",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "control",
+            "creative"
+          ]
+        }
+      },
+      "required": [
+        "mode"
+      ]
+    },
+    "behavior": "BLOCKING"
+  },
+  {
     "description": "Switch how the agent listens: 'ptt' (hold the key), 'toggle' (press to start and stop), 'open' (always listening, headphones recommended).",
     "name": "set_listening",
     "parameters_json_schema": {

@@ -14,7 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-PROFILES = ("full", "perform")
+PROFILES = ("control", "creative")
+PROFILE_ALIASES = {"full": "creative", "perform": "control", "steuer": "control", "kreativ": "creative"}
 TRACKS = ["synth1", "synth2", "drum1", "drum2", "drum3", "drum4", "midi1", "midi2"]
 
 
@@ -325,7 +326,7 @@ CARDS: list[ToolCard] = [
             ["track", "brief"],
         ),
         blocking=False,
-        profiles=("full",),
+        profiles=("creative",),
     ),
     ToolCard(
         "design_patch",
@@ -335,7 +336,7 @@ CARDS: list[ToolCard] = [
             {"synth": {"type": "integer", "minimum": 1, "maximum": 2}, "brief": {"type": "string"}}, ["synth", "brief"]
         ),
         blocking=False,
-        profiles=("full",),
+        profiles=("creative",),
     ),
     ToolCard(
         "save_patch",
@@ -358,7 +359,7 @@ CARDS: list[ToolCard] = [
         "Replaces the loaded song.",
         schema=_obj({"brief": {"type": "string"}}, ["brief"]),
         blocking=False,
-        profiles=("full",),
+        profiles=("creative",),
     ),
     ToolCard(
         "revise",
@@ -366,7 +367,7 @@ CARDS: list[ToolCard] = [
         "lang'). Runs in the background; keeps the music playing where possible.",
         schema=_obj({"instruction": {"type": "string"}}, ["instruction"]),
         blocking=False,
-        profiles=("full",),
+        profiles=("creative",),
     ),
     # --- virtual tools (harness) ---
     ToolCard(
@@ -380,6 +381,13 @@ CARDS: list[ToolCard] = [
         "undo_last",
         "Revert the last parameter, tempo or mute change ('Rückgängig'). Says when nothing can be undone.",
         schema=_obj({}, []),
+    ),
+    ToolCard(
+        "set_agent_mode",
+        "Switch between 'control' (Steuermodus: only exact, instant commands; the agent never invents music) and "
+        "'creative' (Kreativmodus: additionally generate_track, design_patch, compose, revise). Takes a moment; "
+        "the session reconnects.",
+        schema=_obj({"mode": {"type": "string", "enum": ["control", "creative"]}}, ["mode"]),
     ),
     ToolCard(
         "set_listening",
@@ -396,7 +404,13 @@ def card(name: str) -> ToolCard | None:
     return _BY_NAME.get(name)
 
 
-def cards_for_profile(profile: str) -> list[ToolCard]:
+def normalise_profile(profile: str) -> str:
+    profile = PROFILE_ALIASES.get(profile.lower(), profile.lower())
     if profile not in PROFILES:
         raise ValueError(f"unknown tool profile {profile!r}")
+    return profile
+
+
+def cards_for_profile(profile: str) -> list[ToolCard]:
+    profile = normalise_profile(profile)
     return [c for c in CARDS if profile in c.profiles]

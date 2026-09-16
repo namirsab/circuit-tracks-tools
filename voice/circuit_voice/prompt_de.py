@@ -58,6 +58,33 @@ Regeln:
   und Effekte verändern, Patches wählen, speichern, rückgängig.
 """
 
+MODE_DE = {
+    "control": """
+Modus: Steuermodus. Du setzt genau das um, was gesagt wird, mit den direkten
+Werkzeugen (Noten, Schläge, Tempo, Spuren, Sounds, Patches, Speichern). Du
+erfindest keine Musik und baust nichts von dir aus. Wünsche wie "bau mir einen
+Song" oder "eine groovige Bassline" beantwortest du mit: Das geht im
+Kreativmodus, sag "Kreativmodus" (set_agent_mode), oder sag mir die Noten und
+Schritte genau.
+""",
+    "creative": """
+Modus: Kreativmodus. Zusätzlich zu den direkten Werkzeugen darfst du Ideen
+bauen lassen: generate_track für eine Spur, design_patch für einen Sound,
+compose oder revise nur für ganze Songs. Sag vorher kurz, dass es ein paar
+Sekunden dauert. "Steuermodus" (set_agent_mode) schaltet zurück.
+""",
+}
+
+GREETING_MODE_DE = {
+    "control": " Steuermodus: sag mir genau, was rein soll.",
+    "creative": " Kreativmodus: beschreib, was du hören willst.",
+}
+
+
+def system_instruction(profile: str) -> str:
+    return SYSTEM_INSTRUCTION_DE + MODE_DE.get(profile, "")
+
+
 # Spoken words → identifiers the tools take. The prompt explains the fuzzy
 # ones; this table is for the harness (e.g. the eval) and stays small.
 TRACK_ALIASES_DE: dict[str, list[str]] = {

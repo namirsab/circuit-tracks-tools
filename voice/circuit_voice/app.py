@@ -20,7 +20,7 @@ from .generate_tools import register_generate_tools
 from .listen import ListenController
 from .mcp_client import McpBackend, MidiNotFound
 from .patch_tools import PatchCatalog, register_patch_tools
-from .prompt_de import GREETING_DE, GREETING_OPEN_DE, GREETING_TOGGLE_DE
+from .prompt_de import GREETING_DE, GREETING_MODE_DE, GREETING_OPEN_DE, GREETING_TOGGLE_DE
 from .session import Session, run_text_turn
 from .songs import SongLibrary, register_song_tools
 from .ui import TerminalUI
@@ -47,13 +47,13 @@ async def build_bridge(config: Config, backend: McpBackend) -> Bridge:
     register_device_tools(bridge)
     register_edit_tools(bridge)
     register_patch_tools(bridge, PatchCatalog(config.patch_cache))
-    if "compose" in bridge.cards:
-        model = GeminiComposer(config.api_key or "", config.composer_model)
-        composer = Composer(model, backend=backend)
-        await composer.prepare()
-        register_compose_tools(bridge, composer)
-        register_generate_tools(bridge, model)
-        await bridge.generate_prepare()  # type: ignore[attr-defined]
+    # Model jobs are registered in every mode; the profile decides what the model may call.
+    model = GeminiComposer(config.api_key or "", config.composer_model)
+    composer = Composer(model, backend=backend)
+    await composer.prepare()
+    register_compose_tools(bridge, composer)
+    register_generate_tools(bridge, model)
+    await bridge.generate_prepare()  # type: ignore[attr-defined]
     if config.song:
         data = SongLibrary.load(config.song)
         text = await bridge.load_song_dict(data, config.song)  # type: ignore[attr-defined]
@@ -98,7 +98,8 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
             connect=connect or _connect_factory(config),
             mic=mic,
             on_event=on_event,
-            greeting={"open": GREETING_OPEN_DE, "toggle": GREETING_TOGGLE_DE}.get(listen.mode, GREETING_DE),
+            greeting={"open": GREETING_OPEN_DE, "toggle": GREETING_TOGGLE_DE}.get(listen.mode, GREETING_DE)
+            + GREETING_MODE_DE.get(bridge.profile, ""),
         )
 
         async def set_listening(args: dict[str, Any]) -> str:
@@ -109,6 +110,14 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
             warn = " Am besten mit Kopfhörern, sonst höre ich die Musik mit." if mode == "open" else ""
             return f"Ich höre jetzt so zu: {names[mode]}.{warn}"
 
+        async def set_agent_mode(args: dict[str, Any]) -> str:
+            mode = str(args.get("mode", "")).lower()
+            await bridge.set_profile(mode)
+            asyncio.get_running_loop().create_task(session.request_reconnect())
+            names = {"control": "Steuermodus", "creative": "Kreativmodus"}
+            return f"{names[bridge.profile]} ist an; ich verbinde kurz neu."
+
+        bridge.register_virtual("set_agent_mode", set_agent_mode)
         bridge.register_virtual("set_listening", set_listening)
         hint = listen.start_terminal() if config.key_source == "terminal" else listen.start()
         if hint:

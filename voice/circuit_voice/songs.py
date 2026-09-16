@@ -75,8 +75,9 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
 
     async def load_song_dict(data: dict[str, Any], label: str) -> str:
         result = await backend.call("load_song", {"song": copy.deepcopy(data)})  # the server mutates its input
+        ledger.last_load_ok = not result.is_error
         if result.is_error:
-            return f"Der Song {label} konnte nicht geladen werden: {result.text}"
+            return f"Der Song {label} konnte nicht geladen werden: {result.text[:300]}"
         info = result.data if isinstance(result.data, dict) else {}
         name = info.get("name") or data.get("name") or label
         ledger.song_loaded(
