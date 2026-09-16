@@ -68,6 +68,9 @@ class Bridge:
             return "Es gibt nichts, was ich rückgängig machen kann."
         if change.revert is None:
             return f"Die letzte Änderung ({change.text_de}) kann ich nicht rückgängig machen."
+        if change.tool in self._virtual:
+            out = await self._virtual[change.tool](dict(change.revert))
+            return f"Rückgängig: {out}" if isinstance(out, str) else f"Rückgängig: {change.text_de}."
         result = await self.backend.call(change.tool, change.revert)
         if result.is_error:
             return f"Rückgängig fehlgeschlagen: {result.text}"
@@ -127,9 +130,28 @@ class Bridge:
             except Exception as e:  # noqa: BLE001 - report, never crash the session
                 log.exception("virtual tool %s failed", name)
                 return Dispatch(name, {"error": f"{name} ist fehlgeschlagen: {e}"}, c.blocking)
+        note = await self._before(c, args) if c.before else ""
         result = await self.backend.call(c.mcp_tool, args)
         if result.is_error:
             return Dispatch(name, {"error": result.text}, c.blocking)
         self.ledger.observe(name, args, result.data)
         data = c.summarise(spoken, result.data) if c.summarise is not None else result.data
+        if note and isinstance(data, str):
+            data = note + data
         return Dispatch(name, {"result": data}, c.blocking)
+
+    async def _before(self, c: ToolCard, args: dict[str, Any]) -> str:
+        if c.before == "stop_device_first":
+            return await self.stop_device_first()
+        if callable(c.before):
+            return await c.before(self, args) or ""
+        return ""
+
+    async def stop_device_first(self) -> str:
+        """One playback source at a time: stop the device transport before the internal engine starts."""
+        if self.ledger.running and self.ledger.source == "device":
+            result = await self.backend.call("transport", {"action": "stop"})
+            if not result.is_error:
+                self.ledger.running = False
+                return "Ich habe das Gerät gestoppt. "
+        return ""

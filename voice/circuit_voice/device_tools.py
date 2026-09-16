@@ -12,7 +12,8 @@ import re
 from typing import Any
 
 from .bridge import Bridge
-from .tool_cards import ArgumentError, _int_in_range
+from .ledger import TRACK_NAMES_DE, Change
+from .tool_cards import TRACKS, ArgumentError, _int_in_range
 
 _BPM_RE = re.compile(r"clock at ([0-9.]+) BPM")
 
@@ -107,6 +108,47 @@ def register_device_tools(bridge: Bridge) -> None:
             f"{len(patterns)} Patterns, {int(ledger.bpm)} BPM."
         )
 
+    async def mute_track(args: dict[str, Any]) -> str:
+        track = str(args.get("track", ""))
+        muted = bool(args.get("muted", True))
+        if track not in TRACKS:
+            raise ArgumentError(f"Unbekannte Spur {track!r}. Möglich: {', '.join(TRACKS)}.")
+        name = TRACK_NAMES_DE.get(track, track)
+        if ledger.source != "device":
+            result = await backend.call("mute_track", {"track": track, "muted": muted})
+            if result.is_error:
+                return f"Stummschalten ging nicht: {result.text}"
+            ledger.observe("mute_track", {"track": track, "muted": muted}, result.data)
+            return f"{name} ist jetzt {'stumm' if muted else 'wieder an'}."
+        # Device mode: no mute over MIDI, so use the level parameters and remember the old level.
+        if track.startswith("midi"):
+            return f"{name} kann ich auf dem Gerät nicht stumm schalten."
+        if muted:
+            previous = ledger.known.get("project", {}).get(f"{track}_level") if track.startswith("synth") else None
+            if previous is None and track.startswith("drum"):
+                previous = ledger.known.get(track, {}).get("level")
+            ledger.saved_levels[track] = int(previous) if previous is not None else 100
+            level = 0
+        else:
+            level = ledger.saved_levels.pop(track, 100)
+        if track.startswith("synth"):
+            result = await backend.call("set_project_params", {"params": {f"{track}_level": level}})
+        else:
+            result = await backend.call("set_drum_params", {"drum": int(track[-1]), "params": {"level": level}})
+        if result.is_error:
+            return f"Stummschalten ging nicht: {result.text}"
+        ledger.mutes[track] = muted
+        ledger.history.append(
+            Change(
+                "mute_track",
+                {"track": track, "muted": muted},
+                {"track": track, "muted": not muted},
+                f"{name} wieder {'an' if muted else 'stumm'}",
+            )
+        )
+        return f"{name} ist jetzt {'stumm' if muted else 'wieder an'} (Lautstärke {level})."
+
+    bridge.register_virtual("mute_track", mute_track)
     bridge.register_virtual("transport", transport)
     bridge.register_virtual("set_tempo", set_tempo)
     bridge.register_virtual("select_project", select_project)

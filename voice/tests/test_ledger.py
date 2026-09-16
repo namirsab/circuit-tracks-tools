@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from circuit_voice.bridge import Bridge
+from circuit_voice.device_tools import register_device_tools
 from circuit_voice.ledger import Ledger
 from circuit_voice.mcp_client import McpBackend
 
@@ -15,6 +16,7 @@ async def make(server):
         ledger = Ledger()
         b = Bridge(backend, profile="full", ledger=ledger)
         await b.prepare()
+        register_device_tools(b)
         yield b, ledger, server[1]
 
 

@@ -53,7 +53,7 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Mute or unmute one track: synth1, synth2, drum1..drum4, midi1, midi2. 'Drums' or 'Schlagzeug' means all four drum tracks (call once per track). muted=false unmutes.",
+    "description": "Mute or unmute one track: synth1, synth2, drum1..drum4, midi1, midi2. 'Drums' or 'Schlagzeug' means all four drum tracks (call once per track). muted=false unmutes. Works for the internal sequencer and, via levels, for a project playing on the device.",
     "name": "mute_track",
     "parameters_json_schema": {
       "type": "object",

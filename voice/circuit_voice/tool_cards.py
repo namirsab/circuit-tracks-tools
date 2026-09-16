@@ -35,6 +35,8 @@ class ToolCard:
     fill: Callable[[dict[str, Any], Any], dict[str, Any]] | None = None
     # (spoken args, tool result) -> what the model gets back; default: the result itself
     summarise: Callable[[dict[str, Any], Any], Any] | None = None
+    # async (bridge, args) -> note prefixed to the result, run before the tool (e.g. stop the other source)
+    before: Callable[..., Any] | None = None
     profiles: tuple[str, ...] = PROFILES
 
 
@@ -101,6 +103,7 @@ CARDS: list[ToolCard] = [
             [],
         ),
         fill=_fill_start,
+        before="stop_device_first",
     ),
     ToolCard("stop_sequencer", "Stop the internal sequencer immediately (all notes off).", mcp_tool="stop_sequencer"),
     ToolCard(
@@ -112,8 +115,8 @@ CARDS: list[ToolCard] = [
     ToolCard(
         "mute_track",
         "Mute or unmute one track: synth1, synth2, drum1..drum4, midi1, midi2. 'Drums' or 'Schlagzeug' means all four "
-        "drum tracks (call once per track). muted=false unmutes.",
-        mcp_tool="mute_track",
+        "drum tracks (call once per track). muted=false unmutes. Works for the internal sequencer and, via levels, "
+        "for a project playing on the device.",
         schema=_obj(
             {"track": {"type": "string", "enum": TRACKS}, "muted": {"type": "boolean", "default": True}},
             ["track"],

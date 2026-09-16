@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from circuit_voice.bridge import Bridge
+from circuit_voice.device_tools import register_device_tools
 from circuit_voice.ledger import Ledger
 from circuit_voice.mcp_client import McpBackend
 from circuit_voice.songs import SongLibrary, register_song_tools
@@ -23,6 +24,7 @@ async def agent(server):
         bridge = Bridge(backend, profile="full", ledger=ledger)
         await bridge.prepare()
         register_song_tools(bridge, SongLibrary(SONGS))
+        register_device_tools(bridge)
         yield bridge, ledger, server[1]
 
 
