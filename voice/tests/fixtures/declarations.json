@@ -402,7 +402,7 @@
     "behavior": "NON_BLOCKING"
   },
   {
-    "description": "What the agent knows: playback source, loaded song, tempo, mutes, unsaved changes, last change. Cheap; never touches the device.",
+    "description": "What the agent knows: playback source, loaded song, tempo, mutes, unsaved changes, last change. Cheap; never touches the device. Only when the user asks about the state, never before a change.",
     "name": "get_state",
     "parameters_json_schema": {
       "type": "object",

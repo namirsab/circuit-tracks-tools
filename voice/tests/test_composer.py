@@ -72,3 +72,14 @@ def test_track_edits_only_for_step_changes():
     renamed["patterns"]["extra"] = copy.deepcopy(SONG["patterns"]["drift"])
     assert track_edits(SONG, renamed) is None
     assert track_edits(SONG, copy.deepcopy(SONG)) == []
+
+
+async def test_revision_keeps_omitted_sections():
+    from circuit_voice.composer import keep_untouched_sections
+
+    revised = {k: v for k, v in SONG.items() if k not in ("sounds", "fx", "mixer", "name")}
+    merged = keep_untouched_sections(SONG, revised)
+    assert merged["sounds"] == SONG["sounds"] and merged["name"] == SONG["name"]
+    composer = Composer(FakeComposer([revised]), max_retries=0)
+    song = await composer.compose("Outro anhängen", current_song=SONG)
+    assert song["sounds"] == SONG["sounds"]

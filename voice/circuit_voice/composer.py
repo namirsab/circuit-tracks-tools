@@ -139,6 +139,8 @@ class Composer:
         error: str | None = None
         for _attempt in range(self.max_retries + 1):
             answer = await self.model.generate(self.system, messages, self._schema)
+            if current_song is not None and isinstance(answer, dict):
+                answer = keep_untouched_sections(current_song, answer)
             song, error = validate_song(answer)
             if song is not None:
                 if current_song is not None and not song.get("name") and current_song.get("name"):
@@ -147,6 +149,18 @@ class Composer:
             messages.append(("model", json.dumps(answer, ensure_ascii=False)[:20000]))
             messages.append(("user", retry_prompt(error or "invalid")))
         raise ComposeFailed(error or "invalid song")
+
+
+REVISION_KEEP = ("name", "scale", "swing", "sounds", "fx", "mixer")
+
+
+def keep_untouched_sections(current: dict[str, Any], revised: dict[str, Any]) -> dict[str, Any]:
+    """Revisions often omit sections they did not touch; carry them over from the current song."""
+    out = dict(revised)
+    for key in REVISION_KEEP:
+        if key in current and not out.get(key):
+            out[key] = copy.deepcopy(current[key])
+    return out
 
 
 def track_edits(old: dict[str, Any], new: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]] | None:

@@ -27,7 +27,12 @@ Regeln:
   "leiser/lauter" = level.
 - Ohne Zahl änderst du in Schritten von etwa 20 auf der Skala 0 bis 127
   ("etwas" = 10, "viel" = 40); beim Tempo etwa 5 BPM ("viel" = 15).
-  Prozentangaben rechnest du auf 0 bis 127 um.
+  Prozentangaben rechnest du auf 0 bis 127 um. Für solche relativen
+  Änderungen fragst du keinen Zustand ab: Ausgangspunkt ist der Wert, den du
+  zuletzt gesetzt hast, sonst 64 (Lautstärke: 100). Setze direkt, dann sage
+  den neuen Wert.
+- Auf reine Bestätigungen wie "ja", "okay", "danke" ohne offene Frage
+  antwortest du kurz und rufst kein Werkzeug auf.
 - "Rückgängig" nimmt die letzte Änderung zurück (undo_last). "Kurz antworten"
   schaltet in den knappen Modus mit Ein-Wort-Bestätigungen, "ausführlich"
   wieder zurück.

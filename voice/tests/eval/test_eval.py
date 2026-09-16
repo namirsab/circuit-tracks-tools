@@ -25,6 +25,11 @@ STATE_DE = {
     "loaded": "(Kontext: Der Song 'Nachtfahrt' ist geladen, Patterns intro, chorus, outro, 120 BPM, gestoppt.)\n",
     "playing": "(Kontext: Der Song 'Nachtfahrt' läuft, Pattern intro, 120 BPM, keine Spur stumm.)\n",
 }
+STATUS_RESULT = {
+    None: "Es ist noch kein Song geladen und nichts spielt.",
+    "loaded": "Nachtfahrt ist geladen, gestoppt. 120 BPM. nicht gespeichert.",
+    "playing": "Nachtfahrt läuft, Pattern intro. 120 BPM. nicht gespeichert.",
+}
 GATE = 0.9
 
 
@@ -63,17 +68,42 @@ async def test_german_utterances(server):
     async with McpBackend("inproc") as backend:
         bridge = Bridge(backend)
         await bridge.prepare()
-        tools = [types.Tool(function_declarations=bridge.declarations())]
+        # generate_content rejects FunctionDeclaration.behavior (Live-only); strip it for the eval
+        decls = [d.model_copy(update={"behavior": None}) for d in bridge.declarations()]
+        tools = [types.Tool(function_declarations=decls)]
     rows = []
     hits = 0
     for case in CASES:
         prompt = STATE_DE[case.get("state")] + case["say"]
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION_DE, tools=tools, temperature=0),
-        )
+        config = types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION_DE, tools=tools, temperature=0)
+        contents: list = [types.Content(role="user", parts=[types.Part(text=prompt)])]
+        response = await client.aio.models.generate_content(model=model, contents=contents, config=config)
         calls = response.function_calls or []
+        if (
+            calls
+            and calls[0].name in ("get_state", "get_sequencer_status")
+            and case["tool"]
+            not in (
+                "get_state",
+                "get_sequencer_status",
+                ["get_sequencer_status", "get_state"],
+                ["get_state", "get_sequencer_status"],
+            )
+        ):
+            # A status read before acting is fine in a real session; follow it with the read's result.
+            contents.append(response.candidates[0].content)
+            contents.append(
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_function_response(
+                            name=calls[0].name, response={"result": STATUS_RESULT[case.get("state")]}
+                        )
+                    ],
+                )
+            )
+            response = await client.aio.models.generate_content(model=model, contents=contents, config=config)
+            calls = response.function_calls or []
         got = (calls[0].name, dict(calls[0].args or {})) if calls else (None, {})
         want = case["tool"]
         want_names = want if isinstance(want, list) else [want]

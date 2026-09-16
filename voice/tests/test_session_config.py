@@ -51,8 +51,8 @@ def test_resumption_handle_and_text_mode():
     assert c.response_modalities == [types.Modality.AUDIO]
     assert c.speech_config.voice_config.prebuilt_voice_config.voice_name == "Kore"
     t = build_live_config(cfg("ptt"), DECL, text_only=True)
-    assert t.response_modalities == [types.Modality.TEXT]
-    assert t.speech_config is None and t.output_audio_transcription is None
+    assert t.response_modalities == [types.Modality.AUDIO]  # native audio models accept nothing else
+    assert t.output_audio_transcription is not None
     assert t.tools[0].function_declarations[0].name == "set_bpm"
 
 

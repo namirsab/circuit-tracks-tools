@@ -226,7 +226,7 @@ CARDS: list[ToolCard] = [
     ToolCard(
         "get_state",
         "What the agent knows: playback source, loaded song, tempo, mutes, unsaved changes, last change. "
-        "Cheap; never touches the device.",
+        "Cheap; never touches the device. Only when the user asks about the state, never before a change.",
         schema=_obj({}, []),
         read_only=True,
     ),

@@ -39,7 +39,11 @@ def build_live_config(
     resumption_handle: str | None = None,
     text_only: bool = False,
 ) -> types.LiveConnectConfig:
-    """Live config for the configured listening mode (see the spec, Listening modes)."""
+    """Live config for the configured listening mode (see the spec, Listening modes).
+
+    The native audio models accept only the AUDIO response modality; ``text_only``
+    callers (``--dry-run``) read the output transcription and drop the audio.
+    """
     if config.mode == "open":
         realtime = types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
@@ -57,18 +61,16 @@ def build_live_config(
         )
         proactivity = None
     return types.LiveConnectConfig(
-        response_modalities=[types.Modality.TEXT if text_only else types.Modality.AUDIO],
+        response_modalities=[types.Modality.AUDIO],
         system_instruction=types.Content(parts=[types.Part(text=SYSTEM_INSTRUCTION_DE)], role="user"),
-        speech_config=None
-        if text_only
-        else types.SpeechConfig(
+        speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=config.voice))
         ),
         tools=[types.Tool(function_declarations=declarations)] if declarations else None,
         realtime_input_config=realtime,
         proactivity=proactivity,
         input_audio_transcription=types.AudioTranscriptionConfig(),
-        output_audio_transcription=None if text_only else types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig(),
         context_window_compression=types.ContextWindowCompressionConfig(
             sliding_window=types.SlidingWindow(), trigger_tokens=COMPRESSION_TRIGGER_TOKENS
         ),
@@ -307,7 +309,9 @@ async def run_text_turn(
                 sc = msg.server_content
                 if sc is not None and sc.model_turn is not None:
                     reply.extend(p.text for p in sc.model_turn.parts or [] if p.text)
-                if sc is not None and sc.turn_complete and not [t for t in (msg.tool_call,) if t]:
+                if sc is not None and sc.output_transcription is not None and sc.output_transcription.text:
+                    reply.append(sc.output_transcription.text)
+                if sc is not None and sc.turn_complete:
                     if calls and not reply:
                         continue  # the model will speak after the tool result
                     break

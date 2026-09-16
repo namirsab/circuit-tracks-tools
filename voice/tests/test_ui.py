@@ -62,7 +62,7 @@ async def test_dry_run_prints_tool_calls(server, capsys):
     out = capsys.readouterr().out
     assert code == 0
     assert "→ stop_sequencer" in out and "Agent: Gestoppt." in out
-    assert connector.configs[0].response_modalities == [types.Modality.TEXT]
+    assert connector.configs[0].response_modalities == [types.Modality.AUDIO]
     assert fake.client_content[0]["turn_complete"] is True
 
 
