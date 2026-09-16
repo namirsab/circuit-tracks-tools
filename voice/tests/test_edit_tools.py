@@ -52,7 +52,7 @@ def test_empty_song_validates():
 async def test_new_song_then_notes_and_drums(server):
     async with agent(server) as (bridge, ledger, midi):
         out = await bridge.dispatch("write_notes", {"track": "synth1", "notes": "C3"})
-        assert "kein Song" in out.response["error"]
+        assert out.response["error"].startswith("Es ist kein Song geladen")
         out = await bridge.dispatch("new_song", {"name": "Probe", "bpm": 100})
         assert "Probe" in out.response["result"] and ledger.bpm == 100 and ledger.patterns == ["pattern1"]
 

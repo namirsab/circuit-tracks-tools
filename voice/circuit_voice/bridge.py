@@ -127,6 +127,8 @@ class Bridge:
                 return Dispatch(name, {"error": f"{name} ist noch nicht verfügbar."}, c.blocking)
             try:
                 return Dispatch(name, {"result": await handler(args)}, c.blocking)
+            except ArgumentError as e:
+                return Dispatch(name, {"error": str(e)}, c.blocking)
             except Exception as e:  # noqa: BLE001 - report, never crash the session
                 log.exception("virtual tool %s failed", name)
                 return Dispatch(name, {"error": f"{name} ist fehlgeschlagen: {e}"}, c.blocking)
