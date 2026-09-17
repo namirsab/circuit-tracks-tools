@@ -187,3 +187,64 @@ async def test_device_start_with_an_unsaved_song_explains_instead_of_playing_som
         out = await bridge.dispatch("transport", {"action": "start"})
         assert "noch nicht auf dem Gerät" in out.response["result"]
         assert ledger.running is False and ("realtime", "start") not in midi.messages
+
+
+async def test_save_stops_running_sweeps_before_the_project_is_written(server, monkeypatch):
+    """Hardware 2026-09-17: a project saved while a ping-pong morph ran crashed the device on load."""
+    import circuit_mcp.server as srv
+
+    running_at_export = []
+
+    def fake_export(song, midi, slot=0, name="", template_path=None):
+        running_at_export.append(len(srv._morph._threads))
+        return {"status": "ok", "bytes": 1}
+
+    monkeypatch.setattr("circuit_tracks.song.export_song_to_device", fake_export)
+    monkeypatch.setattr("circuit_voice.songs.SETTLE_S", 0.0)
+    async with agent(server) as (bridge, ledger, midi):
+        await bridge.dispatch("load_saved_song", {"name": "Minimal"})
+        await bridge.dispatch(
+            "morph_synth_params",
+            {"synth": 2, "start": {"distortion_level": 40}, "target": {"distortion_level": 80}, "ping_pong": True},
+        )
+        assert len(srv._morph._threads) == 1
+        out = await bridge.dispatch("save_to_device", {"slot": 18, "confirmed": True})
+        assert running_at_export == [0]
+        assert "Bewegung" in out.response["result"]
+
+
+async def test_add_pattern_and_edits_go_to_it(server):
+    from circuit_voice.edit_tools import register_edit_tools
+
+    async with agent(server) as (bridge, ledger, midi):
+        register_edit_tools(bridge)
+        await bridge.dispatch("new_song", {})
+        await bridge.dispatch("write_drums", {"track": "drum1", "steps": [1, 5]})
+        out = await bridge.dispatch("add_pattern", {"copy_from": "pattern1"})
+        assert "pattern2" in out.response["result"] and "Kopie" in out.response["result"]
+        song = ledger.song_json
+        assert song["song"] == ["pattern1", "pattern2"] and ledger.patterns == ["pattern1", "pattern2"]
+        assert song["patterns"]["pattern2"]["tracks"]["drum1"]["steps"].keys() == {"0", "4"}
+        listed = await bridge.dispatch("list_patterns", {})
+        assert "pattern2" in listed.response["result"]["patterns"]
+
+        await bridge.dispatch("write_drums", {"track": "drum2", "steps": [9]})
+        assert "drum2" in song["patterns"]["pattern2"]["tracks"]
+        assert "drum2" not in song["patterns"]["pattern1"]["tracks"]
+
+        out = await bridge.dispatch("add_pattern", {"name": "Break"})
+        assert "break" in out.response["result"] and "leer" in out.response["result"]
+        assert song["patterns"]["break"]["tracks"] == {}
+        out = await bridge.dispatch("add_pattern", {"name": "break"})
+        assert "gibt es schon" in out.response["error"]
+
+
+async def test_save_without_a_slot_takes_the_project_selected_on_the_device(server):
+    """Hardware 2026-09-17: 'der Slot, wo ich bin' after 'Projekt 18 auswählen' was not understood."""
+    async with agent(server) as (bridge, ledger, midi):
+        await bridge.dispatch("load_saved_song", {"name": "Minimal"})
+        out = await bridge.dispatch("save_to_device", {})
+        assert "welchen Slot" in out.response["result"]
+        await bridge.dispatch("select_project", {"number": 18})
+        out = await bridge.dispatch("save_to_device", {})
+        assert "Slot 18" in out.response["result"]["needs_confirmation"]

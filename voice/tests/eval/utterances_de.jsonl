@@ -73,3 +73,7 @@
 {"say": "Spiel auf Synth eins einen C-Dur-Akkord auf Schritt eins.", "tool": "write_notes", "args": {"track": "synth1", "notes": "*"}, "state": "loaded"}
 {"say": "Schreib auf Synth eins Offbeat-Akkorde: E-Moll, dann A-Moll, ab Schritt drei.", "tool": "write_notes", "args": {"track": "synth1", "notes": "*"}, "state": "loaded"}
 {"say": "Mach aus Schritt fünf auf Synth eins einen D-Moll-Akkord.", "tool": "set_step", "args": {"track": "synth1", "step": 5, "notes": "*"}, "state": "loaded"}
+{"say": "Okay, lass uns jetzt ein zweites Pattern hinzufügen, als Kopie vom ersten.", "tool": "add_pattern", "args": {"copy_from": "*"}, "state": "loaded"}
+{"say": "Kannst du ein neues leeres Pattern anlegen?", "tool": "add_pattern", "args": {}, "state": "loaded"}
+{"say": "Mach Synth eins bitte polyphon.", "tool": "set_synth_params", "args": {"synth": 1, "params": "*"}, "state": "loaded"}
+{"say": "Der Sound auf Synth eins braucht ein bisschen mehr Release.", "tool": "set_synth_params", "args": {"synth": 1, "params": "*"}, "state": "loaded"}

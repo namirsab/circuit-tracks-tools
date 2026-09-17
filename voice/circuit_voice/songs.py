@@ -10,6 +10,7 @@ to pass ``confirmed=true`` after asking the user, because it overwrites a slot.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import difflib
 import json
@@ -64,6 +65,7 @@ class SongLibrary:
         return data
 
 
+SETTLE_S = 0.3  # pause between stopping playback or sweeps and writing a project
 DRUM_FIELDS = ("level", "pitch", "decay", "distortion", "eq", "pan")
 
 
@@ -146,6 +148,11 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
     async def save_to_device(args: dict[str, Any]) -> Any:
         if ledger.song_name is None:
             return "Es ist kein Song geladen, den ich speichern könnte."
+        if args.get("slot") is None:
+            current = ledger.device_project or ledger.slot
+            if current is None:
+                return "In welchen Slot von 1 bis 64 soll ich speichern?"
+            args = {**args, "slot": current}
         slot = _int_in_range(args, "slot", 1, 64, "Der Slot")
         name = (str(args.get("name") or ledger.song_name)).strip()[:16]
         if not args.get("confirmed"):
@@ -159,6 +166,12 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
         if ledger.running and ledger.source == "internal":
             await bridge.dispatch("stop_sequencer", {})
             stopped = True
+        # A running sweep keeps sending controller messages between the project's SysEx blocks
+        # (seen on 2026-09-17: a project saved during a ping-pong morph crashed the device on load).
+        morphs = await backend.call("stop_morph", {})
+        swept = not morphs.is_error and "Stopped" in str(morphs.data if morphs.data is not None else morphs.text)
+        if stopped or swept:
+            await asyncio.sleep(SETTLE_S)  # let the last notes and controller messages drain
         # Capture what the user hears: the synths' current patches and the drum/mixer values set live,
         # otherwise the export writes the presets the song started with (seen on 2026-09-16).
         if ledger.song_json is not None:
@@ -179,6 +192,8 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
         if tempo:
             ledger.device_bpm[slot] = ledger.saved_bpm[slot] = float(tempo)
         tail = " Der Sequenzer ist dafür gestoppt; sag Start, oder ich spiele es vom Gerät ab." if stopped else ""
+        if swept:
+            tail = " Die laufende Bewegung habe ich dafür angehalten." + tail
         return f"Gespeichert in Slot {slot} als '{name}'.{tail}"
 
     bridge.register_virtual("list_saved_songs", list_saved_songs)

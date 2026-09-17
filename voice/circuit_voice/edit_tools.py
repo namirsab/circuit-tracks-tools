@@ -110,8 +110,9 @@ def register_edit_tools(bridge: Bridge) -> None:
     def pattern(name: str | None) -> tuple[str, dict[str, Any]]:
         data = song()
         patterns = data.setdefault("patterns", {})
+        name_given = bool(name)
         if not name:
-            name = ledger.first_pattern() or next(iter(patterns), "pattern1")
+            name = ledger.edit_pattern() or next(iter(patterns), "pattern1")
         key = str(name).strip().lower().replace(" ", "")
         if key not in patterns:
             # "Pattern 2" -> pattern2; create it with the song's length so all patterns match
@@ -124,6 +125,8 @@ def register_edit_tools(bridge: Bridge) -> None:
                 ledger.song_order = list(data["song"])
             else:
                 raise ArgumentError(f"Das Pattern {name} gibt es nicht. Vorhanden: {', '.join(patterns)}.")
+        if name_given:
+            ledger.work_pattern = key
         return key, patterns[key]
 
     async def push(
@@ -170,6 +173,39 @@ def register_edit_tools(bridge: Bridge) -> None:
             return text
         ledger.song_json = data
         return f"Neuer Song {name}, {int(bpm)} BPM, ein leeres Pattern mit 32 Schritten. Sag mir, was rein soll."
+
+    async def add_pattern(args: dict[str, Any]) -> str:
+        data = song()
+        patterns = data.setdefault("patterns", {})
+        key = re.sub(r"[^a-z0-9_]", "", str(args.get("name") or "").strip().lower())
+        if not key:
+            n = len(patterns) + 1
+            while f"pattern{n}" in patterns:
+                n += 1
+            key = f"pattern{n}"
+        if key in patterns:
+            raise ArgumentError(f"Das Pattern {key} gibt es schon. Vorhanden: {', '.join(patterns)}.")
+        length = next((p.get("length", DEFAULT_LENGTH) for p in patterns.values()), DEFAULT_LENGTH)
+        tracks: dict[str, Any] = {}
+        source = str(args.get("copy_from") or "").strip().lower().replace(" ", "")
+        if source:
+            if source not in patterns:
+                raise ArgumentError(f"Das Pattern {source} gibt es nicht. Vorhanden: {', '.join(patterns)}.")
+            tracks = copy.deepcopy(patterns[source].get("tracks") or {})
+        result = await backend.call("set_pattern", {"name": key, "tracks": copy.deepcopy(tracks), "length": length})
+        if result.is_error:
+            return f"Das Pattern konnte ich nicht anlegen: {result.text[:200]}"
+        patterns[key] = {"length": length, "tracks": tracks}
+        data.setdefault("song", []).append(key)
+        ledger.patterns, ledger.song_order = list(patterns), list(data["song"])
+        ledger.work_pattern = key
+        ledger.unsaved = True
+        tail = ""
+        if ledger.running and ledger.source == "internal":
+            queued = await backend.call("queue_patterns", {"patterns": [key]})
+            tail = "" if queued.is_error else " Es läuft, sobald das aktuelle Pattern zu Ende ist."
+        what = f"als Kopie von {source}" if source else "leer"
+        return f"Pattern {key} ist angelegt, {what}, {length} Schritte. Änderungen gehen jetzt dorthin.{tail}"
 
     async def write_notes(args: dict[str, Any]) -> str:
         track = str(args.get("track", "synth1")).lower()
@@ -316,6 +352,7 @@ def register_edit_tools(bridge: Bridge) -> None:
     bridge.register_virtual("set_drum_sample", set_drum_sample)
     bridge.register_internal("restore_track", restore_track)
     bridge.register_virtual("new_song", new_song)
+    bridge.register_virtual("add_pattern", add_pattern)
     bridge.register_virtual("write_notes", write_notes)
     bridge.register_virtual("write_drums", write_drums)
     bridge.register_virtual("clear_track", clear_track)

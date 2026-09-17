@@ -139,7 +139,7 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Set synth parameters on synth 1 or 2 while playing. Raw patch parameters (0-127), the base values under the macro knobs; for filter, resonance and envelopes prefer set_macro. Common: filter_frequency, filter_resonance, osc1_wave/osc2_wave, osc1_level/osc2_level, osc2_pitch_coarse, amp_env_attack/amp_env_decay/amp_env_sustain/amp_env_release (Hüllkurve), filter_env_attack/filter_env_decay/filter_env_sustain/filter_env_release, filter_env_depth, lfo1_rate/lfo1_wave, distortion_level, chorus_level, portamento, voice_mode. Without a number, move about 20 steps ('etwas' 10, 'viel' 40).",
+    "description": "Set synth parameters on synth 1 or 2 while playing. Raw patch parameters (0-127), the base values under the macro knobs; for filter, resonance and envelopes prefer set_macro. Common: filter_frequency, filter_resonance, osc1_wave/osc2_wave, osc1_level/osc2_level, osc1_semitones/osc2_semitones (64 = no shift), env1_attack/env1_decay/env1_sustain/env1_release (Lautstärke-Hüllkurve; 'mehr Release' = env1_release), env2_attack/env2_decay/env2_sustain/env2_release (Filter-Hüllkurve), env2_to_filter_freq, lfo1_rate/lfo1_waveform, distortion_level, chorus_level, portamento_rate, polyphony_mode (0 = mono, 2 = polyphon; chords need 2). Without a number, move about 20 steps ('etwas' 10, 'viel' 40).",
     "name": "set_synth_params",
     "parameters_json_schema": {
       "type": "object",
@@ -384,7 +384,7 @@
       "properties": {
         "pattern": {
           "type": "string",
-          "description": "pattern name; default: the first pattern"
+          "description": "pattern name; default: the pattern last worked on"
         },
         "track": {
           "type": "string",
@@ -458,7 +458,7 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Put drum hits on exact steps (spoken 1-based, 1-32) of drum1..drum4, e.g. kick on [1, 5, 9, 13]. Adds to existing hits unless replace=true.",
+    "description": "Put drum hits on exact steps (spoken 1-based, 1-32) of drum1..drum4, e.g. four-on-the-floor kick = [1, 5, 9, 13, 17, 21, 25, 29]. Patterns have 32 steps (two bars): always fill both bars. Adds to existing hits unless replace=true.",
     "name": "write_drums",
     "parameters_json_schema": {
       "type": "object",
@@ -576,6 +576,23 @@
     "behavior": "BLOCKING"
   },
   {
+    "description": "Add a pattern to the song ('zweites Pattern', 'neues Pattern', 'noch ein Teil'). Without a name it becomes pattern2, pattern3, ... copy_from = an existing pattern to start from ('eine Kopie', 'eine Variation'); without it the new pattern is empty. If the user did not say which, ask once: leer oder als Kopie? The new pattern is appended to the song order, later edits without a pattern name go to it, and a running sequencer switches to it when the current pattern ends. To go back, pass pattern= to the edit tools or use queue_patterns.",
+    "name": "add_pattern",
+    "parameters_json_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "copy_from": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "behavior": "BLOCKING"
+  },
+  {
     "description": "Choose the sample (1-64, by number or by a word from its name such as 'Snare') for drum 1-4. The device cannot switch samples live over MIDI, so it is stored in the song and audible after saving to the device and playing the project from there. Says so.",
     "name": "set_drum_sample",
     "parameters_json_schema": {
@@ -647,7 +664,7 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Save the loaded song into a project slot (1-64) on the Circuit Tracks, overwriting that slot. Call it first without confirmed; it returns the German question to ask. After the user says yes, call it again with confirmed=true. name defaults to the song name (max 16 characters).",
+    "description": "Save the loaded song into a project slot (1-64) on the Circuit Tracks, overwriting that slot. Call it first without confirmed; it returns the German question to ask. After the user says yes, call it again with confirmed=true. name defaults to the song name (max 16 characters). Without slot ('hier', 'im aktuellen Slot') it takes the project selected on the device, else the slot of the last save.",
     "name": "save_to_device",
     "parameters_json_schema": {
       "type": "object",
@@ -665,9 +682,7 @@
           "default": false
         }
       },
-      "required": [
-        "slot"
-      ]
+      "required": []
     },
     "behavior": "BLOCKING"
   },

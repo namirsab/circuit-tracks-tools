@@ -41,6 +41,7 @@ class Ledger:
     song_bpm: float | None = None
     patterns: list[str] = field(default_factory=list)
     song_order: list[str] = field(default_factory=list)
+    work_pattern: str | None = None  # the pattern edits go to; set by add_pattern or a named edit
     song_json: dict[str, Any] | None = None  # the loaded song as load_song took it
     unsaved: bool = False
     slot: int | None = None  # 1-based, last slot saved to
@@ -66,6 +67,7 @@ class Ledger:
         self.song_name, self.song_bpm = name, bpm
         self.patterns, self.song_order = list(patterns), list(song_order)
         self.bpm = bpm
+        self.work_pattern = None
         self.unsaved = True
         self.mutes = {}
 
@@ -75,6 +77,10 @@ class Ledger:
 
     def first_pattern(self) -> str | None:
         return self.song_order[0] if self.song_order else (self.patterns[0] if self.patterns else None)
+
+    def edit_pattern(self) -> str | None:
+        """Where an edit without a pattern name goes: the pattern last worked on, else the first."""
+        return self.work_pattern if self.work_pattern in self.patterns else self.first_pattern()
 
     # --- observation of successful tool calls ---
 

@@ -131,3 +131,18 @@ async def test_identical_call_without_progress_is_stopped(server):
         assert "error" in out.response and len(calls) == 2
         out = await b.dispatch("save_patch", {"synth": 1, "slot": 3, "confirmed": True})
         assert len(calls) == 3  # a different call goes through
+
+
+def test_every_synth_parameter_named_in_the_hints_exists():
+    """Hardware 2026-09-17: the hints named voice_mode and amp_env_release; the server knows neither."""
+    import re
+
+    from circuit_tracks.constants import SYNTH_CC, SYNTH_NRPN
+    from circuit_voice.tool_cards import SYNTH_PARAM_HINTS
+
+    known = set(SYNTH_CC) | set(SYNTH_NRPN)
+    named = set()
+    for group in re.findall(r"[a-z0-9_]+(?:/[a-z0-9_]+)+|[a-z0-9]+_[a-z0-9_]+", SYNTH_PARAM_HINTS):
+        named |= set(group.split("/"))
+    named -= {"set_macro"}
+    assert named and named <= known, sorted(named - known)

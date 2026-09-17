@@ -60,7 +60,7 @@ def _select_patch(args: dict[str, Any]) -> dict[str, Any]:
 def _fill_start(args: dict[str, Any], ledger: Any) -> dict[str, Any]:
     out = dict(args)
     if not out.get("pattern"):
-        first = ledger.first_pattern()
+        first = ledger.edit_pattern()
         if first is None:
             raise ArgumentError("Es ist kein Song geladen. Lade erst einen Song oder lass einen bauen.")
         out["pattern"] = first
@@ -76,10 +76,11 @@ def _obj(props: dict[str, Any], required: list[str]) -> dict[str, Any]:
 SYNTH_PARAM_HINTS = (
     "Raw patch parameters (0-127), the base values under the macro knobs; for filter, resonance and envelopes "
     "prefer set_macro. Common: filter_frequency, filter_resonance, "
-    "osc1_wave/osc2_wave, osc1_level/osc2_level, osc2_pitch_coarse, "
-    "amp_env_attack/amp_env_decay/amp_env_sustain/amp_env_release (Hüllkurve), "
-    "filter_env_attack/filter_env_decay/filter_env_sustain/filter_env_release, filter_env_depth, "
-    "lfo1_rate/lfo1_wave, distortion_level, chorus_level, portamento, voice_mode. "
+    "osc1_wave/osc2_wave, osc1_level/osc2_level, osc1_semitones/osc2_semitones (64 = no shift), "
+    "env1_attack/env1_decay/env1_sustain/env1_release (Lautstärke-Hüllkurve; 'mehr Release' = env1_release), "
+    "env2_attack/env2_decay/env2_sustain/env2_release (Filter-Hüllkurve), env2_to_filter_freq, "
+    "lfo1_rate/lfo1_waveform, distortion_level, chorus_level, portamento_rate, "
+    "polyphony_mode (0 = mono, 2 = polyphon; chords need 2). "
     "Without a number, move about 20 steps ('etwas' 10, 'viel' 40)."
 )
 
@@ -222,7 +223,7 @@ CARDS: list[ToolCard] = [
         "replace=true clears the track first.",
         schema=_obj(
             {
-                "pattern": {"type": "string", "description": "pattern name; default: the first pattern"},
+                "pattern": {"type": "string", "description": "pattern name; default: the pattern last worked on"},
                 "track": {"type": "string", "enum": ["synth1", "synth2", "midi1", "midi2"]},
                 "notes": {
                     "type": "array",
@@ -250,7 +251,8 @@ CARDS: list[ToolCard] = [
     ),
     ToolCard(
         "write_drums",
-        "Put drum hits on exact steps (spoken 1-based, 1-32) of drum1..drum4, e.g. kick on [1, 5, 9, 13]. "
+        "Put drum hits on exact steps (spoken 1-based, 1-32) of drum1..drum4, e.g. four-on-the-floor kick = "
+        "[1, 5, 9, 13, 17, 21, 25, 29]. Patterns have 32 steps (two bars): always fill both bars. "
         "Adds to existing hits unless replace=true.",
         schema=_obj(
             {
@@ -297,6 +299,16 @@ CARDS: list[ToolCard] = [
         read_only=True,
     ),
     ToolCard(
+        "add_pattern",
+        "Add a pattern to the song ('zweites Pattern', 'neues Pattern', 'noch ein Teil'). Without a name it becomes "
+        "pattern2, pattern3, ... copy_from = an existing pattern to start from ('eine Kopie', 'eine Variation'); "
+        "without it the new pattern is empty. If the user did not say which, ask once: leer oder als Kopie? "
+        "The new pattern is appended to the song order, later edits without a pattern name go to it, and a running "
+        "sequencer switches to it when the current pattern ends. To go back, pass pattern= to the edit tools or "
+        "use queue_patterns.",
+        schema=_obj({"name": {"type": "string"}, "copy_from": {"type": "string"}}, []),
+    ),
+    ToolCard(
         "set_drum_sample",
         "Choose the sample (1-64, by number or by a word from its name such as 'Snare') for drum 1-4. The device "
         "cannot switch samples live over MIDI, so it is stored in the song and audible after saving to the device "
@@ -331,14 +343,15 @@ CARDS: list[ToolCard] = [
         "save_to_device",
         "Save the loaded song into a project slot (1-64) on the Circuit Tracks, overwriting that slot. Call it "
         "first without confirmed; it returns the German question to ask. After the user says yes, call it again "
-        "with confirmed=true. name defaults to the song name (max 16 characters).",
+        "with confirmed=true. name defaults to the song name (max 16 characters). Without slot ('hier', 'im "
+        "aktuellen Slot') it takes the project selected on the device, else the slot of the last save.",
         schema=_obj(
             {
                 "slot": {"type": "integer", "minimum": 1, "maximum": 64},
                 "name": {"type": "string"},
                 "confirmed": {"type": "boolean", "default": False},
             },
-            ["slot"],
+            [],
         ),
     ),
     # --- projects stored on the device (workflow B) ---

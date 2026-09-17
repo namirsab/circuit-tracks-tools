@@ -40,6 +40,11 @@ macro should sweep it up). Use the standard macro layout as orientation:
 1 Oscillator, 2 Oscillator Mod, 3 Amp Envelope, 4 Filter Envelope,
 5 Filter Frequency, 6 Resonance, 7 Modulation, 8 FX. Give macro 5 a filter
 frequency target with a low base so the player can open the filter by hand.
+Pads, organs, keys and anything meant for chords must be polyphonic
+(polyphony_mode 2); only basses and leads may be mono. Make the patch loud
+enough to hear (oscillator levels around 100 or more), and follow the brief's
+character: an organ sounds like an organ (sine or organ-like waves, fast attack,
+full sustain, short release), "crazy" means audibly unusual modulation.
 """
 
 
@@ -113,7 +118,7 @@ def register_generate_tools(bridge: Bridge, model: ComposerModel, patch_schema: 
                 "hint": "Ask; on yes call generate_track again with confirmed=true.",
             }
         song = ledger.song_json
-        pattern_name = str(args.get("pattern") or ledger.first_pattern() or next(iter(song["patterns"])))
+        pattern_name = str(args.get("pattern") or ledger.edit_pattern() or next(iter(song["patterns"])))
         key = pattern_name.strip().lower().replace(" ", "")
         if key not in song["patterns"]:
             raise ArgumentError(f"Das Pattern {pattern_name} gibt es nicht. Vorhanden: {', '.join(song['patterns'])}.")
