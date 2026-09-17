@@ -48,14 +48,35 @@ def note_number(token: str | int) -> int:
     return value
 
 
-def parse_notes(spoken: Any) -> list[int]:
+def parse_notes(spoken: Any) -> list[list[int]]:
+    """One entry per step; each entry is the notes sounding together (one note, or a chord).
+
+    Accepts a list whose items are a note ("E3", 64) or a list of notes (a chord), or
+    text where steps are separated by spaces and chord notes joined with "+": "C3+E3+G3 D3".
+    """
     if isinstance(spoken, list):
-        tokens = [str(t) for t in spoken]
+        items: list[Any] = spoken
     else:
-        tokens = [t for t in re.split(r"[\s,;]+", str(spoken)) if t]
-    if not tokens:
+        items = [t for t in re.split(r"[\s,;]+", str(spoken or "")) if t]
+    steps: list[list[int]] = []
+    for item in items:
+        if isinstance(item, (list, tuple)):
+            parts: list[Any] = list(item)
+        else:
+            parts = [t for t in str(item).split("+") if t]
+        chord = [note_number(str(t)) for t in parts]
+        if not chord:
+            continue
+        if len(chord) > 6:
+            raise ArgumentError("Ein Akkord hat höchstens sechs Noten.")
+        steps.append(chord)
+    if not steps:
         raise ArgumentError("Ich brauche mindestens eine Note.")
-    return [note_number(t) for t in tokens]
+    return steps
+
+
+def step_notes(chord: list[int]) -> dict[str, Any]:
+    return {"note": chord[0]} if len(chord) == 1 else {"notes": list(chord)}
 
 
 def _velocities(raw: Any, default: int) -> list[int]:
@@ -172,20 +193,24 @@ def register_edit_tools(bridge: Bridge) -> None:
         else:
             used = [int(k) for k in steps] if steps else []
             start = 0 if not used else max(used) + spacing
-        placed = 0
+        placed = chords = 0
         for i, note in enumerate(notes):
             idx = start + i * spacing
             if idx >= length:
                 break
-            steps[str(idx)] = {"note": note, "velocity": velocities[i % len(velocities)], "gate": gate}
+            steps[str(idx)] = {**step_notes(note), "velocity": velocities[i % len(velocities)], "gate": gate}
             placed += 1
+            chords += len(note) > 1
         tracks[track] = {"steps": steps}
         error = await push(name, track, steps, previous=before)
         if error:
             return error
         skipped = f" {len(notes) - placed} Noten passten nicht mehr rein." if placed < len(notes) else ""
         first = start + 1
-        return f"{placed} Noten auf {track} in {name} ab Schritt {first}, alle {spacing} Schritte.{skipped}"
+        what = f"{placed} Noten"
+        if chords:
+            what = f"{chords} Akkorde" if chords == placed else f"{placed} Schritte, davon {chords} Akkorde,"
+        return f"{what} auf {track} in {name} ab Schritt {first}, alle {spacing} Schritte.{skipped}"
 
     async def write_drums(args: dict[str, Any]) -> str:
         track = str(args.get("track", "drum1")).lower()
@@ -242,10 +267,13 @@ def register_edit_tools(bridge: Bridge) -> None:
         if args.get("velocity") is not None:
             step["velocity"] = _int_in_range(args, "velocity", 1, 127, "Die Anschlagstärke")
             changes.append(f"Anschlag {step['velocity']}")
-        if args.get("note") is not None and track in SYNTH_TRACKS:
-            step["note"] = note_number(args["note"])
+        wanted = args.get("notes") if args.get("notes") is not None else args.get("note")
+        if wanted is not None and track in SYNTH_TRACKS:
+            chord = parse_notes([wanted] if isinstance(wanted, list) else str(wanted).replace(" ", "+"))[0]
+            step.pop("note", None)
             step.pop("notes", None)
-            changes.append(f"Note {args['note']}")
+            step.update(step_notes(chord))
+            changes.append("Akkord" if len(chord) > 1 else f"Note {wanted}")
         if args.get("gate") is not None and track in SYNTH_TRACKS:
             step["gate"] = max(0.25, min(16.0, float(args["gate"])))
             changes.append(f"Länge {step['gate']}")

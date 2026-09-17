@@ -377,7 +377,7 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Put exact notes on a synth track, one per step: notes as names the device uses (C3 = middle, F#4, Bb2, German H) or MIDI numbers, e.g. 'C3 E3 G3'. spacing = steps between notes (4 = every beat), start_step is spoken 1-based; without it the notes are appended after the last one. gate defaults to the spacing. replace=true clears the track first.",
+    "description": "Put exact notes or chords on a synth track. notes is an array with one entry per step: a note name the device uses (C3 = middle, F#4, Bb2, German H) or a MIDI number, or an array of notes for a chord, e.g. [[\"E3\",\"G3\",\"B3\"], \"E3\"] = E minor chord, then a single E. The synths play up to six notes at once. spacing = steps between entries (4 = every beat), start_step is spoken 1-based; without it the notes are appended after the last one. gate defaults to the spacing. replace=true clears the track first.",
     "name": "write_notes",
     "parameters_json_schema": {
       "type": "object",
@@ -396,8 +396,23 @@
           ]
         },
         "notes": {
-          "type": "string",
-          "description": "space-separated note names or numbers"
+          "type": "array",
+          "description": "one entry per step; an entry is one note or an array of notes (chord)",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "maxItems": 6
+              }
+            ]
+          }
         },
         "start_step": {
           "type": "integer",
@@ -496,7 +511,7 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Change one existing step of a track: its velocity, note (synth) or gate, e.g. 'Schritt 5 lauter'. Spoken 1-based step.",
+    "description": "Change one existing step of a track: its velocity, notes (synth; one note or a chord) or gate, e.g. 'Schritt 5 lauter', 'auf Schritt 5 einen C-Dur-Akkord'. Spoken 1-based step.",
     "name": "set_step",
     "parameters_json_schema": {
       "type": "object",
@@ -517,8 +532,14 @@
           "minimum": 1,
           "maximum": 127
         },
-        "note": {
-          "type": "string"
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 6,
+          "description": "the notes sounding on this step: one note, or several for a chord"
         },
         "gate": {
           "type": "number",

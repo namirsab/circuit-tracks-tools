@@ -214,15 +214,26 @@ CARDS: list[ToolCard] = [
     ),
     ToolCard(
         "write_notes",
-        "Put exact notes on a synth track, one per step: notes as names the device uses (C3 = middle, F#4, Bb2, "
-        "German H) or MIDI numbers, e.g. 'C3 E3 G3'. spacing = steps between notes (4 = every beat), start_step "
+        "Put exact notes or chords on a synth track. notes is an array with one entry per step: a note name the "
+        "device uses (C3 = middle, F#4, Bb2, German H) or a MIDI number, or an array of notes for a chord, e.g. "
+        '[["E3","G3","B3"], "E3"] = E minor chord, then a single E. The synths play up to six notes at '
+        "once. spacing = steps between entries (4 = every beat), start_step "
         "is spoken 1-based; without it the notes are appended after the last one. gate defaults to the spacing. "
         "replace=true clears the track first.",
         schema=_obj(
             {
                 "pattern": {"type": "string", "description": "pattern name; default: the first pattern"},
                 "track": {"type": "string", "enum": ["synth1", "synth2", "midi1", "midi2"]},
-                "notes": {"type": "string", "description": "space-separated note names or numbers"},
+                "notes": {
+                    "type": "array",
+                    "description": "one entry per step; an entry is one note or an array of notes (chord)",
+                    "items": {
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 6},
+                        ]
+                    },
+                },
                 "start_step": {"type": "integer", "minimum": 1, "maximum": 32},
                 "spacing": {"type": "integer", "minimum": 1, "maximum": 32, "default": 4},
                 "gate": {"type": "number", "minimum": 0.25, "maximum": 16},
@@ -259,15 +270,21 @@ CARDS: list[ToolCard] = [
     ),
     ToolCard(
         "set_step",
-        "Change one existing step of a track: its velocity, note (synth) or gate, e.g. 'Schritt 5 lauter'. "
-        "Spoken 1-based step.",
+        "Change one existing step of a track: its velocity, notes (synth; one note or a chord) or gate, e.g. "
+        "'Schritt 5 lauter', 'auf Schritt 5 einen C-Dur-Akkord'. Spoken 1-based step.",
         schema=_obj(
             {
                 "pattern": {"type": "string"},
                 "track": {"type": "string"},
                 "step": {"type": "integer", "minimum": 1, "maximum": 32},
                 "velocity": {"type": "integer", "minimum": 1, "maximum": 127},
-                "note": {"type": "string"},
+                "notes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "maxItems": 6,
+                    "description": "the notes sounding on this step: one note, or several for a chord",
+                },
                 "gate": {"type": "number", "minimum": 0.25, "maximum": 16},
             },
             ["track", "step"],

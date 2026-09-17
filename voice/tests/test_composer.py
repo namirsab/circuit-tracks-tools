@@ -88,7 +88,7 @@ async def test_revision_keeps_omitted_sections():
 def test_house_rules_reject_unknown_macro_targets_and_mod_names():
     song = broken(
         sounds={
-            "synth1": {"preset": "bass", "macros": {"5": {"targets": [{"param": "filter_drive_amount"}]}}},
+            "synth1": {"preset": "bass", "macros": {"5": {"targets": [{"dest": "filter_drive_amount"}]}}},
             "synth2": {"preset": "lead", "mod_matrix": [{"source1": "lfo 1", "dest": "no such dest", "depth": 10}]},
         }
     )
@@ -97,7 +97,7 @@ def test_house_rules_reject_unknown_macro_targets_and_mod_names():
     assert any("mod matrix" in p for p in problems)
     fine = broken(
         sounds={
-            "synth1": {"preset": "bass", "macros": {"5": {"targets": [{"param": "filter_frequency"}]}}},
+            "synth1": {"preset": "bass", "macros": {"5": {"targets": [{"dest": "filter_frequency"}]}}},
             "synth2": {"preset": "lead"},
         }
     )

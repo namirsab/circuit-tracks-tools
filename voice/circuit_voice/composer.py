@@ -84,7 +84,7 @@ def _macro_targets_ok(sounds: dict[str, Any]) -> list[str]:
             continue
         for macro, mcfg in (cfg.get("macros") or {}).items():
             for target in (mcfg or {}).get("targets") or []:
-                param = target.get("param") if isinstance(target, dict) else None
+                param = target.get("dest", target.get("destination")) if isinstance(target, dict) else None
                 if isinstance(param, str) and param not in MACRO_DEST_BY_NAME:
                     problems.append(
                         f"{synth} macro {macro}: unknown target {param!r}; valid targets are patch parameter names "

@@ -36,8 +36,9 @@ def test_note_names_follow_the_device():
     assert note_number("Cis3") == 61
     assert note_number("C") == 60
     assert note_number("60") == 60 and note_number(72) == 72
-    assert parse_notes("C3, E3 G3") == [60, 64, 67]
-    assert parse_notes(["C3", 64]) == [60, 64]
+    assert parse_notes("C3, E3 G3") == [[60], [64], [67]]
+    assert parse_notes([["C3", "E3"], 67]) == [[60, 64], [67]]
+    assert parse_notes(["C3", 64]) == [[60], [64]]
     for bad in ("X3", "C99", "", "Katze"):
         with pytest.raises(ArgumentError):
             parse_notes(bad)
@@ -186,3 +187,31 @@ async def test_save_captures_live_patches_and_drum_values(server, monkeypatch):
         assert song.sounds["drum1"].decay == 44 and song.sounds["drum1"].level == 80
         assert ledger.song_json["mixer"]["synth1"]["level"] == 70
         assert ledger.device_dirty is False and ledger.device_bpm[12] == 90.0
+
+
+async def test_chords_are_several_notes_on_one_step(server):
+    """Hardware 2026-09-17: 'E3 G3 B3' became three single notes; the agent said it cannot play chords."""
+    async with agent(server) as (bridge, ledger, midi):
+        await bridge.dispatch("new_song", {})
+        out = await bridge.dispatch(
+            "write_notes",
+            {"track": "synth1", "notes": [["E3", "G3", "B3"], "E3", ["A2", "C3", "E3"]], "start_step": 3, "spacing": 4},
+        )
+        assert "Akkord" in out.response["result"]
+        steps = ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]
+        assert steps["2"]["notes"] == [64, 67, 71] and "note" not in steps["2"]
+        assert steps["6"]["note"] == 64
+        assert steps["10"]["notes"] == [57, 60, 64]
+        engine = (await bridge.backend.call("get_pattern", {"name": "pattern1"})).data
+        assert engine["tracks"]["synth1"]["steps"]["2"]["notes"] == [64, 67, 71]
+
+
+async def test_chord_as_text_and_on_a_single_step(server):
+    async with agent(server) as (bridge, ledger, midi):
+        await bridge.dispatch("new_song", {})
+        await bridge.dispatch("write_notes", {"track": "synth1", "notes": "C3+E3+G3 D3", "start_step": 1})
+        steps = ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]
+        assert steps["0"]["notes"] == [60, 64, 67] and steps["4"]["note"] == 62
+        await bridge.dispatch("set_step", {"track": "synth1", "step": 5, "notes": ["D3", "F3", "A3"]})
+        steps = ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]
+        assert steps["4"]["notes"] == [62, 65, 69] and "note" not in steps["4"]

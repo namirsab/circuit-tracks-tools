@@ -25,7 +25,8 @@ TRACK_RULES = """\
 You write one track of a step sequencer pattern for a Novation Circuit Tracks.
 Answer with JSON only: {"steps": {"<whole-number step index as string, 0-based>": {...}}}.
 Step indices are whole numbers only (no "2.5").
-Synth/MIDI steps: {"note": <MIDI 0-127>, "velocity": 1-127, "gate": 0.25-16 (steps)}.
+Synth/MIDI steps: {"note": <MIDI 0-127>, "velocity": 1-127, "gate": 0.25-16 (steps)}; for a chord use
+{"notes": [<MIDI>, <MIDI>, ...]} (up to 6 notes) instead of "note". When the brief asks for chords, write chords.
 Drum steps: {"velocity": 1-127}. Use only step indices below the pattern length.
 Fit the song's tempo and key; leave space; make it loop well. No prose.
 """
