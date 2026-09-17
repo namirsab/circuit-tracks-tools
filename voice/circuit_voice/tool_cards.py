@@ -218,7 +218,8 @@ CARDS: list[ToolCard] = [
         "Put exact notes or chords on a synth track. notes is an array with one entry per step: a note name the "
         "device uses (C3 = middle, F#4, Bb2, German H) or a MIDI number, or an array of notes for a chord, e.g. "
         '[["E3","G3","B3"], "E3"] = E minor chord, then a single E. The synths play up to six notes at '
-        "once. spacing = steps between entries (4 = every beat), start_step "
+        'once. A rest is an empty string "": it keeps its place (\'C3 C3 leer leer C4\' = ["C3","C3","","","C4"]). '
+        "spacing = steps between entries (4 = every beat, 2 = eighths, 1 = every step), start_step "
         "is spoken 1-based; without it the notes are appended after the last one. gate defaults to the spacing. "
         "replace=true clears the track first.",
         schema=_obj(

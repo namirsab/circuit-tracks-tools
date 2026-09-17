@@ -215,3 +215,13 @@ async def test_chord_as_text_and_on_a_single_step(server):
         await bridge.dispatch("set_step", {"track": "synth1", "step": 5, "notes": ["D3", "F3", "A3"]})
         steps = ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]
         assert steps["4"]["notes"] == [62, 65, 69] and "note" not in steps["4"]
+
+
+def test_rests_keep_their_place_in_a_melody():
+    """Hardware 2026-09-17: 'C3 C3 leer leer C4' arrived as ["C3","C3","","","C4"]; the rests were
+    dropped and C4 landed on the third position instead of the fifth."""
+    from circuit_voice.edit_tools import parse_notes
+
+    assert parse_notes(["C3", "C3", "", "", "C4"]) == [[60], [60], [], [], [72]]
+    assert parse_notes("C3 - leer C4") == [[60], [], [], [72]]
+    assert parse_notes(["C3", None, [], "E3"]) == [[60], [], [], [64]]

@@ -21,6 +21,7 @@ from .tool_cards import ArgumentError, _int_in_range
 NOTE_OFFSETS = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11, "H": 11}
 _NOTE_RE = re.compile(r"^([A-Ha-h])(#|b|is|es|s)?(-?\d)?$")
 DEFAULT_LENGTH = 32
+RESTS = {"", "-", "_", ".", "leer", "pause", "rest", "none", "null", "x"}
 SYNTH_TRACKS = ("synth1", "synth2", "midi1", "midi2")
 DRUM_TRACKS = ("drum1", "drum2", "drum3", "drum4")
 
@@ -53,6 +54,7 @@ def parse_notes(spoken: Any) -> list[list[int]]:
 
     Accepts a list whose items are a note ("E3", 64) or a list of notes (a chord), or
     text where steps are separated by spaces and chord notes joined with "+": "C3+E3+G3 D3".
+    A rest ("", "-", "leer", "pause", null, or an empty list) is an empty entry: it keeps its place.
     """
     if isinstance(spoken, list):
         items: list[Any] = spoken
@@ -64,13 +66,14 @@ def parse_notes(spoken: Any) -> list[list[int]]:
             parts: list[Any] = list(item)
         else:
             parts = [t for t in str(item).split("+") if t]
-        chord = [note_number(str(t)) for t in parts]
-        if not chord:
+        if item is None or (len(parts) <= 1 and str(parts[0] if parts else "").strip().lower() in RESTS):
+            steps.append([])
             continue
+        chord = [note_number(str(t)) for t in parts]
         if len(chord) > 6:
             raise ArgumentError("Ein Akkord hat höchstens sechs Noten.")
         steps.append(chord)
-    if not steps:
+    if not any(steps):
         raise ArgumentError("Ich brauche mindestens eine Note.")
     return steps
 
@@ -229,11 +232,15 @@ def register_edit_tools(bridge: Bridge) -> None:
         else:
             used = [int(k) for k in steps] if steps else []
             start = 0 if not used else max(used) + spacing
-        placed = chords = 0
+        placed = chords = rests = 0
         for i, note in enumerate(notes):
             idx = start + i * spacing
             if idx >= length:
                 break
+            if not note:  # a rest keeps its place and clears what was there
+                steps.pop(str(idx), None)
+                rests += 1
+                continue
             steps[str(idx)] = {**step_notes(note), "velocity": velocities[i % len(velocities)], "gate": gate}
             placed += 1
             chords += len(note) > 1
@@ -241,7 +248,8 @@ def register_edit_tools(bridge: Bridge) -> None:
         error = await push(name, track, steps, previous=before)
         if error:
             return error
-        skipped = f" {len(notes) - placed} Noten passten nicht mehr rein." if placed < len(notes) else ""
+        left = len(notes) - placed - rests
+        skipped = f" {left} Einträge passten nicht mehr rein." if left > 0 else ""
         first = start + 1
         what = f"{placed} Noten"
         if chords:
