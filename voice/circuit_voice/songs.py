@@ -84,13 +84,16 @@ async def capture_live_sounds(bridge: Bridge) -> list[str]:
         if dump.is_error or not isinstance(dump.data, dict) or not dump.data.get("params"):
             notes.append(f"synth{synth}: Patch nicht lesbar")
             continue
-        # A dump only carries parameter values. The macro routing and the mod matrix come from what we
-        # know about the patch; without them the knobs on the device do nothing (seen on 2026-09-17).
+        # Without macro routing the knobs on the device do nothing (seen on 2026-09-17). The dump carries
+        # the routing of whatever is on the synth; an older server sends parameter values only, then it
+        # comes from what we know: the designed patch, else the song's own sound.
         design = ledger.designed_patch.get(synth)
-        if design is not None:
+        if dump.data.get("macros"):
+            routing = {"macros": dump.data["macros"]}  # the mod matrix is part of params
+        elif design is not None:
             routing = {k: design[k] for k in ("mod_matrix", "macros") if design.get(k)}
         elif ledger.selected_patch.get(synth):
-            routing = {}  # a patch from the device: its own routing cannot be read
+            routing = {}  # a patch from the device whose routing we could not read
         else:
             previous = sounds.get(f"synth{synth}") or {}
             routing = {k: previous[k] for k in ("preset", "mod_matrix", "macros") if previous.get(k)}

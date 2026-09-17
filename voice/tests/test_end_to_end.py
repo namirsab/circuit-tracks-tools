@@ -283,3 +283,33 @@ async def test_saved_project_keeps_the_macro_routing_of_the_patches(server, monk
         assert list(sounds["synth1"].macros) == ["5"] and (target["dest"], target["end"]) == ("filter_resonance", 99)
         assert sounds["synth1"].params["filter_frequency"] == 40
         assert set(sounds["synth2"].macros) == {str(n) for n in range(1, 9)}  # nothing known: the standard set
+
+
+async def test_saved_project_takes_the_routing_the_device_reports(server, monkeypatch):
+    """A patch chosen on the device by number keeps its own macros: the dump carries them."""
+    from circuit_voice import songs
+    from circuit_voice.mcp_client import ToolResult
+
+    saved = []
+    factory = {"2": {"targets": [{"dest": "osc1_density", "start": 5, "end": 70, "depth": 127}]}}
+
+    def fake_export(song, midi, slot=0, name="", template_path=None):
+        saved.append(song)
+        return {"status": "ok", "bytes": 1}
+
+    real_call = None
+
+    async def call(name, args=None):
+        if name == "get_synth_patch":
+            return ToolResult("", {"name": "Factory 12", "params": {"filter_frequency": 40}, "macros": factory}, False)
+        return await real_call(name, args)
+
+    monkeypatch.setattr("circuit_tracks.song.export_song_to_device", fake_export)
+    monkeypatch.setattr(songs, "SETTLE_S", 0.0)
+    async with agent(server) as (bridge, ledger, midi):
+        real_call, bridge.backend.call = bridge.backend.call, call  # type: ignore[method-assign]
+        await bridge.dispatch("load_saved_song", {"name": "Minimal"})
+        ledger.selected_patch[1] = 12
+        await bridge.dispatch("save_to_device", {"slot": 18, "confirmed": True})
+        macros = saved[0].sounds["synth1"].macros
+        assert list(macros) == ["2"] and macros["2"]["targets"][0]["dest"] == "osc1_density"
