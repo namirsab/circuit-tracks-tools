@@ -51,6 +51,7 @@ class Ledger:
     project_selected_at: float | None = None  # monotonic time of the last program change while stopped
     device_dirty: bool = False  # sounds changed since the project was selected
     selected_patch: dict[int, int] = field(default_factory=dict)  # synth -> 1-based patch number
+    designed_patch: dict[int, dict[str, Any]] = field(default_factory=dict)  # synth -> what design_patch sent
     running: bool = False
     bpm: float | None = None
     mutes: dict[str, bool] = field(default_factory=dict)
@@ -68,6 +69,7 @@ class Ledger:
         self.patterns, self.song_order = list(patterns), list(song_order)
         self.bpm = bpm
         self.work_pattern = None
+        self.designed_patch = {}
         self.unsaved = True
         self.mutes = {}
 

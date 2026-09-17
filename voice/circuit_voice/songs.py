@@ -21,6 +21,7 @@ from typing import Any
 from circuit_tracks.song_schema import SongSchema
 
 from .bridge import Bridge
+from .generate_tools import default_macros
 from .tool_cards import _int_in_range
 
 
@@ -83,7 +84,20 @@ async def capture_live_sounds(bridge: Bridge) -> list[str]:
         if dump.is_error or not isinstance(dump.data, dict) or not dump.data.get("params"):
             notes.append(f"synth{synth}: Patch nicht lesbar")
             continue
+        # A dump only carries parameter values. The macro routing and the mod matrix come from what we
+        # know about the patch; without them the knobs on the device do nothing (seen on 2026-09-17).
+        design = ledger.designed_patch.get(synth)
+        if design is not None:
+            routing = {k: design[k] for k in ("mod_matrix", "macros") if design.get(k)}
+        elif ledger.selected_patch.get(synth):
+            routing = {}  # a patch from the device: its own routing cannot be read
+        else:
+            previous = sounds.get(f"synth{synth}") or {}
+            routing = {k: previous[k] for k in ("preset", "mod_matrix", "macros") if previous.get(k)}
+        if not routing.get("macros") and not routing.get("preset"):
+            routing["macros"] = default_macros(dump.data["params"])
         sounds[f"synth{synth}"] = {
+            **routing,
             "name": str(dump.data.get("name") or f"Synth {synth}")[:16],
             "params": dump.data["params"],
         }

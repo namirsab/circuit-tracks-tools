@@ -248,3 +248,38 @@ async def test_save_without_a_slot_takes_the_project_selected_on_the_device(serv
         await bridge.dispatch("select_project", {"number": 18})
         out = await bridge.dispatch("save_to_device", {})
         assert "Slot 18" in out.response["result"]["needs_confirmation"]
+
+
+async def test_saved_project_keeps_the_macro_routing_of_the_patches(server, monkeypatch):
+    """Hardware 2026-09-17: the save rebuilt patches from parameter values only; macros were empty."""
+    from circuit_voice import songs
+
+    saved = []
+
+    def fake_export(song, midi, slot=0, name="", template_path=None):
+        saved.append(song)
+        return {"status": "ok", "bytes": 1}
+
+    real_call = None
+
+    async def call(name, args=None):
+        if name == "get_synth_patch":  # the mock device has no patch dump
+            from circuit_voice.mcp_client import ToolResult
+
+            return ToolResult("", {"name": f"Dump {args['synth']}", "params": {"filter_frequency": 40}}, False)
+        return await real_call(name, args)
+
+    monkeypatch.setattr("circuit_tracks.song.export_song_to_device", fake_export)
+    monkeypatch.setattr(songs, "SETTLE_S", 0.0)
+    async with agent(server) as (bridge, ledger, midi):
+        real_call, bridge.backend.call = bridge.backend.call, call  # type: ignore[method-assign]
+        await bridge.dispatch("load_saved_song", {"name": "Minimal"})
+        designed = {"5": {"targets": [{"dest": "filter_resonance", "start": 0, "end": 99}]}}
+        ledger.designed_patch[1] = {"name": "Orgel", "macros": designed, "mod_matrix": []}
+        ledger.song_json.setdefault("sounds", {})["synth2"] = {"name": "alt", "params": {}}
+        await bridge.dispatch("save_to_device", {"slot": 18, "confirmed": True})
+        sounds = saved[0].sounds
+        target = sounds["synth1"].macros["5"]["targets"][0]
+        assert list(sounds["synth1"].macros) == ["5"] and (target["dest"], target["end"]) == ("filter_resonance", 99)
+        assert sounds["synth1"].params["filter_frequency"] == 40
+        assert set(sounds["synth2"].macros) == {str(n) for n in range(1, 9)}  # nothing known: the standard set

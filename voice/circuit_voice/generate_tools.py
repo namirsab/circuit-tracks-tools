@@ -48,6 +48,36 @@ full sustain, short release), "crazy" means audibly unusual modulation.
 """
 
 
+def default_macros(params: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
+    """The device's standard knob layout, for a patch that arrives without macro routing.
+
+    1 Oscillator, 2 Oscillator Mod, 3 Amp Envelope, 4 Filter Envelope, 5 Filter Frequency,
+    6 Resonance, 7 Modulation, 8 FX (the same set as the library's presets).
+    """
+    wavetable = int((params or {}).get("osc1_wave", 0)) >= 14  # pulse width does nothing on a wavetable
+    shape = "wave_interpolate" if wavetable else "pulse_width_index"
+
+    def knob(*targets: tuple[str, int, int]) -> dict[str, Any]:
+        return {"targets": [{"dest": d, "start": a, "end": b} for d, a, b in targets]}
+
+    return {
+        "1": knob((f"osc1_{shape}", 0, 127), (f"osc2_{shape}", 0, 127)),
+        "2": knob(("osc1_density", 0, 80), ("osc1_density_detune", 0, 60)),
+        "3": knob(("env1_attack", 0, 127), ("env1_release", 0, 127)),
+        "4": knob(("env2_attack", 0, 100), ("env2_decay", 0, 127)),
+        "5": knob(("filter_frequency", 0, 127)),
+        "6": knob(("filter_resonance", 0, 127)),
+        "7": knob(("osc2_cents", 52, 76)),
+        "8": knob(("distortion_level", 0, 90), ("chorus_level", 0, 80)),
+    }
+
+
+def with_default_macros(patch: dict[str, Any]) -> dict[str, Any]:
+    """Every knob does something: keep the designer's macros, fill the missing knobs from the standard set."""
+    own = {str(k): v for k, v in (patch.get("macros") or {}).items() if isinstance(v, dict) and v.get("targets")}
+    return {**patch, "macros": {**default_macros(patch.get("params")), **own}}
+
+
 STEP_FIELDS = {"note", "notes", "velocity", "gate", "tie", "probability"}
 DRUM_STEP_FIELDS = {"velocity", "probability", "sample"}
 
@@ -202,7 +232,8 @@ def register_generate_tools(bridge: Bridge, model: ComposerModel, patch_schema: 
                     messages.append(("user", "Rejected: not a patch object with a name. Return corrected JSON."))
                     continue
                 answer.pop("synth", None)
-                result = await backend.call("create_synth_patch", {"synth": synth, **answer})
+                answer = with_default_macros(answer)
+                result = await backend.call("create_synth_patch", {"synth": synth, **copy.deepcopy(answer)})
                 if not result.is_error:
                     break
                 messages.append(("model", json.dumps(answer)[:6000]))
@@ -213,6 +244,8 @@ def register_generate_tools(bridge: Bridge, model: ComposerModel, patch_schema: 
             ledger.composer_job = None
         ledger.device_dirty = True
         ledger.unsaved = True
+        ledger.designed_patch[synth] = answer  # the project save needs its macros and mod matrix
+        ledger.selected_patch.pop(synth, None)
         name = str(answer.get("name"))[:16]
         return (
             f"Patch '{name}' ist auf Synth {synth} geladen, aber noch nicht gespeichert. "

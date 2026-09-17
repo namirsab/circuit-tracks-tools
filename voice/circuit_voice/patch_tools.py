@@ -125,6 +125,7 @@ def register_patch_tools(bridge: Bridge, catalog: PatchCatalog) -> None:
         if result.is_error:
             return f"Patch wählen ging nicht: {result.text}"
         ledger.selected_patch[synth] = number
+        ledger.designed_patch.pop(synth, None)
         ledger.unsaved = True
         ledger.device_dirty = True
         label = label or catalog.names.get(number, "")

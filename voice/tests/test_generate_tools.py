@@ -70,3 +70,19 @@ async def test_design_patch_and_save_with_confirmation(server):
         midi.messages.clear()
         out = await bridge.dispatch("save_patch", {"synth": 2, "slot": 40, "confirmed": True})
         assert "gespeichert" in out.response["result"] or "ging nicht" in out.response["result"]
+
+
+def test_default_macros_give_every_knob_a_target_the_patch_format_accepts():
+    """Hardware 2026-09-17: patches in a saved project had no macro routing; the knobs did nothing."""
+    from circuit_tracks.song import SoundConfig, _build_patch_bytes
+    from circuit_voice.generate_tools import default_macros, with_default_macros
+
+    plain = _build_patch_bytes(SoundConfig(name="X", params={"osc1_wave": 2}))
+    routed = _build_patch_bytes(SoundConfig(name="X", params={"osc1_wave": 2}, macros=default_macros()))
+    assert len(routed) == len(plain) and routed != plain
+    assert set(default_macros()) == {str(n) for n in range(1, 9)}
+    assert default_macros({"osc1_wave": 20})["1"]["targets"][0]["dest"] == "osc1_wave_interpolate"
+
+    own = {"5": {"targets": [{"dest": "filter_frequency", "start": 10, "end": 90}]}, "6": {"targets": []}}
+    filled = with_default_macros({"name": "Orgel", "macros": own})["macros"]
+    assert filled["5"] == own["5"] and filled["6"]["targets"] and len(filled) == 8
