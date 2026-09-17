@@ -32,7 +32,7 @@ class Config:
     mode: str = "ptt"
     ptt_key: str = "alt_r"
     silence_ms: int = 1200
-    max_utterance_s: int = 60
+    max_utterance_s: int = 180
     key_source: str = "global"
     mcp: str = "inproc"
     midi_port: str | None = None
@@ -105,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--mode", default="ptt", help="ptt (hold key), toggle (press to start/stop) or open (server VAD)")
     g.add_argument("--ptt-key", default="alt_r", help="key for ptt/toggle modes (pynput name, e.g. alt_r, f13, space)")
     g.add_argument("--silence-ms", type=int, default=1200, help="end-of-speech silence for open mode (500-3000)")
-    g.add_argument("--max-utterance", type=int, default=60, help="auto-stop seconds for toggle mode")
+    g.add_argument("--max-utterance", type=int, default=180, help="auto-stop seconds for toggle mode")
     g.add_argument(
         "--key-source",
         default="global",

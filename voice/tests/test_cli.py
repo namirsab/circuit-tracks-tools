@@ -17,7 +17,7 @@ def test_defaults():
     assert cfg.composer_model == "gemini-3.8-flash"
     assert cfg.api_key == "k"
     assert cfg.log_path is not None
-    assert cfg.max_utterance_s == 60
+    assert cfg.max_utterance_s == 180
 
 
 def test_flags_override_defaults():
