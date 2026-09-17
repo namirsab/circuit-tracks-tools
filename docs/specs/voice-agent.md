@@ -344,7 +344,7 @@ No cycles: `cli → session → bridge → mcp`, `bridge → composer → mcp`,
 | Mode | Gemini config | When to use |
 | --- | --- | --- |
 | `ptt` (default) | `automaticActivityDetection.disabled=true`; send `activityStart` on press, stream audio, `activityEnd` on release. | Loud room, speakers on, single-switch users. |
-| `toggle` | Same as `ptt`, one press starts and the next stops; auto-stop after `--max-utterance` seconds (default 20). | Users who cannot hold a switch. |
+| `toggle` | Same as `ptt`, one press starts and the next stops; auto-stop after `--max-utterance` seconds (default 60). | Users who cannot hold a switch. |
 | `open` | Server VAD with `endOfSpeechSensitivity=LOW`, `silenceDurationMs` from `--silence-ms` (default 1200, range 500–3000), `proactivity.proactiveAudio=true`. Prints and speaks a headphones warning once. | Headphones, quiet room, users who cannot operate any switch. |
 
 Earcons: rising two-tone on listen start, falling on stop, short tick on tool
