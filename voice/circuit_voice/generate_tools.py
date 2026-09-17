@@ -17,7 +17,7 @@ from circuit_tracks.song_schema import get_song_json_schema
 
 from .bridge import Bridge
 from .composer import ComposeFailed, ComposerModel, validate_song
-from .edit_tools import DRUM_TRACKS, SYNTH_TRACKS
+from .edit_tools import DRUM_TRACKS, SYNTH_TRACKS, snap_to_scale
 from .ledger import Change
 from .tool_cards import ArgumentError, _int_in_range
 
@@ -312,6 +312,7 @@ def register_generate_tools(bridge: Bridge, model: ComposerModel, patch_schema: 
         finally:
             ledger.composer_job = None
         before = copy.deepcopy((pat.get("tracks") or {}).get(track, {}).get("steps") or {})
+        snap_to_scale(song, steps)  # set_track does not; loading and saving do
         result = await backend.call(
             "set_track", {"pattern_name": key, "track": track, "steps": steps, "clear_existing": True}
         )

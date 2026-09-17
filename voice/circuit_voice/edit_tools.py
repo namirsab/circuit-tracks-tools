@@ -14,6 +14,8 @@ import copy
 import re
 from typing import Any
 
+from circuit_tracks.song import _SCALE_ROOT, _SCALE_TYPE, quantize_to_scale
+
 from .bridge import Bridge
 from .ledger import Change
 from .tool_cards import ArgumentError, _int_in_range
@@ -91,11 +93,37 @@ def _velocities(raw: Any, default: int) -> list[int]:
     return out or [default]
 
 
+# A fresh project on the device is in C minor; a song that says "chromatic" is saved as a chromatic
+# project and then sounds different from what was heard while building it (seen on 2026-09-17).
+DEFAULT_SCALE = {"root": "C", "type": "natural minor"}
+
+
+def snap_to_scale(song: dict[str, Any], steps: dict[str, Any]) -> int:
+    """Move every note in ``steps`` to the song's scale, the way loading and saving do; returns how many moved."""
+    scale = song.get("scale") or {}
+    root = _SCALE_ROOT.get(str(scale.get("root", "C")), 0)
+    kind = _SCALE_TYPE.get(str(scale.get("type", "chromatic")).lower(), 15)
+    moved = 0
+    for step in steps.values():
+        if not isinstance(step, dict):
+            continue
+        for key in ("note", "notes"):
+            old = step.get(key)
+            if isinstance(old, int):
+                step[key] = quantize_to_scale(old, root, kind)
+            elif isinstance(old, list):
+                step[key] = list(dict.fromkeys(quantize_to_scale(int(n), root, kind) for n in old))
+            else:
+                continue
+            moved += step[key] != old
+    return moved
+
+
 def empty_song(name: str, bpm: float) -> dict[str, Any]:
     return {
         "name": name[:16],
         "bpm": float(bpm),
-        "scale": {"root": "C", "type": "chromatic"},
+        "scale": dict(DEFAULT_SCALE),
         "sounds": {"synth1": {"preset": "lead"}, "synth2": {"preset": "bass"}},
         "patterns": {"pattern1": {"length": DEFAULT_LENGTH, "tracks": {}}},
         "song": ["pattern1"],
@@ -135,6 +163,7 @@ def register_edit_tools(bridge: Bridge) -> None:
     async def push(
         pattern_name: str, track: str, steps: dict[str, Any], previous: dict[str, Any] | None = None
     ) -> str | None:
+        snap_to_scale(song(), steps)  # set_track does not; loading and saving do
         result = await backend.call(
             "set_track", {"pattern_name": pattern_name, "track": track, "steps": steps, "clear_existing": True}
         )
@@ -245,6 +274,7 @@ def register_edit_tools(bridge: Bridge) -> None:
             placed += 1
             chords += len(note) > 1
         tracks[track] = {"steps": steps}
+        moved = snap_to_scale(song(), steps)
         error = await push(name, track, steps, previous=before)
         if error:
             return error
@@ -254,7 +284,9 @@ def register_edit_tools(bridge: Bridge) -> None:
         what = f"{placed} Noten"
         if chords:
             what = f"{chords} Akkorde" if chords == placed else f"{placed} Schritte, davon {chords} Akkorde,"
-        return f"{what} auf {track} in {name} ab Schritt {first}, alle {spacing} Schritte.{skipped}"
+        scale = song().get("scale") or {}
+        fitted = f" {moved} davon auf die Tonleiter {scale.get('root')} {scale.get('type')} gerückt." if moved else ""
+        return f"{what} auf {track} in {name} ab Schritt {first}, alle {spacing} Schritte.{fitted}{skipped}"
 
     async def write_drums(args: dict[str, Any]) -> str:
         track = str(args.get("track", "drum1")).lower()

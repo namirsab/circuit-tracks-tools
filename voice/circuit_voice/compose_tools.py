@@ -6,6 +6,7 @@ from typing import Any
 
 from .bridge import Bridge
 from .composer import ComposeFailed, Composer, track_edits
+from .edit_tools import snap_to_scale
 
 
 def register_compose_tools(bridge: Bridge, composer: Composer) -> None:
@@ -69,6 +70,7 @@ def register_compose_tools(bridge: Bridge, composer: Composer) -> None:
         if edits is None:
             return await load_new(new, ledger.song_name or "Song", "Geändert")
         for pattern, track, data in edits:
+            snap_to_scale(new, data.get("steps") or {})  # set_track does not; loading and saving do
             result = await backend.call(
                 "set_track", {"pattern_name": pattern, "track": track, "steps": data.get("steps", {})}
             )

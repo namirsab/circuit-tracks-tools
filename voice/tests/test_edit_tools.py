@@ -58,13 +58,13 @@ async def test_new_song_then_notes_and_drums(server):
         assert "Probe" in out.response["result"] and ledger.bpm == 100 and ledger.patterns == ["pattern1"]
 
         out = await bridge.dispatch(
-            "write_notes", {"track": "synth1", "notes": "C3 E3 G3", "start_step": 1, "spacing": 4}
+            "write_notes", {"track": "synth1", "notes": "C3 Eb3 G3", "start_step": 1, "spacing": 4}
         )
         assert out.response["result"].startswith("3 Noten auf synth1 in pattern1 ab Schritt 1")
         steps = ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]
-        assert {k: v["note"] for k, v in steps.items()} == {"0": 60, "4": 64, "8": 67}
+        assert {k: v["note"] for k, v in steps.items()} == {"0": 60, "4": 63, "8": 67}
         engine = await bridge.backend.call("get_pattern", {"name": "pattern1"})
-        assert engine.data["tracks"]["synth1"]["steps"]["4"]["notes"] == [64]
+        assert engine.data["tracks"]["synth1"]["steps"]["4"]["notes"] == [63]
 
         out = await bridge.dispatch("write_notes", {"track": "synth1", "notes": "C4"})
         assert "ab Schritt 13" in out.response["result"]
@@ -195,26 +195,26 @@ async def test_chords_are_several_notes_on_one_step(server):
         await bridge.dispatch("new_song", {})
         out = await bridge.dispatch(
             "write_notes",
-            {"track": "synth1", "notes": [["E3", "G3", "B3"], "E3", ["A2", "C3", "E3"]], "start_step": 3, "spacing": 4},
+            {"track": "synth1", "notes": [["Eb3", "G3", "Bb3"], "Eb3", ["Ab2", "C3", "Eb3"]], "start_step": 3},
         )
         assert "Akkord" in out.response["result"]
         steps = ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]
-        assert steps["2"]["notes"] == [64, 67, 71] and "note" not in steps["2"]
-        assert steps["6"]["note"] == 64
-        assert steps["10"]["notes"] == [57, 60, 64]
+        assert steps["2"]["notes"] == [63, 67, 70] and "note" not in steps["2"]
+        assert steps["6"]["note"] == 63
+        assert steps["10"]["notes"] == [56, 60, 63]
         engine = (await bridge.backend.call("get_pattern", {"name": "pattern1"})).data
-        assert engine["tracks"]["synth1"]["steps"]["2"]["notes"] == [64, 67, 71]
+        assert engine["tracks"]["synth1"]["steps"]["2"]["notes"] == [63, 67, 70]
 
 
 async def test_chord_as_text_and_on_a_single_step(server):
     async with agent(server) as (bridge, ledger, midi):
         await bridge.dispatch("new_song", {})
-        await bridge.dispatch("write_notes", {"track": "synth1", "notes": "C3+E3+G3 D3", "start_step": 1})
+        await bridge.dispatch("write_notes", {"track": "synth1", "notes": "C3+Eb3+G3 D3", "start_step": 1})
         steps = ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]
-        assert steps["0"]["notes"] == [60, 64, 67] and steps["4"]["note"] == 62
-        await bridge.dispatch("set_step", {"track": "synth1", "step": 5, "notes": ["D3", "F3", "A3"]})
+        assert steps["0"]["notes"] == [60, 63, 67] and steps["4"]["note"] == 62
+        await bridge.dispatch("set_step", {"track": "synth1", "step": 5, "notes": ["D3", "F3", "Ab3"]})
         steps = ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]
-        assert steps["4"]["notes"] == [62, 65, 69] and "note" not in steps["4"]
+        assert steps["4"]["notes"] == [62, 65, 68] and "note" not in steps["4"]
 
 
 def test_rests_keep_their_place_in_a_melody():
@@ -225,3 +225,17 @@ def test_rests_keep_their_place_in_a_melody():
     assert parse_notes(["C3", "C3", "", "", "C4"]) == [[60], [60], [], [], [72]]
     assert parse_notes("C3 - leer C4") == [[60], [], [], [72]]
     assert parse_notes(["C3", None, [], "E3"]) == [[60], [], [], [64]]
+
+
+async def test_new_song_is_in_the_devices_default_scale_and_notes_follow_it(server):
+    """Hardware 2026-09-17: a fresh device project is in C minor, our song said chromatic, so the
+    saved project was chromatic and did not sound like what was heard while building."""
+    async with agent(server) as (bridge, ledger, midi):
+        await bridge.dispatch("new_song", {})
+        assert ledger.song_json["scale"] == {"root": "C", "type": "natural minor"}
+        out = await bridge.dispatch("write_notes", {"track": "synth1", "notes": "C3 E3 G3", "start_step": 1})
+        steps = ledger.song_json["patterns"]["pattern1"]["tracks"]["synth1"]["steps"]
+        assert [steps[k]["note"] for k in ("0", "4", "8")] == [60, 65, 67]  # E is not in C minor; ties go up
+        assert "gerückt" in out.response["result"]
+        engine = (await bridge.backend.call("get_pattern", {"name": "pattern1"})).data
+        assert engine["tracks"]["synth1"]["steps"]["4"]["notes"] == [65]

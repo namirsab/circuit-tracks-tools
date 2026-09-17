@@ -209,7 +209,8 @@ CARDS: list[ToolCard] = [
     # --- precise, step-by-step building (no model in between) ---
     ToolCard(
         "new_song",
-        "Start an empty song: one 32-step pattern ('pattern1'), chromatic scale, lead on synth1 and bass on synth2. "
+        "Start an empty song: one 32-step pattern ('pattern1'), lead on synth1 and bass on synth2. The scale is "
+        "C minor like a fresh device project; notes outside it move to the nearest scale note. "
         "Use it when the user wants to build from nothing ('Neuer Song', 'fang neu an').",
         schema=_obj({"name": {"type": "string"}, "bpm": {"type": "number", "minimum": 40, "maximum": 240}}, []),
     ),

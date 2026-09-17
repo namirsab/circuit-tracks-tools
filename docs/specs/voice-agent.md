@@ -382,7 +382,7 @@ and how the result is summarised for the ledger.
 
 | Spoken concept | Tool the model sees | Backed by | Notes |
 | --- | --- | --- | --- |
-| Empty song | `new_song(name, bpm)` | virtual → `load_song` with a blank 32-step pattern, chromatic scale, preset sounds | Starting point for step-by-step building. |
+| Empty song | `new_song(name, bpm)` | virtual → `load_song` with a blank 32-step pattern, C minor (the device default), preset sounds | Starting point for step-by-step building. |
 | Notes on a synth track | `write_notes(pattern, track, notes, start_step, spacing, gate, velocity)` | virtual → `set_track` + song JSON | "C3 E3 G3 auf Synth 1 in Pattern 1". Note names as the device labels them (C3 = MIDI 60). Appends by default, `replace=true` clears first. |
 | Drum hits | `write_drums(pattern, track, steps, velocity)` | virtual → `set_track` + song JSON | "Kick auf 1, 5, 9, 13" (spoken 1-based steps). |
 | Clear a track | `clear_track(pattern, track)` | virtual → `set_track` with no steps | |

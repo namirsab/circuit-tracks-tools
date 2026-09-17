@@ -358,7 +358,7 @@
     "behavior": "NON_BLOCKING"
   },
   {
-    "description": "Start an empty song: one 32-step pattern ('pattern1'), chromatic scale, lead on synth1 and bass on synth2. Use it when the user wants to build from nothing ('Neuer Song', 'fang neu an').",
+    "description": "Start an empty song: one 32-step pattern ('pattern1'), lead on synth1 and bass on synth2. The scale is C minor like a fresh device project; notes outside it move to the nearest scale note. Use it when the user wants to build from nothing ('Neuer Song', 'fang neu an').",
     "name": "new_song",
     "parameters_json_schema": {
       "type": "object",
