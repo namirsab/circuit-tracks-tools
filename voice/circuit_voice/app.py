@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -24,6 +25,7 @@ from .prompt_de import GREETING_DE, GREETING_MODE_DE, GREETING_OPEN_DE, GREETING
 from .session import Session, run_text_turn
 from .songs import SongLibrary, register_song_tools
 from .ui import TerminalUI
+from .usage import UsageMeter
 
 
 def _connect_factory(config: Config) -> Callable[..., Any]:
@@ -40,7 +42,7 @@ def _connect_factory(config: Config) -> Callable[..., Any]:
     return connect
 
 
-async def build_bridge(config: Config, backend: McpBackend) -> Bridge:
+async def build_bridge(config: Config, backend: McpBackend, on_usage: Any = None) -> Bridge:
     bridge = Bridge(backend, profile=config.tools)
     await bridge.prepare()
     register_song_tools(bridge, SongLibrary(config.songs_dir))
@@ -49,6 +51,7 @@ async def build_bridge(config: Config, backend: McpBackend) -> Bridge:
     register_patch_tools(bridge, PatchCatalog(config.patch_cache))
     # Model jobs are registered in every mode; the profile decides what the model may call.
     model = GeminiComposer(config.api_key or "", config.composer_model)
+    model.on_usage = on_usage
     composer = Composer(model, backend=backend)
     await composer.prepare()
     register_compose_tools(bridge, composer)
@@ -69,6 +72,12 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
         log.write(event)
         ui.handle(event)
 
+    meter = UsageMeter()
+    started = time.monotonic()
+
+    def on_text_usage(model: str, usage: Any) -> None:
+        on_event({**meter.add(model, usage), "t": time.monotonic()})
+
     async with McpBackend(config.mcp) as backend:
         if not config.no_midi and backend.kind == "inproc":
             try:
@@ -77,7 +86,7 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
             except MidiNotFound as e:
                 on_event({"type": "hint", "text": str(e)})
                 return 3
-        bridge = await build_bridge(config, backend)
+        bridge = await build_bridge(config, backend, on_usage=on_text_usage)
         listen = ListenController(config.mode, key=config.ptt_key, max_utterance_s=config.max_utterance_s)
         if config.key_source == "terminal" and listen.mode == "ptt":
             listen.mode = "toggle"  # a terminal cannot report key releases
@@ -102,6 +111,8 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
             + GREETING_MODE_DE.get(bridge.profile, ""),
         )
 
+        session.usage = meter
+
         async def set_listening(args: dict[str, Any]) -> str:
             mode = args["mode"]
             listen.set_mode(mode)
@@ -121,6 +132,8 @@ async def run_agent(config: Config, connect: Callable[..., Any] | None = None) -
             listen.stop()
             mic.stop()
             player.stop()
+            if meter.models:
+                on_event({**meter.summary_event(time.monotonic() - started), "t": time.monotonic()})
             log.close()
     return 0
 

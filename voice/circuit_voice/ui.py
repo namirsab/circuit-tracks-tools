@@ -65,6 +65,12 @@ def render(event: dict[str, Any], state: UIState) -> str | None:
         return "Server beendet die Verbindung gleich; ich verbinde neu."
     if kind == "goodbye":
         return event.get("text", "")
+    if kind == "usage_total":
+        usd, per_hour = event.get("usd"), event.get("usd_per_hour")
+        if usd is None:
+            return "Verbrauch: Preis für dieses Modell unbekannt; die Token stehen im Log."
+        minutes = int(event.get("seconds", 0)) // 60
+        return f"Verbrauch: etwa {usd:.2f} $ in {minutes} Minuten (rund {per_hour:.2f} $ pro Stunde), geschätzt."
     if kind == "hint":
         return f"Hinweis: {event.get('text')}"
     return None

@@ -40,6 +40,7 @@ class GeminiComposer:
         self._client = genai.Client(api_key=api_key)
         self.name = model_id
         self.temperature = temperature
+        self.on_usage: Any = None  # called with (model name, usage_metadata) after every response
 
     async def generate(self, system: str, messages: Sequence[tuple[str, str]], json_schema: dict[str, Any]) -> Any:
         from google.genai import types  # noqa: PLC0415
@@ -55,6 +56,8 @@ class GeminiComposer:
                 temperature=self.temperature,
             ),
         )
+        if self.on_usage is not None and getattr(response, "usage_metadata", None) is not None:
+            self.on_usage(self.name, response.usage_metadata)
         return json.loads(response.text or "null")
 
 

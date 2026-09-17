@@ -117,6 +117,7 @@ class Session:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._listen_stop_at: float | None = None
         self._reconnect = False
+        self.usage: Any = None  # a UsageMeter, set by the app
         listen._on_event = self._listen_event  # events arrive from the hotkey thread
 
     # --- events ---
@@ -258,6 +259,10 @@ class Session:
                 return
 
     async def _handle_message(self, live: Any, msg: Any) -> None:
+        reported = getattr(msg, "usage_metadata", None)
+        if reported is not None and self.usage is not None:
+            event = self.usage.add(self.config.model, reported)
+            self.emit(event.pop("type"), **event)
         update = msg.session_resumption_update
         if update is not None and update.resumable and update.new_handle:
             self.resumption_handle = update.new_handle
