@@ -764,7 +764,7 @@
     "behavior": "NON_BLOCKING"
   },
   {
-    "description": "Design a new synth sound from a description ('warmer, weicher Bass mit langsamem Filter') and load it into synth 1 or 2 (working memory, not saved). Without confirmed it returns the question to ask first.",
+    "description": "Design a new synth sound from a description ('warmer, weicher Bass mit langsamem Filter') and load it into synth 1 or 2 (working memory, not saved). Without confirmed it returns the question to ask first; after a clear yes call again with confirmed=true.",
     "name": "design_patch",
     "parameters_json_schema": {
       "type": "object",
@@ -776,6 +776,10 @@
         },
         "brief": {
           "type": "string"
+        },
+        "confirmed": {
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [

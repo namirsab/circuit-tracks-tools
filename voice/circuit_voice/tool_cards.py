@@ -382,9 +382,15 @@ CARDS: list[ToolCard] = [
     ToolCard(
         "design_patch",
         "Design a new synth sound from a description ('warmer, weicher Bass mit langsamem Filter') and load it into "
-        "synth 1 or 2 (working memory, not saved). Without confirmed it returns the question to ask first.",
+        "synth 1 or 2 (working memory, not saved). Without confirmed it returns the question to ask first; after a "
+        "clear yes call again with confirmed=true.",
         schema=_obj(
-            {"synth": {"type": "integer", "minimum": 1, "maximum": 2}, "brief": {"type": "string"}}, ["synth", "brief"]
+            {
+                "synth": {"type": "integer", "minimum": 1, "maximum": 2},
+                "brief": {"type": "string"},
+                "confirmed": {"type": "boolean", "default": False},
+            },
+            ["synth", "brief"],
         ),
         blocking=False,
         profiles=("creative",),

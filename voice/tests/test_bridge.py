@@ -105,3 +105,29 @@ def test_perform_profile_is_a_subset():
     perform = {c.name for c in cards_for_profile("perform")}
     assert perform <= full
     assert len(CARDS) == len({c.name for c in CARDS}), "duplicate card names"
+
+
+def test_every_tool_that_asks_first_can_be_confirmed():
+    """design_patch had no 'confirmed' argument, so a yes could never get through (2026-09-17)."""
+    asking = ["save_to_device", "select_project", "generate_track", "design_patch", "save_patch", "compose", "revise"]
+    by_name = {c.name: c for c in CARDS}
+    for name in asking:
+        assert "confirmed" in by_name[name].schema["properties"], name
+
+
+async def test_identical_call_without_progress_is_stopped(server):
+    async with make_bridge(server) as (b, midi):
+        calls = []
+
+        async def ask(args):
+            calls.append(args)
+            return {"needs_confirmation": "Wirklich?", "hint": "ask"}
+
+        b.register_virtual("save_patch", ask)
+        for _ in range(2):
+            out = await b.dispatch("save_patch", {"synth": 1, "slot": 3})
+            assert "needs_confirmation" in out.response["result"]
+        out = await b.dispatch("save_patch", {"synth": 1, "slot": 3})
+        assert "error" in out.response and len(calls) == 2
+        out = await b.dispatch("save_patch", {"synth": 1, "slot": 3, "confirmed": True})
+        assert len(calls) == 3  # a different call goes through

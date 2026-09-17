@@ -10,7 +10,9 @@ route to a virtual handler or the MCP tool, and wrap the outcome in the
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -22,6 +24,8 @@ from .mcp_client import McpBackend
 from .tool_cards import ArgumentError, ToolCard, cards_for_profile, normalise_profile
 
 log = logging.getLogger("circuit_voice.bridge")
+
+REPEAT_WINDOW_S = 30.0  # identical calls without progress inside this window count as a loop
 
 VirtualHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 
@@ -51,6 +55,10 @@ class Bridge:
         self._virtual: dict[str, VirtualHandler] = {}
         self._internal: dict[str, VirtualHandler] = {}  # undo handlers not exposed as tools
         self._declarations: list[types.FunctionDeclaration] = []
+        self._last_key: tuple[str, str] | None = None
+        self._last_at = 0.0
+        self._last_stuck = False
+        self._repeats = 0
         if "get_state" in self.cards:
             self._virtual["get_state"] = self._get_state
         if "undo_last" in self.cards:
@@ -119,6 +127,34 @@ class Bridge:
         self._virtual[name] = handler  # cards decide what the model may call; handlers may outlive a profile
 
     async def dispatch(self, name: str, args: dict[str, Any] | None) -> Dispatch:
+        """Run one tool call, and stop a model that repeats a call which made no progress.
+
+        Seen on hardware: the same call came about 30 times in 20 seconds because the
+        answer (a question to ask the user) never changed.
+        """
+        key = (name, json.dumps(args or {}, sort_keys=True, default=str))
+        now = time.monotonic()
+        if key == self._last_key and self._last_stuck and now - self._last_at < REPEAT_WINDOW_S:
+            self._repeats += 1
+        else:
+            self._repeats = 0
+        self._last_key, self._last_at = key, now
+        if self._repeats >= 2:
+            log.warning("stopped a repeated call without progress: %s", name)
+            return Dispatch(
+                name,
+                {
+                    "error": "Same call, same answer. Stop calling tools now; tell the user in one German sentence "
+                    "what is open (for a question: ask it once and wait; after a yes pass confirmed=true)."
+                },
+                True,
+            )
+        out = await self._dispatch(name, args)
+        result = out.response.get("result")
+        self._last_stuck = "error" in out.response or (isinstance(result, dict) and "needs_confirmation" in result)
+        return out
+
+    async def _dispatch(self, name: str, args: dict[str, Any] | None) -> Dispatch:
         spoken = dict(args or {})
         args = dict(spoken)
         c = self.cards.get(name)
