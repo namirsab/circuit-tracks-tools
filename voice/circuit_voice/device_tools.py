@@ -8,7 +8,9 @@ rule together with the internal sequencer tools (see ``bridge``).
 
 from __future__ import annotations
 
+import asyncio
 import re
+import time
 from typing import Any
 
 from .bridge import Bridge
@@ -16,6 +18,9 @@ from .ledger import TRACK_NAMES_DE, Change
 from .tool_cards import TRACKS, ArgumentError, _int_in_range
 
 _BPM_RE = re.compile(r"clock at ([0-9.]+) BPM")
+# The device loads a project for a moment after the program change. Clock, start or a
+# SysEx read during that window hung it on hardware, so a start waits this long.
+PROJECT_LOAD_S = 2.0
 
 
 def register_device_tools(bridge: Bridge) -> None:
@@ -35,6 +40,11 @@ def register_device_tools(bridge: Bridge) -> None:
         if ledger.running and ledger.source == "internal":
             await bridge.dispatch("stop_sequencer", {})
             note = "Ich habe den internen Sequenzer gestoppt. "
+        if ledger.project_selected_at is not None:
+            wait = PROJECT_LOAD_S - (time.monotonic() - ledger.project_selected_at)
+            ledger.project_selected_at = None
+            if wait > 0:
+                await asyncio.sleep(wait)
         payload: dict[str, Any] = {"action": action}
         bpm = args.get("bpm") or ledger.device_bpm.get(ledger.device_project)
         if bpm:
@@ -83,7 +93,12 @@ def register_device_tools(bridge: Bridge) -> None:
             ledger.device_bpm[number] = ledger.bpm  # loaded while running: keeps the current tempo
             when = "sofort" if immediate else "am Ende des Patterns"
             return f"Projekt {number} kommt {when}."
-        ledger.device_bpm.pop(number, None)  # loaded while stopped: brings its own saved tempo
+        # Loaded while stopped: the project brings its own tempo. We know it for projects saved
+        # from here; otherwise the next start reads it from the device.
+        ledger.device_bpm.pop(number, None)
+        if number in ledger.saved_bpm:
+            ledger.device_bpm[number] = ledger.saved_bpm[number]
+        ledger.project_selected_at = time.monotonic()
         ledger.source = "device"
         return f"Projekt {number} ist gewählt."
 

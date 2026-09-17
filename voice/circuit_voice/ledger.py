@@ -46,6 +46,8 @@ class Ledger:
     slot: int | None = None  # 1-based, last slot saved to
     device_project: int | None = None  # 1-based
     device_bpm: dict[int, float] = field(default_factory=dict)  # tempo per device project, once read
+    saved_bpm: dict[int, float] = field(default_factory=dict)  # tempo stored in projects written from here
+    project_selected_at: float | None = None  # monotonic time of the last program change while stopped
     device_dirty: bool = False  # sounds changed since the project was selected
     selected_patch: dict[int, int] = field(default_factory=dict)  # synth -> 1-based patch number
     running: bool = False

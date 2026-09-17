@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+import pytest
+
 from circuit_tracks.constants import PROJECT_CHANNEL
 from circuit_voice.bridge import Bridge
 from circuit_voice.device_tools import register_device_tools
 from circuit_voice.ledger import Ledger
 from circuit_voice.mcp_client import McpBackend
+
+
+@pytest.fixture(autouse=True)
+def no_project_load_wait(monkeypatch):
+    monkeypatch.setattr("circuit_voice.device_tools.PROJECT_LOAD_S", 0.0)
 
 
 @asynccontextmanager
@@ -67,6 +74,41 @@ async def test_transport_reads_device_bpm_once_and_caches(server, monkeypatch):
         await bridge.dispatch("transport", {"action": "start"})
         assert len(reads) == 1 and ledger.device_bpm[5] == 96.0
         await bridge.dispatch("transport", {"action": "stop"})
+
+
+async def test_project_saved_from_here_starts_without_reading_the_device(server, monkeypatch):
+    """A SysEx read right after the program change hung the device (2026-09-17)."""
+
+    def no_read(midi):
+        raise AssertionError("must not read the project over SysEx")
+
+    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", no_read)
+    async with agent(server) as (bridge, ledger, midi):
+        ledger.saved_bpm[29] = 120.0  # what save_to_device records
+        await bridge.dispatch("select_project", {"number": 29, "immediate": True})
+        out = await bridge.dispatch("transport", {"action": "start"})
+        assert "120" in out.response["result"] and ledger.running
+        await bridge.dispatch("transport", {"action": "stop"})
+
+
+async def test_transport_start_waits_for_the_project_to_load(server, monkeypatch):
+    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", lambda midi: 100.0)
+    monkeypatch.setattr("circuit_voice.device_tools.PROJECT_LOAD_S", 2.0)
+    naps = []
+
+    async def fake_sleep(seconds):
+        naps.append(seconds)
+
+    monkeypatch.setattr("circuit_voice.device_tools.asyncio.sleep", fake_sleep)
+    async with agent(server) as (bridge, ledger, midi):
+        await bridge.dispatch("select_project", {"number": 3})
+        await bridge.dispatch("transport", {"action": "start"})
+        assert naps and 0 < naps[0] <= 2.0
+        await bridge.dispatch("transport", {"action": "stop"})
+        naps.clear()
+        await bridge.dispatch("transport", {"action": "start"})  # no fresh project change, no wait
+        await bridge.dispatch("transport", {"action": "stop"})
+        assert naps == []
 
 
 async def test_set_tempo_uses_the_clock_tool(server, monkeypatch):

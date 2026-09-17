@@ -175,6 +175,7 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
         ledger.device_dirty = False
         if ledger.bpm:
             ledger.device_bpm[slot] = float(ledger.bpm)
+            ledger.saved_bpm[slot] = float(ledger.bpm)
         tail = " Der Sequenzer ist dafür gestoppt; sag Start, oder ich spiele es vom Gerät ab." if stopped else ""
         return f"Gespeichert in Slot {slot} als '{name}'.{tail}"
 
