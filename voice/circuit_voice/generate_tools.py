@@ -33,19 +33,141 @@ Fit the song's tempo and key; leave space; make it loop well. No prose.
 
 PATCH_RULES = """\
 You design synth patches for a Novation Circuit Tracks. Answer with JSON only
-in the shape given (name up to 16 characters; params are 0-127; mod matrix
+in the shape given. You start from nothing: there are no presets, and every
+parameter in "params" is yours to set. Two briefs must never give the same
+numbers: choose waveforms, levels, detune, filter and both envelopes for THIS
+sound (a kalimba is a short sine/triangle pluck with a fast decay and no
+sustain; a guitar is a brighter pluck with a filter envelope and longer decay;
+an electric piano has a bell-like attack, medium decay and some sustain; a pad
+has slow attack and release). Pitch values centre on 64 (osc semitones and
+cents). (Name up to 16 characters; params are 0-127; mod matrix
 sources and destinations use space-separated names such as "filter frequency";
 depth is -64..63; macros add on top of base values, so set a base low when a
 macro should sweep it up). Use the standard macro layout as orientation:
 1 Oscillator, 2 Oscillator Mod, 3 Amp Envelope, 4 Filter Envelope,
 5 Filter Frequency, 6 Resonance, 7 Modulation, 8 FX. Give macro 5 a filter
 frequency target with a low base so the player can open the filter by hand.
+"macros" is optional: knobs you leave out get the standard layout.
 Pads, organs, keys and anything meant for chords must be polyphonic
 (polyphony_mode 2); only basses and leads may be mono. Make the patch loud
 enough to hear (oscillator levels around 100 or more), and follow the brief's
 character: an organ sounds like an organ (sine or organ-like waves, fast attack,
 full sustain, short release), "crazy" means audibly unusual modulation.
 """
+
+
+# The parameters that decide what a sound is. The designer must set every one of them: with an open
+# "params" object the model returned none at all and every sound was the same preset (2026-09-17).
+DESIGN_PARAMS = (
+    "polyphony_mode", "portamento_rate",
+    "osc1_wave", "osc1_wave_interpolate", "osc1_pulse_width_index", "osc1_virtual_sync_depth", "osc1_density",
+    "osc1_density_detune", "osc1_semitones", "osc1_cents", "osc1_level",
+    "osc2_wave", "osc2_wave_interpolate", "osc2_pulse_width_index", "osc2_virtual_sync_depth", "osc2_density",
+    "osc2_density_detune", "osc2_semitones", "osc2_cents", "osc2_level",
+    "ring_mod_level", "noise_level", "drive", "drive_type",
+    "filter_type", "filter_frequency", "filter_tracking", "filter_resonance", "env2_to_filter_freq",
+    "env1_velocity", "env1_attack", "env1_decay", "env1_sustain", "env1_release",
+    "env2_velocity", "env2_attack", "env2_decay", "env2_sustain", "env2_release",
+    "lfo1_waveform", "lfo1_rate", "lfo2_waveform", "lfo2_rate",
+    "distortion_level", "distortion_type", "chorus_level", "chorus_rate", "chorus_feedback", "chorus_mod_depth",
+    "eq_bass_level", "eq_mid_level", "eq_treble_level",
+)  # fmt: skip
+MOD_SOURCES = (
+    "direct",
+    "velocity",
+    "keyboard",
+    "LFO 1+",
+    "LFO 1+/-",
+    "LFO 2+",
+    "LFO 2+/-",
+    "env amp",
+    "env filter",
+    "env 3",
+)  # noqa: E501
+MOD_DESTS = (
+    "osc 1 & 2 pitch", "osc 1 pitch", "osc 2 pitch", "osc 1 v-sync", "osc 2 v-sync", "osc 1 pulse width / index",
+    "osc 2 pulse width / index", "osc 1 level", "osc 2 level", "noise level", "ring modulation 1*2 level",
+    "filter drive amount", "filter frequency", "filter resonance", "LFO 1 rate", "LFO 2 rate",
+    "amp envelope decay", "filter envelope decay",
+)  # fmt: skip
+
+
+def design_schema() -> dict[str, Any]:
+    """A closed schema for the sound designer: every sound-shaping parameter is a required number."""
+    value = {"type": "integer", "minimum": 0, "maximum": 127}
+    return {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "up to 16 characters"},
+            "params": {
+                "type": "object",
+                "properties": {name: value for name in DESIGN_PARAMS},
+                "required": list(DESIGN_PARAMS),
+            },
+            "mod_matrix": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "source1": {"type": "string", "enum": list(MOD_SOURCES)},
+                        "dest": {"type": "string", "enum": list(MOD_DESTS)},
+                        "depth": {"type": "integer", "minimum": -64, "maximum": 63},
+                    },
+                    "required": ["source1", "dest", "depth"],
+                },
+            },
+            "macros": {
+                "type": "array",
+                "description": "one entry per knob that should differ from the standard layout",
+                "maxItems": 8,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "knob": {"type": "integer", "minimum": 1, "maximum": 8},
+                        "targets": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 4,
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "dest": {
+                                        "type": "string",
+                                        "description": "a name from params (continuous ones only)",
+                                    },
+                                    "start": value,
+                                    "end": value,
+                                },
+                                "required": ["dest", "start", "end"],
+                            },
+                        },
+                    },
+                    "required": ["knob", "targets"],
+                },
+            },
+        },
+        "required": ["name", "params", "mod_matrix"],
+    }
+
+
+def patch_from_design(answer: dict[str, Any]) -> dict[str, Any]:
+    """The designer's answer -> arguments for create_synth_patch (macros keyed by knob, no preset)."""
+    params = {k: max(0, min(127, int(v))) for k, v in (answer.get("params") or {}).items() if k in DESIGN_PARAMS}
+    from circuit_tracks.constants import MACRO_DEST_BY_NAME  # noqa: PLC0415
+
+    macros: dict[str, Any] = {}
+    for m in answer.get("macros") or []:
+        if not isinstance(m, dict) or not 1 <= int(m.get("knob") or 0) <= 8:
+            continue
+        # only continuous parameters can sit on a knob; a wrong name would reject the whole patch
+        targets = [t for t in m.get("targets") or [] if isinstance(t, dict) and t.get("dest") in MACRO_DEST_BY_NAME]
+        if targets:
+            macros[str(m["knob"])] = {"targets": targets[:4]}
+    patch = {"name": str(answer.get("name") or "Sound")[:16], "params": params, "macros": macros}
+    if answer.get("mod_matrix"):
+        patch["mod_matrix"] = answer["mod_matrix"]
+    return with_default_macros(patch)
 
 
 def default_macros(params: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
@@ -125,7 +247,7 @@ def register_generate_tools(bridge: Bridge, model: ComposerModel, patch_schema: 
     reference: dict[str, str] = {}
 
     async def prepare() -> None:
-        for section in ("patch", "mod_matrix", "macros"):
+        for section in ("patch", "lookup_tables", "mod_matrix", "macros"):
             result = await backend.call("get_parameter_reference", {"section": section})
             if not result.is_error:
                 reference[section] = result.text
@@ -218,21 +340,17 @@ def register_generate_tools(bridge: Bridge, model: ComposerModel, patch_schema: 
                 "Sekunden und ersetzt den aktuellen Sound auf dem Synth (nicht gespeichert).",
                 "hint": "Ask; on yes call design_patch again with confirmed=true.",
             }
-        schema = patch_schema or await backend.input_schema("create_synth_patch")
-        schema = {k: v for k, v in schema.items() if k != "title"}
-        props = {k: v for k, v in schema.get("properties", {}).items() if k != "synth"}
-        schema = {**schema, "properties": props, "required": [r for r in schema.get("required", []) if r != "synth"]}
+        schema = patch_schema or design_schema()
         system = PATCH_RULES + "".join(f"\n## Reference: {k}\n{v}" for k, v in reference.items())
         messages: list[tuple[str, str]] = [("user", f"Brief (German): {brief}\nReturn the patch as JSON.")]
         ledger.composer_job = brief
         try:
             for _attempt in range(3):
                 answer = await model.generate(system, messages, schema)
-                if not isinstance(answer, dict) or not answer.get("name"):
-                    messages.append(("user", "Rejected: not a patch object with a name. Return corrected JSON."))
+                if not isinstance(answer, dict) or not answer.get("name") or not answer.get("params"):
+                    messages.append(("user", "Rejected: a patch needs a name and params. Return corrected JSON."))
                     continue
-                answer.pop("synth", None)
-                answer = with_default_macros(answer)
+                answer = patch_from_design(answer)
                 result = await backend.call("create_synth_patch", {"synth": synth, **copy.deepcopy(answer)})
                 if not result.is_error:
                     break

@@ -86,3 +86,37 @@ def test_default_macros_give_every_knob_a_target_the_patch_format_accepts():
     own = {"5": {"targets": [{"dest": "filter_frequency", "start": 10, "end": 90}]}, "6": {"targets": []}}
     filled = with_default_macros({"name": "Orgel", "macros": own})["macros"]
     assert filled["5"] == own["5"] and filled["6"]["targets"] and len(filled) == 8
+
+
+def test_the_sound_designer_must_set_every_parameter_and_cannot_pick_a_preset():
+    """Hardware 2026-09-17: kalimba, guitar and piano were all the 'pluck' preset with a new name,
+    because the schema offered 'preset' and an open 'params' object the model left empty."""
+    from circuit_voice.generate_tools import DESIGN_PARAMS, design_schema, patch_from_design
+
+    schema = design_schema()
+    assert "preset" not in schema["properties"]
+    params = schema["properties"]["params"]
+    assert set(params["required"]) == set(params["properties"]) == set(DESIGN_PARAMS)
+    assert {"name", "params"} <= set(schema["required"])
+
+    answer = {
+        "name": "Kalimba mit langem Namen",
+        "params": {**dict.fromkeys(DESIGN_PARAMS, 10), "env1_decay": 300, "unknown": 5},
+        "mod_matrix": [{"source1": "velocity", "dest": "filter frequency", "depth": 20}],
+        "macros": [
+            {"knob": 5, "targets": [{"dest": "filter_frequency", "start": 0, "end": 100}]},
+            {"knob": 1, "targets": [{"dest": "osc1_wave", "start": 0, "end": 29}]},  # not continuous: dropped
+        ],
+    }
+    patch = patch_from_design(answer)
+    assert patch["name"] == "Kalimba mit lange"[:16] and "preset" not in patch
+    assert patch["params"]["env1_decay"] == 127 and "unknown" not in patch["params"]
+    assert patch["macros"]["5"]["targets"][0]["end"] == 100
+    assert patch["macros"]["1"]["targets"][0]["dest"] != "osc1_wave" and len(patch["macros"]) == 8
+
+
+def test_every_design_parameter_is_a_real_patch_parameter():
+    from circuit_tracks.patch import _PARAM_OFFSETS
+    from circuit_voice.generate_tools import DESIGN_PARAMS
+
+    assert set(DESIGN_PARAMS) <= set(_PARAM_OFFSETS)
