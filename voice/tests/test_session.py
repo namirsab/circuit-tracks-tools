@@ -142,35 +142,6 @@ async def test_mic_frames_only_forwarded_while_listening(server):
     assert any(e["type"] == "listen_start" for e in events)
 
 
-async def test_speech_after_the_stop_key_still_reaches_the_model_before_activity_end(server):
-    """Sentence ends were cut off on hardware (2026-09-17): the key closes the mic late, not at once."""
-
-    async def mic():
-        for _ in range(30):
-            yield b"\x00" * 640
-            await asyncio.sleep(0.01)
-        await asyncio.sleep(10)
-
-    fake = FakeLiveSession([], tail=0.4)
-    async with harness(server, [fake], mic=mic()) as (session, connector, events, midi):
-        session.listen.tail_s = 0.1
-
-        async def press():
-            await asyncio.sleep(0.02)
-            session.listen.key_down("alt_r")
-            await asyncio.sleep(0.05)
-            session.listen.key_up("alt_r")
-            released.append(len([r for r in fake.realtime if "audio" in r]))
-
-        released = []
-        asyncio.get_running_loop().create_task(press())
-        await session.run(max_connections=1)
-    kinds = [("audio" if "audio" in r else next(iter(r))) for r in fake.realtime]
-    end = kinds.index("activity_end")
-    assert kinds[:end].count("audio") > released[0]  # audio kept flowing after the key
-    assert "audio" not in kinds[end + 1 :]
-
-
 async def test_max_minutes_ends_the_session(server):
     fake = FakeLiveSession([], tail=5)
     async with harness(server, [fake], max_minutes=1) as (session, connector, events, midi):

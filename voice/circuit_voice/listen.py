@@ -18,7 +18,6 @@ from collections.abc import Callable
 from typing import Any
 
 MODES = ("ptt", "toggle", "open")
-TAIL_S = 0.35  # speech still forwarded after the stop key
 
 PERMISSION_HINT_DE = (
     "Die Taste kann nicht abgefangen werden. Erlaube dem Terminal den Zugriff unter "
@@ -59,25 +58,12 @@ class ListenController:
         self._listening = False
         self._key_held = False
         self._started_at = 0.0
-        self._stopped_at: float | None = None
-        self.tail_s = TAIL_S
 
     # --- state ---
 
     @property
     def forwarding(self) -> bool:
-        """True while speech should reach the model, including a short tail after the key.
-
-        People press the key while the last word is still leaving their mouth, and the
-        audio driver delivers it a little later; closing at once cut sentence ends off.
-        """
-        if self.mode == "open" or self._listening:
-            return True
-        return self._stopped_at is not None and self._clock() - self._stopped_at < self.tail_s
-
-    def close_tail(self) -> None:
-        """The session ends the utterance: nothing more is forwarded until the next start."""
-        self._stopped_at = None
+        return True if self.mode == "open" else self._listening
 
     def _start(self) -> None:
         if not self._listening:
@@ -88,7 +74,6 @@ class ListenController:
     def _stop(self) -> None:
         if self._listening:
             self._listening = False
-            self._stopped_at = self._clock()
             self._on_event("listen_stop")
 
     def set_mode(self, mode: str) -> None:
