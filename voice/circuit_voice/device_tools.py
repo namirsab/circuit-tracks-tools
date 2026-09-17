@@ -40,6 +40,20 @@ def register_device_tools(bridge: Bridge) -> None:
         if ledger.running and ledger.source == "internal":
             await bridge.dispatch("stop_sequencer", {})
             note = "Ich habe den internen Sequenzer gestoppt. "
+        if ledger.source != "device" and ledger.song_json is not None:
+            # Coming from the internal sequencer, "play it on the device" means the project this
+            # song was saved to, not whatever happens to be loaded there.
+            if ledger.slot is None:
+                return (
+                    "Der Song ist noch nicht auf dem Gerät. Sag 'speicher das in Slot …', dann spiele ich ihn "
+                    "vom Gerät; oder sag 'spiel Projekt …' für ein gespeichertes Projekt."
+                )
+            if ledger.device_project != ledger.slot:
+                chosen = await select_project({"number": ledger.slot, "immediate": True, "confirmed": True})
+                if not str(chosen).endswith("gewählt."):
+                    return chosen
+            if ledger.unsaved:
+                note += "Das Gerät spielt den Stand vom letzten Speichern. "
         if ledger.project_selected_at is not None:
             wait = PROJECT_LOAD_S - (time.monotonic() - ledger.project_selected_at)
             ledger.project_selected_at = None
@@ -91,6 +105,11 @@ def register_device_tools(bridge: Bridge) -> None:
         ledger.device_dirty = False
         if device_running:
             ledger.device_bpm[number] = ledger.bpm  # loaded while running: keeps the current tempo
+            known = ledger.saved_bpm.get(number)
+            if known and known != ledger.bpm:  # a project saved from here: follow its tempo
+                changed = await backend.call("set_clock_bpm", {"bpm": known})
+                if not changed.is_error:
+                    ledger.bpm = ledger.device_bpm[number] = known
             when = "sofort" if immediate else "am Ende des Patterns"
             return f"Projekt {number} kommt {when}."
         # Loaded while stopped: the project brings its own tempo. We know it for projects saved

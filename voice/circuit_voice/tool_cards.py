@@ -65,7 +65,7 @@ def _fill_start(args: dict[str, Any], ledger: Any) -> dict[str, Any]:
             raise ArgumentError("Es ist kein Song geladen. Lade erst einen Song oder lass einen bauen.")
         out["pattern"] = first
     if not out.get("bpm"):
-        out["bpm"] = ledger.bpm or 120
+        out["bpm"] = getattr(ledger, "song_bpm", None) or ledger.bpm or 120  # the song's tempo, not the device's
     return out
 
 

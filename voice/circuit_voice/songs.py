@@ -165,6 +165,8 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
             await capture_live_sounds(bridge)
         # The export writes the server's last loaded song; reload ours so step edits are included.
         if ledger.song_json is not None:
+            if ledger.song_bpm:  # tempo changes made by voice belong in the project (40-240 in the file)
+                ledger.song_json["bpm"] = max(40, min(240, int(round(ledger.song_bpm))))
             reload = await backend.call("load_song", {"song": copy.deepcopy(ledger.song_json)})
             if reload.is_error:
                 return f"Speichern fehlgeschlagen, der Song ist nicht mehr gültig: {reload.text[:200]}"
@@ -173,9 +175,9 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
             return f"Speichern fehlgeschlagen: {result.text}"
         ledger.saved(slot)
         ledger.device_dirty = False
-        if ledger.bpm:
-            ledger.device_bpm[slot] = float(ledger.bpm)
-            ledger.saved_bpm[slot] = float(ledger.bpm)
+        tempo = ledger.song_bpm or ledger.bpm
+        if tempo:
+            ledger.device_bpm[slot] = ledger.saved_bpm[slot] = float(tempo)
         tail = " Der Sequenzer ist dafür gestoppt; sag Start, oder ich spiele es vom Gerät ab." if stopped else ""
         return f"Gespeichert in Slot {slot} als '{name}'.{tail}"
 

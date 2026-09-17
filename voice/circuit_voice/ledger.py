@@ -89,6 +89,8 @@ class Ledger:
         elif tool == "set_bpm":
             self._param_change("tempo", {"bpm": float(args["bpm"])}, tool, {}, "Tempo")
             self.bpm = float(args["bpm"])
+            self.song_bpm = self.bpm  # set_bpm is the internal sequencer's tempo: it belongs to the song
+            self.unsaved = True
         elif tool == "mute_track":
             track, muted = args["track"], bool(args.get("muted", True))
             self.mutes[track] = muted
@@ -144,7 +146,7 @@ class Ledger:
         if change.tool == "mute_track":
             self.mutes[change.revert["track"]] = change.revert["muted"]
         elif change.tool == "set_bpm":
-            self.bpm = change.revert["bpm"]
+            self.bpm = self.song_bpm = change.revert["bpm"]
             self.known.get("tempo", {})["bpm"] = change.revert["bpm"]
         elif "params" in change.revert:
             scope = self._scope_for(change)

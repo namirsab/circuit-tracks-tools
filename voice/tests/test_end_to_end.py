@@ -150,3 +150,40 @@ async def test_compose_loads_and_restarts_and_revise_edits_in_place(server):
         out = await bridge.dispatch("compose", {"brief": "Unmöglich", "confirmed": True})
         assert "nicht geklappt" in out.response["result"]
         assert ledger.composer_job is None
+
+
+async def test_tempo_change_is_saved_and_play_from_device_selects_the_saved_project(server, monkeypatch):
+    """Hardware 2026-09-17: 174 BPM was set, the project was saved with 120, and 'play it on the
+    device' started whatever project was loaded at the tempo of slot 1."""
+    from circuit_tracks.constants import PROJECT_CHANNEL
+
+    exported = []
+
+    def fake_export(song, midi, slot=0, name="", template_path=None):
+        exported.append(song.bpm)
+        return {"status": "ok", "bytes": 1}
+
+    def no_read(midi):
+        raise AssertionError("must not read the tempo from the device")
+
+    monkeypatch.setattr("circuit_tracks.song.export_song_to_device", fake_export)
+    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", no_read)
+    monkeypatch.setattr("circuit_voice.device_tools.PROJECT_LOAD_S", 0.0)
+    async with agent(server) as (bridge, ledger, midi):
+        await bridge.dispatch("load_saved_song", {"name": "Ethereal Drift"})
+        await bridge.dispatch("set_bpm", {"bpm": 174})
+        await bridge.dispatch("save_to_device", {"slot": 22, "confirmed": True})
+        assert exported == [174]
+        midi.messages.clear()
+        out = await bridge.dispatch("transport", {"action": "start"})
+        assert ("pc", PROJECT_CHANNEL, 21) in midi.messages
+        assert "Projekt 22" in out.response["result"] and "174" in out.response["result"]
+        await bridge.dispatch("transport", {"action": "stop"})
+
+
+async def test_device_start_with_an_unsaved_song_explains_instead_of_playing_something_else(server):
+    async with agent(server) as (bridge, ledger, midi):
+        await bridge.dispatch("load_saved_song", {"name": "Ethereal Drift"})
+        out = await bridge.dispatch("transport", {"action": "start"})
+        assert "noch nicht auf dem Gerät" in out.response["result"]
+        assert ledger.running is False and ("realtime", "start") not in midi.messages
