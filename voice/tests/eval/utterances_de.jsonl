@@ -77,3 +77,10 @@
 {"say": "Kannst du ein neues leeres Pattern anlegen?", "tool": "add_pattern", "args": {}, "state": "loaded"}
 {"say": "Mach Synth eins bitte polyphon.", "tool": "set_synth_params", "args": {"synth": 1, "params": "*"}, "state": "loaded"}
 {"say": "Der Sound auf Synth eins braucht ein bisschen mehr Release.", "tool": "set_synth_params", "args": {"synth": 1, "params": "*"}, "state": "loaded"}
+{"say": "Lass uns einen neuen Song mystisch bauen.", "tool": "new_song", "args": {}, "state": "loaded"}
+{"say": "Ich möchte einen neuen Song anfangen.", "tool": "new_song", "args": {}, "state": "loaded"}
+{"say": "Okay, ich möchte jetzt Kicks, nicht so viele, aber genug.", "tool": "write_drums", "args": {"track": "drum1", "steps": "*"}, "state": "loaded"}
+{"say": "Ich möchte jetzt die passende Snare dazu.", "tool": "write_drums", "args": {"track": "drum2", "steps": "*"}, "state": "loaded"}
+{"say": "King of Queens.", "tool": null, "state": "loaded"}
+{"say": "llave", "tool": null, "state": "loaded"}
+{"say": "comprehensive", "tool": null, "state": "loaded"}

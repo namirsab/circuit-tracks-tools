@@ -146,3 +146,62 @@ def test_every_synth_parameter_named_in_the_hints_exists():
         named |= set(group.split("/"))
     named -= {"set_macro"}
     assert named and named <= known, sorted(named - known)
+
+
+async def test_overwriting_needs_the_users_own_clear_yes(server, monkeypatch):
+    """Hardware 2026-09-17: the transcript 'llave' was passed on as a yes and slot 25 was overwritten."""
+    from pathlib import Path
+
+    from circuit_voice.songs import SongLibrary, register_song_tools
+
+    exported = []
+    monkeypatch.setattr(
+        "circuit_tracks.song.export_song_to_device", lambda song, midi, slot=0, **kw: exported.append(slot) or {}
+    )
+    monkeypatch.setattr("circuit_voice.songs.SETTLE_S", 0.0)
+    async with McpBackend("inproc") as backend:
+        bridge = Bridge(backend, profile="full")
+        await bridge.prepare()
+        register_song_tools(bridge, SongLibrary(Path(__file__).parent / "songs"))
+        await bridge.dispatch("load_saved_song", {"name": "Minimal"})
+
+        bridge.listening_started()
+        bridge.heard("Speicher das in Slot 25.")
+        out = await bridge.dispatch("save_to_device", {"slot": 25, "confirmed": True})  # nobody was asked yet
+        assert "needs_confirmation" in out.response["result"] and exported == []
+
+        bridge.listening_started()
+        bridge.heard("llave")
+        out = await bridge.dispatch("save_to_device", {"slot": 25, "confirmed": True})
+        assert "not a clear yes" in out.response["error"] and exported == []
+
+        bridge.listening_started()
+        bridge.heard("Yo.")
+        out = await bridge.dispatch("save_to_device", {"slot": 25, "confirmed": True})
+        assert "Gespeichert" in out.response["result"] and exported == [24]
+
+        await bridge.dispatch("save_to_device", {"slot": 26})
+        bridge.listening_started()
+        bridge.heard("Nein, lieber nicht.")
+        bridge.listening_started()
+        bridge.heard("Ja.")  # a yes to nothing: the question was dropped by the no
+        out = await bridge.dispatch("save_to_device", {"slot": 26, "confirmed": True})
+        assert "needs_confirmation" in out.response["result"] and exported == [24]
+
+
+def test_what_counts_as_yes():
+    from circuit_voice.bridge import heard_yes
+
+    for text in ("Ja, bitte.", "Mach.", "Mach bitte.", "Yo", "Okay.", "Bitte", "jo klar", "Ja, speichern."):
+        assert heard_yes(text) is True, text
+    for text in ("Nein.", "Nee, lieber nicht", "Stopp", "ja nein warte"):
+        assert heard_yes(text) is False, text
+    for text in (
+        "llave",
+        "luz",
+        "¿Qué?",
+        "King of Queens",
+        "",
+        "Ich möchte bitte jetzt lieber einen ganz anderen Bass haben",
+    ):
+        assert heard_yes(text) is not True, text

@@ -132,6 +132,8 @@ class Session:
 
     def _handle_listen_event(self, name: str) -> None:
         self.emit(name)
+        if name == "listen_start":
+            self.bridge.listening_started()
         if name == "listen_stop":
             self._listen_stop_at = self._clock()
         self.player.play_earcon(name)
@@ -286,6 +288,7 @@ class Session:
             self.emit("interrupted")
         if sc.input_transcription is not None and sc.input_transcription.text:
             self.emit("input_transcript", text=sc.input_transcription.text)
+            self.bridge.heard(sc.input_transcription.text)
         if sc.output_transcription is not None and sc.output_transcription.text:
             self.emit("output_transcript", text=sc.output_transcription.text)
         if sc.model_turn is not None:

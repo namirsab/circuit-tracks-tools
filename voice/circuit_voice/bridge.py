@@ -10,6 +10,7 @@ route to a virtual handler or the MCP tool, and wrap the outcome in the
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -26,6 +27,28 @@ from .tool_cards import ArgumentError, ToolCard, cards_for_profile, normalise_pr
 log = logging.getLogger("circuit_voice.bridge")
 
 REPEAT_WINDOW_S = 30.0  # identical calls without progress inside this window count as a loop
+
+HEARD_WAIT_S = 1.5  # how long a confirmed call waits for the transcript of what the user said
+YES_MAX_WORDS = 8  # a yes is short; a longer sentence is a new request
+_YES = (
+    "ja jaa jawohl jo joa yo jep jup yes yeah yep ok okay oke klar mach machs mache bitte gerne gern genau los "
+    "passt einverstanden sicher richtig stimmt si sí go bestätige bestätigt speichern speicher überschreiben"
+)
+_NO = "nein nee ne nö no nicht stopp stop halt abbrechen abbruch warte lieber doch"
+YES_WORDS = frozenset(_YES.split())
+NO_WORDS = frozenset(_NO.split())
+
+
+def heard_yes(text: str) -> bool | None:
+    """True for a clear yes, False for a clear no, None when it is neither (or not understood)."""
+    words = [w.strip(".,!?;:'\"()").lower() for w in text.split()]
+    words = [w for w in words if w]
+    if any(w in NO_WORDS for w in words):
+        return False
+    if 0 < len(words) <= YES_MAX_WORDS and any(w in YES_WORDS for w in words):
+        return True
+    return None
+
 
 VirtualHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 
@@ -59,6 +82,8 @@ class Bridge:
         self._last_at = 0.0
         self._last_stuck = False
         self._repeats = 0
+        self._heard: str | None = None  # what the user said last; None when there is no transcript at all
+        self._asked: set[str] = set()  # tools whose question is waiting for an answer
         if "get_state" in self.cards:
             self._virtual["get_state"] = self._get_state
         if "undo_last" in self.cards:
@@ -126,6 +151,42 @@ class Bridge:
     def register_virtual(self, name: str, handler: VirtualHandler) -> None:
         self._virtual[name] = handler  # cards decide what the model may call; handlers may outlive a profile
 
+    # --- what the user said, for confirmations ---
+
+    def listening_started(self) -> None:
+        self._heard = ""
+        self._last_key, self._repeats = None, 0  # the user speaks: the same call again is not a loop
+
+    def heard(self, text: str) -> None:
+        self._heard = ((self._heard or "") + " " + text).strip()
+        if self._asked and heard_yes(self._heard) is False:
+            self._asked.clear()  # a clear no drops the open question
+
+    async def _check_confirmation(self, name: str, args: dict[str, Any]) -> dict[str, Any] | str:
+        """Overwriting and long jobs need the user's own clear yes, not the model's impression of one.
+
+        Seen on hardware: the transcript "llave" was passed on as a yes and a project slot was
+        overwritten; another time the model confirmed a job nobody had been asked about.
+        Returns the arguments to run with, or the error text for the model.
+        """
+        if not args.get("confirmed") or self._heard is None:
+            return args  # nothing to check, or no transcripts in this setup (text mode, tests)
+        if name not in self._asked:
+            return {k: v for k, v in args.items() if k != "confirmed"}  # ask first
+        waited = 0.0
+        while not self._heard and waited < HEARD_WAIT_S:  # the transcript can trail the tool call
+            await asyncio.sleep(0.1)
+            waited += 0.1
+        if not self._heard:
+            log.warning("confirmed %s without a transcript of the answer", name)
+            return args
+        if heard_yes(self._heard):
+            return args
+        return (
+            f"Not confirmed: the user said '{self._heard[:80]}', which is not a clear yes. Do not run it. Ask the "
+            "same question again in one short German sentence and wait for the answer."
+        )
+
     async def dispatch(self, name: str, args: dict[str, Any] | None) -> Dispatch:
         """Run one tool call, and stop a model that repeats a call which made no progress.
 
@@ -149,8 +210,16 @@ class Bridge:
                 },
                 True,
             )
-        out = await self._dispatch(name, args)
+        checked = await self._check_confirmation(name, dict(args or {}))
+        if isinstance(checked, str):
+            self._last_stuck = True
+            return Dispatch(name, {"error": checked}, self.is_blocking(name))
+        out = await self._dispatch(name, checked)
         result = out.response.get("result")
+        if isinstance(result, dict) and "needs_confirmation" in result:
+            self._asked.add(name)
+        elif checked.get("confirmed"):
+            self._asked.discard(name)
         self._last_stuck = "error" in out.response or (isinstance(result, dict) and "needs_confirmation" in result)
         return out
 
