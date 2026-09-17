@@ -42,7 +42,7 @@ from circuit_tracks.ncs_parser import (
     set_scene_chain,
 )
 from circuit_tracks.ncs_transfer import send_ncs_project
-from circuit_tracks.patch import _PARAM_OFFSETS, send_current_patch
+from circuit_tracks.patch import _PARAM_OFFSETS, parse_patch_routing, send_current_patch
 from circuit_tracks.patch_builder import (
     PatchBuilder,
     preset_bass,
@@ -1015,12 +1015,6 @@ def _parse_embedded_patch(patch_bytes: bytes) -> SoundConfig | None:
     if len(patch_bytes) < 340:
         return None
 
-    from circuit_tracks.constants import (
-        MACRO_DESTINATIONS,
-        MOD_MATRIX_DESTINATIONS,
-        MOD_MATRIX_SOURCES,
-    )
-
     # Extract name (bytes 0-15 ASCII)
     name = ""
     for b in patch_bytes[0:16]:
@@ -1037,60 +1031,7 @@ def _parse_embedded_patch(patch_bytes: bytes) -> SoundConfig | None:
         if offset < len(patch_bytes):
             params[param_name] = patch_bytes[offset]
 
-    # Extract mod matrix (20 slots, 4 bytes each, starting at offset 124)
-    _MOD_START = 124
-    _MOD_SLOTS = 20
-    mod_matrix: list[dict] = []
-    for i in range(_MOD_SLOTS):
-        addr = _MOD_START + i * 4
-        source = patch_bytes[addr]
-        source2 = patch_bytes[addr + 1]
-        raw_depth = patch_bytes[addr + 2]
-        dest = patch_bytes[addr + 3]
-        # Skip empty slots (depth 64 = no modulation, source 0 + dest 0)
-        if raw_depth == 64 and source == 0 and dest == 0:
-            continue
-        entry: dict = {
-            "source": MOD_MATRIX_SOURCES.get(source, source),
-            "dest": MOD_MATRIX_DESTINATIONS.get(dest, dest),
-            "depth": raw_depth - 64,  # Convert raw 0-127 to signed -64..+63
-        }
-        if source2 != 0:
-            entry["source2"] = MOD_MATRIX_SOURCES.get(source2, source2)
-        mod_matrix.append(entry)
-
-    # Extract macros (8 macros, 17 bytes each, starting at offset 204)
-    _MACRO_START = 204
-    _MACRO_COUNT = 8
-    _MACRO_SIZE = 17
-    _MACRO_TARGETS = 4
-    macros: dict[str, dict] = {}
-    for m in range(_MACRO_COUNT):
-        base = _MACRO_START + m * _MACRO_SIZE
-        position = patch_bytes[base]
-        targets: list[dict] = []
-        for t in range(_MACRO_TARGETS):
-            tb = base + 1 + t * 4
-            dest_idx = patch_bytes[tb]
-            start = patch_bytes[tb + 1]
-            end = patch_bytes[tb + 2]
-            depth = patch_bytes[tb + 3]
-            # Skip empty targets (dest=0, start=0, end=127, depth=64 is sentinel)
-            if dest_idx == 0 and start == 0 and end == 127 and depth == 64:
-                continue
-            targets.append(
-                {
-                    "dest": MACRO_DESTINATIONS.get(dest_idx, dest_idx),
-                    "start": start,
-                    "end": end,
-                    "depth": depth,
-                }
-            )
-        if targets:
-            macro_cfg: dict = {"targets": targets}
-            if position != 0:
-                macro_cfg["position"] = position
-            macros[str(m + 1)] = macro_cfg
+    mod_matrix, macros = parse_patch_routing(patch_bytes)
 
     return SoundConfig(
         name=name if name else None,

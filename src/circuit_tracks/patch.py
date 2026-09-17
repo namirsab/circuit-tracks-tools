@@ -185,6 +185,78 @@ def request_current_patch(midi: MidiConnection, synth: int) -> list[int] | None:
     return midi.sysex_request(request, timeout_s=3.0, match_fn=match)
 
 
+def parse_patch_routing(patch_bytes: bytes | list[int]) -> tuple[list[dict], dict[str, dict]]:
+    """Read the mod matrix and the macro knob routing out of a 340-byte patch.
+
+    Returns ``(mod_matrix, macros)`` in the song format: mod entries with
+    ``source``/``dest``/``depth`` (-64..63) and optional ``source2``; macros keyed
+    "1"-"8" with ``targets`` (``dest``, ``start``, ``end``, ``depth``) and an
+    optional ``position``. Empty slots and knobs without targets are left out.
+    """
+    from circuit_tracks.constants import (  # noqa: PLC0415
+        MACRO_DESTINATIONS,
+        MOD_MATRIX_DESTINATIONS,
+        MOD_MATRIX_SOURCES,
+    )
+
+    # Extract mod matrix (20 slots, 4 bytes each, starting at offset 124)
+    _MOD_START = 124
+    _MOD_SLOTS = 20
+    mod_matrix: list[dict] = []
+    for i in range(_MOD_SLOTS):
+        addr = _MOD_START + i * 4
+        source = patch_bytes[addr]
+        source2 = patch_bytes[addr + 1]
+        raw_depth = patch_bytes[addr + 2]
+        dest = patch_bytes[addr + 3]
+        # Skip empty slots (depth 64 = no modulation, source 0 + dest 0)
+        if raw_depth == 64 and source == 0 and dest == 0:
+            continue
+        entry: dict = {
+            "source": MOD_MATRIX_SOURCES.get(source, source),
+            "dest": MOD_MATRIX_DESTINATIONS.get(dest, dest),
+            "depth": raw_depth - 64,  # Convert raw 0-127 to signed -64..+63
+        }
+        if source2 != 0:
+            entry["source2"] = MOD_MATRIX_SOURCES.get(source2, source2)
+        mod_matrix.append(entry)
+
+    # Extract macros (8 macros, 17 bytes each, starting at offset 204)
+    _MACRO_START = 204
+    _MACRO_COUNT = 8
+    _MACRO_SIZE = 17
+    _MACRO_TARGETS = 4
+    macros: dict[str, dict] = {}
+    for m in range(_MACRO_COUNT):
+        base = _MACRO_START + m * _MACRO_SIZE
+        position = patch_bytes[base]
+        targets: list[dict] = []
+        for t in range(_MACRO_TARGETS):
+            tb = base + 1 + t * 4
+            dest_idx = patch_bytes[tb]
+            start = patch_bytes[tb + 1]
+            end = patch_bytes[tb + 2]
+            depth = patch_bytes[tb + 3]
+            # Skip empty targets (dest=0, start=0, end=127, depth=64 is sentinel)
+            if dest_idx == 0 and start == 0 and end == 127 and depth == 64:
+                continue
+            targets.append(
+                {
+                    "dest": MACRO_DESTINATIONS.get(dest_idx, dest_idx),
+                    "start": start,
+                    "end": end,
+                    "depth": depth,
+                }
+            )
+        if targets:
+            macro_cfg: dict = {"targets": targets}
+            if position != 0:
+                macro_cfg["position"] = position
+            macros[str(m + 1)] = macro_cfg
+
+    return mod_matrix, macros
+
+
 def parse_patch_data(sysex_data: list[int]) -> dict:
     """Parse a SysEx patch dump response into named parameter values.
 
@@ -192,7 +264,8 @@ def parse_patch_data(sysex_data: list[int]) -> dict:
         sysex_data: Raw SysEx data (without F0/F7) from the device or file.
 
     Returns:
-        Dict with 'name', 'category', 'genre', 'params', and 'raw_hex'.
+        Dict with 'name', 'category', 'genre', 'params', 'mod_matrix', 'macros'
+        (the routing, in the song format) and 'raw_params_hex_first_100'.
     """
     # Patch binary starts at byte 8 (after: manufacturer[3] + product[2] + cmd + index + 0)
     patch_start = 8
@@ -215,6 +288,8 @@ def parse_patch_data(sysex_data: list[int]) -> dict:
         if addr < len(patch_bytes):
             params[param_name] = patch_bytes[addr]
 
+    mod_matrix, macros = parse_patch_routing(patch_bytes[:_PATCH_SIZE])
+
     # Raw hex of the parameter region for inspection
     raw_param_hex = " ".join(f"{b:02x}" for b in patch_bytes[_PATCH_PARAMS_OFFSET : _PATCH_PARAMS_OFFSET + 100])
 
@@ -223,6 +298,8 @@ def parse_patch_data(sysex_data: list[int]) -> dict:
         "category": category,
         "genre": genre,
         "params": params,
+        "mod_matrix": mod_matrix,
+        "macros": macros,
         "raw_params_hex_first_100": raw_param_hex,
     }
 

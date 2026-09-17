@@ -382,3 +382,25 @@ class TestClamping:
     def test_negative_clamped(self):
         patch = PatchBuilder().filter(frequency=-10).build()
         assert patch[64] == 0  # min is 0
+
+
+def test_patch_dump_returns_the_macro_routing_and_mod_matrix():
+    """A dump used to return parameter values only, so a patch rebuilt from it had dead macro knobs."""
+    from circuit_tracks.patch import parse_patch_data
+    from circuit_tracks.song import SoundConfig, _build_patch_bytes
+
+    patch = (
+        PatchBuilder("Routing")
+        .add_mod(source="LFO 1+", destination="filter frequency", depth=84)  # raw 84 = +20
+        .set_macro(5, [{"dest": "filter_frequency", "start": 10, "end": 90}], position=30)
+        .build()
+    )
+    parsed = parse_patch_data([0] * 8 + list(patch))
+    assert parsed["macros"] == {
+        "5": {"targets": [{"dest": "filter_frequency", "start": 10, "end": 90, "depth": 127}], "position": 30}
+    }
+    assert [(m["dest"], m["depth"]) for m in parsed["mod_matrix"]] == [("filter frequency", 20)]
+
+    # and the routing survives the way a project save uses it: dump -> song sound -> patch bytes
+    rebuilt = _build_patch_bytes(SoundConfig(name="Routing", params=parsed["params"], macros=parsed["macros"]))
+    assert parse_patch_data([0] * 8 + list(rebuilt))["macros"] == parsed["macros"]
