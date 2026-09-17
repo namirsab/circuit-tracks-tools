@@ -116,6 +116,7 @@ class Session:
         self._tasks: dict[str, asyncio.Task] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self._listen_stop_at: float | None = None
+        self._ending: asyncio.Task[None] | None = None
         self._reconnect = False
         listen._on_event = self._listen_event  # events arrive from the hotkey thread
 
@@ -133,15 +134,30 @@ class Session:
         self.emit(name)
         if name == "listen_stop":
             self._listen_stop_at = self._clock()
-        self.player.play_earcon(name)
         live = self._live
-        if live is not None and self.config.mode != "open":
-            signal = (
-                {"activity_start": types.ActivityStart()}
-                if name == "listen_start"
-                else {"activity_end": types.ActivityEnd()}
-            )
-            self._loop.create_task(live.send_realtime_input(**signal))
+        manual = live is not None and self.config.mode != "open"
+        if name == "listen_start":
+            self.player.play_earcon(name)
+            pending, self._ending = self._ending, None
+            if pending is not None and not pending.done():
+                pending.cancel()  # pressed again inside the tail: same utterance goes on
+            elif manual:
+                self._loop.create_task(live.send_realtime_input(activity_start=types.ActivityStart()))
+        else:
+            self._ending = self._loop.create_task(self._end_utterance(live if manual else None, name))
+
+    async def _end_utterance(self, live: Any, earcon: str) -> None:
+        """Let the tail of the sentence through, then the tone, then tell the model we are done."""
+        await asyncio.sleep(self.listen.tail_s)
+        queue = getattr(self.mic, "_queue", None)
+        for _ in range(20):  # frames already captured must go out before activity_end
+            if queue is None or queue.empty():
+                break
+            await asyncio.sleep(0.01)
+        self.listen.close_tail()
+        self.player.play_earcon(earcon)
+        if live is not None:
+            await live.send_realtime_input(activity_end=types.ActivityEnd())
 
     # --- lifecycle ---
 

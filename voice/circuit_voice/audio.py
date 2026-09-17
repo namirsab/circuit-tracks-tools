@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import contextlib
 import math
 import sys
 import time
@@ -190,7 +191,10 @@ class MicStream:
         if self._rate != IN_RATE:
             samples = resample(samples, self._rate, IN_RATE)
         if not self._gate():
-            self._framer.buffer = b""
+            rest, self._framer.buffer = self._framer.buffer, b""
+            if rest:  # the last partial frame of an utterance still belongs to it
+                with contextlib.suppress(RuntimeError):
+                    self._loop.call_soon_threadsafe(self._enqueue, rest)
             return
         for frame in self._framer.push(samples.tobytes()):
             try:

@@ -5,8 +5,17 @@ from __future__ import annotations
 from circuit_voice.listen import ListenController, key_name
 
 
+class Clock:
+    def __init__(self):
+        self.now = 100.0
+
+    def __call__(self):
+        return self.now
+
+
 def make(mode, **kw):
     events = []
+    kw.setdefault("clock", Clock())
     ctl = ListenController(mode, key="alt_r", max_utterance_s=5, on_event=events.append, **kw)
     return ctl, events
 
@@ -18,6 +27,8 @@ def test_ptt_hold_and_release():
     ctl.key_down("alt_r")  # key repeat
     assert ctl.forwarding is True
     ctl.key_up("alt_r")
+    assert ctl.forwarding is True  # the tail of the sentence still goes through
+    ctl._clock.now += 0.5
     assert ctl.forwarding is False
     assert events == ["listen_start", "listen_stop"]
 
@@ -37,6 +48,7 @@ def test_toggle_press_press_and_auto_stop():
     assert ctl.forwarding is True
     ctl.key_down("alt_r")
     ctl.key_up("alt_r")
+    now[0] += 0.5
     assert ctl.forwarding is False
     assert events == ["listen_start", "listen_stop"]
     ctl.key_down("alt_r")
@@ -46,6 +58,7 @@ def test_toggle_press_press_and_auto_stop():
     assert ctl.forwarding is True
     now[0] += 1.5
     ctl.tick()
+    now[0] += 0.5  # past the tail
     assert ctl.forwarding is False
     assert events[-1] == "listen_stop"
 
@@ -66,6 +79,7 @@ def test_set_mode_switch_stops_listening_cleanly():
     assert events == ["listen_start", "listen_stop"]
     assert ctl.mode == "open" and ctl.forwarding is True
     ctl.set_mode("toggle")
+    ctl._clock.now += 0.5  # past the tail
     assert ctl.forwarding is False
 
 
