@@ -56,6 +56,15 @@ def test_resumption_handle_and_text_mode():
     assert t.tools[0].function_declarations[0].name == "set_bpm"
 
 
+def test_history_is_a_short_sliding_window():
+    # Old audio turns must leave the context: 56k tokens per pass and $10.75/h on 2026-09-20.
+    c = build_live_config(cfg("ptt"), DECL)
+    window = c.context_window_compression
+    assert window.trigger_tokens <= 24_000
+    assert window.sliding_window.target_tokens <= 12_000
+    assert "get_state" in c.system_instruction.parts[0].text
+
+
 def test_prompt_contains_the_rules():
     for needle in ["1 bis 64", "confirmed=true", "nur eine Quelle", "Cutoff", "Rückgängig", "compose"]:
         assert needle in SYSTEM_INSTRUCTION_DE, needle

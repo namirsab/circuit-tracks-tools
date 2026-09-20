@@ -29,7 +29,12 @@ from .prompt_de import GOODBYE_DE, system_instruction
 
 log = logging.getLogger("circuit_voice.session")
 
-COMPRESSION_TRIGGER_TOKENS = 100_000
+# Every pass re-sends the whole history and the user's audio turns dominate it: a 19-minute session
+# reached 56k tokens per pass and $10.75/h on 2026-09-20 without ever hitting the old 100k trigger.
+# The ledger (get_state) is the memory, so the window can be short. Live counts the system instruction
+# and tool declarations (~7k) in the total; the target keeps roughly the last few exchanges.
+COMPRESSION_TRIGGER_TOKENS = 20_000
+COMPRESSION_TARGET_TOKENS = 12_000
 AUDIO_MIME = "audio/pcm;rate=16000"
 
 
@@ -77,7 +82,8 @@ def build_live_config(
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),
         context_window_compression=types.ContextWindowCompressionConfig(
-            sliding_window=types.SlidingWindow(), trigger_tokens=COMPRESSION_TRIGGER_TOKENS
+            sliding_window=types.SlidingWindow(target_tokens=COMPRESSION_TARGET_TOKENS),
+            trigger_tokens=COMPRESSION_TRIGGER_TOKENS,
         ),
         session_resumption=types.SessionResumptionConfig(handle=resumption_handle),
     )
