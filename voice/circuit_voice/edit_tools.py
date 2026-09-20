@@ -25,6 +25,43 @@ _NOTE_RE = re.compile(r"^([A-Ha-h])(#|b|is|es|s)?(-?\d)?$")
 DEFAULT_LENGTH = 32
 RESTS = {"", "-", "_", ".", "leer", "pause", "rest", "none", "null", "x"}
 SYNTH_TRACKS = ("synth1", "synth2", "midi1", "midi2")
+# The factory samples are named by family (08_HousePercA1.wav); spoken kinds that have no family of
+# their own map to the nearest one. Longer kinds first so "OHH" is not read as "HH".
+SAMPLE_KINDS = ("OHH", "Kick", "Snare", "Clap", "Perc", "Bass", "Mel", "HH")
+SAMPLE_ALIASES = {
+    "shaker": "perc",
+    "tambourine": "perc",
+    "tamburin": "perc",
+    "conga": "perc",
+    "bongo": "perc",
+    "tom": "perc",
+    "rimshot": "perc",
+    "cowbell": "perc",
+    "kuhglocke": "perc",
+    "hihat": "hh",
+    "hat": "hh",
+    "openhat": "ohh",
+    "offenehihat": "ohh",
+    "becken": "ohh",
+    "ride": "ohh",
+    "crash": "ohh",
+    "klatschen": "clap",
+    "bassdrum": "kick",
+    "kickdrum": "kick",
+    "bumm": "kick",
+}
+
+
+def sample_kinds(name: str) -> list[str]:
+    """The families a sample name belongs to ('05_HouseHHB1.wav' -> ['HH'])."""
+    lower = name.lower()
+    found: list[str] = []
+    for kind in SAMPLE_KINDS:
+        if kind.lower() in lower and not (kind == "HH" and "OHH" in found):
+            found.append(kind)
+    return found
+
+
 DRUM_TRACKS = ("drum1", "drum2", "drum3", "drum4")
 
 
@@ -371,10 +408,15 @@ def register_edit_tools(bridge: Bridge) -> None:
                 raise ArgumentError("Sag mir die Sample-Nummer (1 bis 64) oder ein Wort aus dem Namen.")
             listing = await backend.call("list_drum_samples", {})
             samples = (listing.data or {}).get("samples", {}) if isinstance(listing.data, dict) else {}
-            hits = [(int(k), v) for k, v in samples.items() if query in str(v).lower()]
+            wanted = SAMPLE_ALIASES.get(query.replace("-", "").replace(" ", ""), query)
+            hits = [(int(k), v) for k, v in samples.items() if wanted in str(v).lower()]
             if not hits:
-                return f"Kein Sample-Name enthält '{query}'. Frag mit list_drum_samples nach den Namen."
+                # Not a listing: 64 names in the model's context cost $0.28 for one question (2026-09-20).
+                kinds = sorted({kind for name in samples.values() for kind in sample_kinds(str(name))})
+                return f"Kein Sample heißt '{query}'. Es gibt: {', '.join(kinds) or 'keine Namen'}."
             number, label = hits[0][0] + 1, str(hits[0][1])
+            if wanted != query:
+                label += f", {wanted.capitalize()} statt {query.capitalize()}"
         number = _int_in_range({"n": number}, "n", 1, 64, "Die Sample-Nummer")
         sounds = data.setdefault("sounds", {})
         entry = dict(sounds.get(f"drum{drum}") or {})

@@ -298,7 +298,8 @@ CARDS: list[ToolCard] = [
     ),
     ToolCard(
         "list_drum_samples",
-        "The drum samples on the device by number and name (64 per page of the bank, page 1-4).",
+        "The drum samples on the device by number and name (16 per page, page 1-4). Only when the user asks for "
+        "the names; to pick a sample use set_drum_sample by kind (Kick, Snare, HH, OHH, Clap, Perc).",
         mcp_tool="list_drum_samples",
         read_only=True,
     ),

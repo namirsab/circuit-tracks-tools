@@ -154,6 +154,15 @@ async def test_velocities_set_step_and_drum_sample(server):
         assert ledger.song_json["sounds"]["drum2"]["sample"] == 2
         out = await bridge.dispatch("set_drum_sample", {"drum": 1, "number": 64})
         assert ledger.song_json["sounds"]["drum1"]["sample"] == 63
+        # "Shaker" matched nothing and the model paged through all 64 names ($0.28, 2026-09-20):
+        # spoken kinds map to the sample families, and an unknown word gets the families, not a listing.
+        out = await bridge.dispatch("set_drum_sample", {"drum": 4, "name": "Shaker"})
+        assert "Perc" in out.response["result"] and "statt Shaker" in out.response["result"]
+        assert ledger.song_json["sounds"]["drum4"]["sample"] == 8
+        out = await bridge.dispatch("set_drum_sample", {"drum": 4, "name": "Xylophon"})
+        text = out.response["result"]
+        assert "list_drum_samples" not in text and "Kick" in text and "Perc" in text
+        assert ledger.song_json["sounds"]["drum4"]["sample"] == 8
 
 
 async def test_save_captures_live_patches_and_drum_values(server, monkeypatch):
