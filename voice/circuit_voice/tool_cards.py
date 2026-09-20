@@ -141,7 +141,8 @@ CARDS: list[ToolCard] = [
     ),
     ToolCard(
         "set_drum_params",
-        "Set drum parameters on drum 1-4 (0-127): level (leiser/lauter), pitch, decay, distortion, eq, pan.",
+        "Set drum parameters on drum 1-4 (0-127): level (leiser/lauter), pitch, decay, distortion, eq, pan. "
+        "eq is a tilt: 0 = only lows pass (dumpf, mehr Bass), 64 = flat, 127 = only highs (hell, dünn).",
         mcp_tool="set_drum_params",
     ),
     ToolCard(
@@ -222,7 +223,8 @@ CARDS: list[ToolCard] = [
         'once. A rest is an empty string "": it keeps its place (\'C3 C3 leer leer C4\' = ["C3","C3","","","C4"]). '
         "spacing = steps between entries (4 = every beat, 2 = eighths, 1 = every step), start_step "
         "is spoken 1-based; without it the notes are appended after the last one. gate defaults to the spacing. "
-        "replace=true clears the track first.",
+        "A note held 'für 12 Schritte' or 'lang' is ONE entry with gate 12 (max 16) and spacing 12, not 12 "
+        "repeated entries. replace=true clears the track first.",
         schema=_obj(
             {
                 "pattern": {"type": "string", "description": "pattern name; default: the pattern last worked on"},

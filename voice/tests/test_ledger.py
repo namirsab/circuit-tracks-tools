@@ -51,6 +51,18 @@ def test_summary_internal_merges_status():
     assert "nicht gespeichert" in text
 
 
+def test_summary_names_the_new_value_of_the_last_change_not_the_old_one():
+    # "Drum 4: eq wieder auf 100" in get_state made the model believe eq was back at 100 (2026-09-20).
+    lg = Ledger()
+    lg.song_loaded("Nachtfahrt", 118, ["intro"], ["intro"])
+    lg.observe("set_drum_params", {"drum": 4, "params": {"eq": 100}}, "ok")
+    lg.observe("set_drum_params", {"drum": 4, "params": {"eq": 0}}, "ok")
+    text = lg.summary_de()
+    assert "letzte Änderung: Drum 4: eq auf 0 (vorher 100)" in text
+    assert "wieder auf" not in text
+    assert lg.history[-1].text_de == "Drum 4: eq wieder auf 100"  # what undo says
+
+
 async def test_undo_reverts_the_last_known_change(server):
     async with make(server) as (b, lg, midi):
         await b.dispatch("set_synth_params", {"synth": 1, "params": {"filter_frequency": 60}})

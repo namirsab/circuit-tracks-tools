@@ -31,7 +31,8 @@ class Change:
     tool: str
     args: dict[str, Any]  # arguments as sent to the backend
     revert: dict[str, Any] | None  # arguments that undo it, None when the previous value is unknown
-    text_de: str  # "Filter auf Synth 1 wieder auf 60"
+    text_de: str  # what undo says: "Filter auf Synth 1 wieder auf 60"
+    done_de: str = ""  # what happened: "Synth 1: filter_frequency auf 90 (vorher 60)"; empty falls back to text_de
 
 
 @dataclass
@@ -135,7 +136,10 @@ class Ledger:
                 revert = {**base, "params": previous}
         known.update(params)
         shown = ", ".join(f"{k} wieder auf {v}" for k, v in previous.items()) or "vorheriger Wert unbekannt"
-        self.history.append(Change(tool, {**base, "params": params}, revert, f"{text}: {shown}"))
+        done = ", ".join(
+            f"{k} auf {v}" + (f" (vorher {previous[k]})" if k in previous else "") for k, v in params.items()
+        )
+        self.history.append(Change(tool, {**base, "params": params}, revert, f"{text}: {shown}", f"{text}: {done}"))
         if scope != "tempo":
             self.unsaved = True
             self.device_dirty = True
@@ -204,5 +208,6 @@ class Ledger:
         elif self.slot:
             parts.append(f"gespeichert in Slot {self.slot}")
         if self.history:
-            parts.append(f"letzte Änderung: {self.history[-1].text_de}")
+            last = self.history[-1]
+            parts.append(f"letzte Änderung: {last.done_de or last.text_de}")
         return ". ".join(parts) + "."
