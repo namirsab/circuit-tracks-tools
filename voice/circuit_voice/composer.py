@@ -54,6 +54,8 @@ class GeminiComposer:
                 response_mime_type="application/json",
                 response_json_schema=json_schema,
                 temperature=self.temperature,
+                # No tools here; without this the SDK logs an AFC warning on the first call
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             ),
         )
         if self.on_usage is not None and getattr(response, "usage_metadata", None) is not None:
