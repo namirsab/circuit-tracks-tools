@@ -107,6 +107,25 @@ and round-trips of all tested factory/user projects are now byte-exact.
 
 ## [Unreleased]
 
+### Added
+
+- **The connection listens to the device.** With an input port open,
+  `MidiConnection` runs a reader thread that owns the port: SysEx replies are
+  queued for the transfer code (`poll_sysex`, `drain_sysex`), and everything
+  else feeds `device_state()` — the project last selected on the device
+  (Program Change on channel 16, sent when a project pad is pressed), whether
+  it is playing (its own Start/Stop) and the tempo of its clock, which the
+  Circuit Tracks sends continuously even while stopped when Clock Tx is on.
+- `get_device_state` MCP tool exposing that state plus whether our clock is
+  driving the device.
+
+### Changed
+
+- `transport("start")` without a `bpm` now follows the device's own clock
+  tempo instead of reading project slot 0 over SysEx, which gave the wrong
+  tempo for every other project and could hang a device still loading one.
+  With no clock from the device it assumes 120 and says so.
+
 ### Fixed
 
 - **MIDI clock ran slow** — `ClockGenerator` waited "interval minus send time"

@@ -809,13 +809,26 @@ def configure_macro(
 # --- Transport ---
 
 
-def _read_device_bpm(midi: MidiConnection) -> float:
-    """Read the current project BPM from the device via SysEx."""
-    from circuit_tracks.ncs_parser import TIMING_OFFSET
-    from circuit_tracks.ncs_transfer import receive_ncs_project
+def _device_bpm(midi: MidiConnection) -> float | None:
+    """The tempo of the device's own clock, which it sends even while stopped (Clock Tx on)."""
+    return midi.device_state().get("bpm")
 
-    ncs_bytes = receive_ncs_project(midi, 0)
-    return float(ncs_bytes[TIMING_OFFSET])
+
+@mcp.tool()
+def get_device_state() -> dict:
+    """What the Circuit Tracks has told us over MIDI, without asking it anything.
+
+    project: the slot (0-63) of the project last selected on the device or by
+    select_project, or null if no selection has been seen since connecting.
+    playing: whether the device is running (its Play/Stop or our transport).
+    bpm: the tempo of the device's clock, which it sends all the time when
+    Clock Tx is on in Setup View; null if no clock is arriving.
+    last_seen_s: seconds since the last non-SysEx message from the device.
+    clock_from_here: whether our MIDI clock is currently driving the device.
+    """
+    state = _midi.device_state()
+    state["clock_from_here"] = _clock.is_running
+    return state
 
 
 @mcp.tool()
@@ -823,22 +836,26 @@ def transport(action: str, bpm: float | None = None) -> str:
     """Control the Circuit Tracks transport (sequencer start/stop).
 
     For "start" and "continue", this also starts sending MIDI clock so the
-    device actually advances. If bpm is not provided, the current project
-    tempo is read from the device.
+    device actually advances (on MIDI Start it waits for external clock).
+    If bpm is not provided, the tempo of the device's own clock is used, so
+    the project keeps its tempo; 120 if no clock has been seen.
 
     For "stop", the clock is stopped automatically.
 
     Args:
         action: One of "start", "stop", or "continue".
-        bpm: Tempo for the MIDI clock. If omitted, reads the device's current project tempo.
+        bpm: Tempo for the MIDI clock. If omitted, follows the device's clock.
     """
     midi = _midi
     if action in ("start", "continue"):
+        note = ""
         if bpm is None:
-            bpm = _read_device_bpm(midi)
+            bpm = _device_bpm(midi)
+            if bpm is None:
+                bpm, note = 120.0, " — no clock from the device, assumed 120"
         _clock.start(bpm=bpm)
         midi.send_realtime(action)
-        return f"Sent transport: {action} (clock at {bpm} BPM)"
+        return f"Sent transport: {action} (clock at {bpm} BPM{note})"
     elif action == "stop":
         midi.send_realtime(action)
         _clock.stop()

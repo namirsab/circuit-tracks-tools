@@ -1,19 +1,44 @@
 """MIDI connection management for Novation Circuit Tracks."""
 
+import queue
+import threading
 import time
+from collections import deque
 from collections.abc import Callable
 
 import mido
 
+# Project select is Program Change on MIDI channel 16 (0-based: 15), sent by the
+# device when a project pad is pressed and received to select one.
+PROJECT_CHANNEL = 15
+# The device sends MIDI clock at the project tempo all the time (Clock Tx on);
+# the tempo is read from ticks within this window and forgotten after a gap.
+_CLOCK_WINDOW_S = 1.0
+_CLOCK_GAP_S = 0.5
+
 
 class MidiConnection:
-    """Manages MIDI input/output connections to the Circuit Tracks."""
+    """Manages MIDI input/output connections to the Circuit Tracks.
+
+    When an input port is open, a reader thread owns it: SysEx messages are
+    queued for ``poll_sysex`` (used by the transfer code), everything else
+    updates ``device_state()`` — the project the device has loaded, whether
+    it is playing and the tempo of its clock.
+    """
 
     def __init__(self) -> None:
         self._port: mido.ports.BaseOutput | None = None
         self._input_port: mido.ports.BaseInput | None = None
         self._port_name: str | None = None
         self._input_port_name: str | None = None
+        self._sysex: queue.Queue[list[int]] = queue.Queue()
+        self._reader: threading.Thread | None = None
+        self._reader_stop = threading.Event()
+        self._state_lock = threading.Lock()
+        self._project: int | None = None
+        self._playing: bool | None = None
+        self._clock_ticks: deque[float] = deque(maxlen=200)
+        self._last_seen: float | None = None
 
     @property
     def is_connected(self) -> bool:
@@ -47,11 +72,13 @@ class MidiConnection:
                 try:
                     self._input_port = mido.open_input(ip)
                     self._input_port_name = ip
+                    self._start_reader()
                 except Exception:
                     pass  # Input port not available, not critical
                 break
 
     def disconnect(self) -> None:
+        self._stop_reader()
         if self._input_port is not None:
             self._input_port.close()
             self._input_port = None
@@ -60,6 +87,77 @@ class MidiConnection:
             self._port.close()
             self._port = None
             self._port_name = None
+
+    # --- input reader -------------------------------------------------------
+
+    def _start_reader(self) -> None:
+        self._stop_reader()
+        self._reader_stop.clear()
+        self._reader = threading.Thread(target=self._read_loop, name="circuit-midi-in", daemon=True)
+        self._reader.start()
+
+    def _stop_reader(self) -> None:
+        if self._reader is not None and self._reader.is_alive():
+            self._reader_stop.set()
+            self._reader.join(timeout=2)
+        self._reader = None
+
+    def _read_loop(self) -> None:
+        port = self._input_port
+        while not self._reader_stop.is_set():
+            try:
+                msg = port.poll()
+            except Exception:
+                break  # port closed underneath us
+            if msg is None:
+                time.sleep(0.002)
+                continue
+            self._handle(msg)
+
+    def _handle(self, msg: mido.Message) -> None:
+        now = time.monotonic()
+        if msg.type == "sysex":
+            self._sysex.put(list(msg.data))
+            return
+        with self._state_lock:
+            self._last_seen = now
+            if msg.type == "clock":
+                self._clock_ticks.append(now)
+            elif msg.type in ("start", "continue"):
+                self._playing = True
+            elif msg.type == "stop":
+                self._playing = False
+            elif msg.type == "program_change" and msg.channel == PROJECT_CHANNEL:
+                self._project = msg.program % 64  # 64-127 would be a queued select
+
+    def device_state(self) -> dict:
+        """What the device last told us: project (0-63), playing, bpm from its clock."""
+        now = time.monotonic()
+        with self._state_lock:
+            ticks = [t for t in self._clock_ticks if now - t <= _CLOCK_WINDOW_S]
+            bpm = None
+            if len(ticks) >= 12 and now - ticks[-1] <= _CLOCK_GAP_S:
+                bpm = (len(ticks) - 1) / (ticks[-1] - ticks[0]) / 24 * 60
+            return {
+                "project": self._project,
+                "playing": self._playing,
+                "bpm": round(bpm, 1) if bpm else None,
+                "last_seen_s": round(now - self._last_seen, 1) if self._last_seen else None,
+            }
+
+    def poll_sysex(self, timeout_s: float) -> list[int] | None:
+        """Next SysEx message from the device (without F0/F7), or None after the timeout."""
+        try:
+            return self._sysex.get(timeout=max(timeout_s, 0.0))
+        except queue.Empty:
+            return None
+
+    def drain_sysex(self) -> None:
+        while True:
+            try:
+                self._sysex.get_nowait()
+            except queue.Empty:
+                return
 
     def _ensure_connected(self) -> None:
         if not self.is_connected:
@@ -130,22 +228,13 @@ class MidiConnection:
         if not self.has_input:
             raise RuntimeError("No MIDI input port available. Reconnect to a port that has both input and output.")
 
-        # Drain any pending messages
-        while self._input_port.poll() is not None:
-            pass
-
-        # Send the request
+        self.drain_sysex()
         self.send_sysex(request_data)
 
         # Wait for matching response
         deadline = time.monotonic() + timeout_s
-        while time.monotonic() < deadline:
-            msg = self._input_port.poll()
-            if msg is None:
-                time.sleep(0.01)
-                continue
-            if msg.type == "sysex":
-                data = list(msg.data)
-                if match_fn is None or match_fn(data):
-                    return data
+        while (remaining := deadline - time.monotonic()) > 0:
+            data = self.poll_sysex(remaining)
+            if data is not None and (match_fn is None or match_fn(data)):
+                return data
         return None

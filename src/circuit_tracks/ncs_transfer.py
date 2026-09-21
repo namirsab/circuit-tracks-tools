@@ -145,28 +145,24 @@ def _wait_for_ack(
         return True
 
     deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        msg = midi._input_port.poll()
-        if msg is None:
-            time.sleep(0.005)
+    while (remaining := deadline - time.monotonic()) > 0:
+        data = midi.poll_sysex(remaining)
+        if data is None:
             continue
-        if msg.type == "sysex":
-            data = list(msg.data)
-            # ACK format: header + 0x04 + address(8) + file_id(3)
-            if (
-                len(data) >= len(_SYSEX_HEADER) + 1 + 8 + 3
-                and data[: len(_SYSEX_HEADER)] == _SYSEX_HEADER
-                and data[len(_SYSEX_HEADER)] == _SUBCMD_ACK
-            ):
-                return True
+        # ACK format: header + 0x04 + address(8) + file_id(3)
+        if (
+            len(data) >= len(_SYSEX_HEADER) + 1 + 8 + 3
+            and data[: len(_SYSEX_HEADER)] == _SYSEX_HEADER
+            and data[len(_SYSEX_HEADER)] == _SUBCMD_ACK
+        ):
+            return True
     return False
 
 
 def _drain_input(midi: MidiConnection) -> None:
-    """Drain any pending input messages."""
+    """Drop SysEx replies we are not going to read."""
     if midi.has_input:
-        while midi._input_port.poll() is not None:
-            pass
+        midi.drain_sysex()
 
 
 def list_directory(
@@ -222,21 +218,14 @@ def list_directory(
     entries: list[dict] = []
     header_len = len(_SYSEX_HEADER)
     deadline = time.monotonic() + timeout_s
-    last_msg_time = time.monotonic()
 
-    while time.monotonic() < deadline:
-        msg = midi._input_port.poll()
-        if msg is None:
-            # If we have entries and haven't seen a message in 0.5s, we're done
-            if entries and (time.monotonic() - last_msg_time) > 0.5:
+    while (remaining := deadline - time.monotonic()) > 0:
+        # Once entries arrive, a 0.5 s silence means the listing is complete
+        data = midi.poll_sysex(min(remaining, 0.5) if entries else remaining)
+        if data is None:
+            if entries:
                 break
-            time.sleep(0.01)
             continue
-
-        last_msg_time = time.monotonic()
-        if msg.type != "sysex":
-            continue
-        data = list(msg.data)
         if len(data) > header_len + 3 and data[:header_len] == _SYSEX_HEADER and data[header_len] == _SUBCMD_FILE_ENTRY:
             # FILE_ENTRY format: header + 0x0C + subtype + slot_hi + slot_lo + filename bytes
             subtype = data[header_len + 1]
@@ -323,14 +312,10 @@ def receive_ncs_project(
     # 4. Receive READ_INIT response (contains file size)
     file_size = None
     deadline = time.monotonic() + 5.0
-    while time.monotonic() < deadline:
-        msg = midi._input_port.poll()
-        if msg is None:
-            time.sleep(0.005)
+    while (remaining := deadline - time.monotonic()) > 0:
+        data = midi.poll_sysex(remaining)
+        if data is None:
             continue
-        if msg.type != "sysex":
-            continue
-        data = list(msg.data)
         if (
             len(data) >= header_len + 1 + 8 + 3 + 5
             and data[:header_len] == _SYSEX_HEADER
@@ -355,14 +340,10 @@ def receive_ncs_project(
     crc_received = None
     deadline = time.monotonic() + 60.0  # generous timeout for full transfer
 
-    while time.monotonic() < deadline:
-        msg = midi._input_port.poll()
-        if msg is None:
-            time.sleep(0.001)
+    while (remaining := deadline - time.monotonic()) > 0:
+        data = midi.poll_sysex(remaining)
+        if data is None:
             continue
-        if msg.type != "sysex":
-            continue
-        data = list(msg.data)
         if len(data) < header_len + 1 or data[:header_len] != _SYSEX_HEADER:
             continue
 

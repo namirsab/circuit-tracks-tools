@@ -38,6 +38,11 @@ class MockMidi:
     def nrpn(self, channel, msb, lsb, value):
         self.messages.append(("nrpn", channel, msb, lsb, value))
 
+    state = {"project": None, "playing": None, "bpm": None, "last_seen_s": None}
+
+    def device_state(self):
+        return dict(self.state)
+
     def program_change(self, channel, program):
         self.messages.append(("pc", channel, program))
 

@@ -63,6 +63,11 @@ class MockMidi:
     def sysex_request(self, request_data, timeout_s=3.0, match_fn=None):
         return None  # no hardware response
 
+    state = {"project": None, "playing": None, "bpm": None, "last_seen_s": None}
+
+    def device_state(self):
+        return dict(self.state)
+
     @staticmethod
     def list_output_ports():
         return ["MockPort"]
@@ -469,6 +474,31 @@ class TestTransport:
         srv, mock_midi = server
         srv.transport(action="continue", bpm=120)
         assert ("realtime", "continue") in mock_midi.messages
+
+    def test_transport_start_follows_the_device_clock(self, server):
+        """The device sends its project tempo as clock even while stopped; no SysEx read of slot 0."""
+        srv, mock_midi = server
+        mock_midi.state = {**mock_midi.state, "bpm": 96.0}
+        try:
+            out = srv.transport(action="start")
+            assert "96.0 BPM" in out and srv._clock._bpm == 96.0
+        finally:
+            srv.transport(action="stop")
+
+    def test_transport_start_without_device_clock_assumes_120_and_says_so(self, server):
+        srv, mock_midi = server
+        try:
+            out = srv.transport(action="start")
+            assert srv._clock._bpm == 120.0 and "assumed 120" in out
+        finally:
+            srv.transport(action="stop")
+
+    def test_get_device_state_reports_project_playing_and_our_clock(self, server):
+        srv, mock_midi = server
+        mock_midi.state = {"project": 44, "playing": False, "bpm": 120.0, "last_seen_s": 0.1}
+        state = srv.get_device_state()
+        assert state["project"] == 44 and state["playing"] is False and state["bpm"] == 120.0
+        assert state["clock_from_here"] is False
 
 
 # ---------------------------------------------------------------------------

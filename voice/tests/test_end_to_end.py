@@ -167,7 +167,7 @@ async def test_tempo_change_is_saved_and_play_from_device_selects_the_saved_proj
         raise AssertionError("must not read the tempo from the device")
 
     monkeypatch.setattr("circuit_tracks.song.export_song_to_device", fake_export)
-    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", no_read)
+    monkeypatch.setattr("circuit_mcp.server._device_bpm", no_read)
     monkeypatch.setattr("circuit_voice.device_tools.PROJECT_LOAD_S", 0.0)
     async with agent(server) as (bridge, ledger, midi):
         await bridge.dispatch("load_saved_song", {"name": "Ethereal Drift"})

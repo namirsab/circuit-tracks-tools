@@ -29,7 +29,7 @@ async def agent(server):
 
 
 async def test_select_project_queued_while_running_instant_when_stopped(server, monkeypatch):
-    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", lambda midi: 100.0)
+    monkeypatch.setattr("circuit_mcp.server._device_bpm", lambda midi: 100.0)
     async with agent(server) as (bridge, ledger, midi):
         out = await bridge.dispatch("select_project", {"number": 3})
         assert ("pc", PROJECT_CHANNEL, 2) in midi.messages and "gewählt" in out.response["result"]
@@ -66,7 +66,7 @@ async def test_transport_reads_device_bpm_once_and_caches(server, monkeypatch):
         reads.append(1)
         return 96.0
 
-    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", fake_read)
+    monkeypatch.setattr("circuit_mcp.server._device_bpm", fake_read)
     async with agent(server) as (bridge, ledger, midi):
         await bridge.dispatch("select_project", {"number": 5})
         await bridge.dispatch("transport", {"action": "start"})
@@ -82,7 +82,7 @@ async def test_project_saved_from_here_starts_without_reading_the_device(server,
     def no_read(midi):
         raise AssertionError("must not read the project over SysEx")
 
-    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", no_read)
+    monkeypatch.setattr("circuit_mcp.server._device_bpm", no_read)
     async with agent(server) as (bridge, ledger, midi):
         ledger.saved_bpm[29] = 120.0  # what save_to_device records
         await bridge.dispatch("select_project", {"number": 29, "immediate": True})
@@ -92,7 +92,7 @@ async def test_project_saved_from_here_starts_without_reading_the_device(server,
 
 
 async def test_transport_start_waits_for_the_project_to_load(server, monkeypatch):
-    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", lambda midi: 100.0)
+    monkeypatch.setattr("circuit_mcp.server._device_bpm", lambda midi: 100.0)
     monkeypatch.setattr("circuit_voice.device_tools.PROJECT_LOAD_S", 2.0)
     naps = []
 
@@ -112,7 +112,7 @@ async def test_transport_start_waits_for_the_project_to_load(server, monkeypatch
 
 
 async def test_set_tempo_uses_the_clock_tool(server, monkeypatch):
-    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", lambda midi: 120.0)
+    monkeypatch.setattr("circuit_mcp.server._device_bpm", lambda midi: 120.0)
     async with agent(server) as (bridge, ledger, midi):
         out = await bridge.dispatch("set_tempo", {"bpm": 90})
         assert "vorgemerkt" in out.response["result"]
@@ -124,7 +124,7 @@ async def test_set_tempo_uses_the_clock_tool(server, monkeypatch):
 
 
 async def test_transport_start_stops_internal_sequencer_first(server, monkeypatch):
-    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", lambda midi: 120.0)
+    monkeypatch.setattr("circuit_mcp.server._device_bpm", lambda midi: 120.0)
     async with agent(server) as (bridge, ledger, midi):
         ledger.song_loaded("x", 100, ["a"], ["a"])
         await bridge.backend.call("set_pattern", {"name": "a", "tracks": {"drum1": {"steps": {"0": {}}}}})
@@ -159,7 +159,7 @@ async def test_import_project(server):
 async def test_device_mode_mute_uses_levels_and_restores(server, monkeypatch):
     from circuit_tracks.constants import DRUM_CC
 
-    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", lambda midi: 120.0)
+    monkeypatch.setattr("circuit_mcp.server._device_bpm", lambda midi: 120.0)
     async with agent(server) as (bridge, ledger, midi):
         await bridge.dispatch("select_project", {"number": 1})
         await bridge.dispatch("transport", {"action": "start"})
@@ -191,7 +191,7 @@ async def test_internal_mode_mute_uses_the_engine(server):
 
 
 async def test_start_sequencer_stops_the_device_first(server, monkeypatch):
-    monkeypatch.setattr("circuit_mcp.server._read_device_bpm", lambda midi: 120.0)
+    monkeypatch.setattr("circuit_mcp.server._device_bpm", lambda midi: 120.0)
     async with agent(server) as (bridge, ledger, midi):
         await bridge.dispatch("select_project", {"number": 2})
         await bridge.dispatch("transport", {"action": "start"})
