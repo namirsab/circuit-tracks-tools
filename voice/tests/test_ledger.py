@@ -25,6 +25,23 @@ def test_summary_when_nothing_is_loaded():
     assert "kein Song" in text.lower() or "nichts" in text.lower()
 
 
+def test_observe_device_names_the_project_the_user_picked_on_the_pads():
+    lg = Ledger()
+    lg.observe_device({"project": 33, "playing": None, "bpm": 120.0})
+    assert lg.device_project == 34 and lg.bpm == 120.0 and not lg.running
+    assert "Projekt 34 ist gewählt" in lg.summary_de() and "120 BPM" in lg.summary_de()
+    lg.observe_device({"project": 33, "playing": True, "bpm": 120.0})
+    assert lg.running and lg.source == "device" and "spielt Projekt 34" in lg.summary_de()
+
+
+def test_observe_device_does_not_touch_the_internal_sequencer_state():
+    lg = Ledger()
+    lg.song_loaded("Nachtfahrt", 118, ["a"], ["a"])
+    lg.observe("start_sequencer", {}, None)
+    lg.observe_device({"project": None, "playing": True, "bpm": 118.0, "clock_from_here": True})
+    assert lg.source == "internal" and lg.bpm == 118 and lg.device_project is None
+
+
 def test_song_loaded_and_unsaved_flag():
     lg = Ledger()
     lg.song_loaded("Nachtfahrt", 118, ["intro", "chorus"], ["intro", "chorus"])

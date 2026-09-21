@@ -363,8 +363,8 @@ CARDS: list[ToolCard] = [
     ToolCard(
         "transport",
         "Start, stop or continue the project playing on the Circuit Tracks itself (its own patterns, our MIDI "
-        "clock). Stops the internal sequencer first if it runs. bpm is optional; the device's project tempo is "
-        "used otherwise.",
+        "clock). Stops the internal sequencer first if it runs. Without bpm the project keeps the tempo the "
+        "device reports; give bpm only when the user names one.",
         schema=_obj(
             {"action": {"type": "string", "enum": ["start", "stop", "continue"]}, "bpm": {"type": "number"}}, ["action"]
         ),
@@ -496,8 +496,9 @@ CARDS: list[ToolCard] = [
     # --- virtual tools (harness) ---
     ToolCard(
         "get_state",
-        "What the agent knows: playback source, loaded song, tempo, mutes, unsaved changes, last change. "
-        "Cheap; never touches the device. Only when the user asks about the state, never before a change.",
+        "What the agent knows: playback source, the project selected on the device (from its pads or "
+        "select_project), whether it plays, tempo, loaded song, mutes, unsaved changes, last change. Cheap. "
+        "Only when the user asks about the state, never before a change.",
         schema=_obj({}, []),
         read_only=True,
     ),

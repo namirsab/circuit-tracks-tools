@@ -24,11 +24,13 @@ STATE_DE = {
     None: "",
     "loaded": "(Kontext: Der Song 'Nachtfahrt' ist geladen, Patterns intro, chorus, outro, 120 BPM, gestoppt.)\n",
     "playing": "(Kontext: Der Song 'Nachtfahrt' läuft, Pattern intro, 120 BPM, keine Spur stumm.)\n",
+    "device": "(Kontext: Kein Song geladen. Auf dem Gerät ist Projekt 34 gewählt, gestoppt, 120 BPM.)\n",
 }
 STATUS_RESULT = {
     None: "Es ist noch kein Song geladen und nichts spielt.",
     "loaded": "Nachtfahrt ist geladen, gestoppt. 120 BPM. nicht gespeichert.",
     "playing": "Nachtfahrt läuft, Pattern intro. 120 BPM. nicht gespeichert.",
+    "device": "Projekt 34 ist gewählt, gestoppt. 120 BPM.",
 }
 GATE = 0.9
 

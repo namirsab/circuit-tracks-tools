@@ -49,6 +49,8 @@ class Ledger:
     device_project: int | None = None  # 1-based
     device_bpm: dict[int, float] = field(default_factory=dict)  # tempo per device project, once read
     saved_bpm: dict[int, float] = field(default_factory=dict)  # tempo stored in projects written from here
+    pending_bpm: float | None = None  # tempo said while stopped; the next start from here uses it once
+    device_clock: float | None = None  # tempo of the device's own clock when last looked at
     project_selected_at: float | None = None  # monotonic time of the last program change while stopped
     device_dirty: bool = False  # sounds changed since the project was selected
     selected_patch: dict[int, int] = field(default_factory=dict)  # synth -> 1-based patch number
@@ -77,6 +79,26 @@ class Ledger:
     def saved(self, slot: int) -> None:
         self.slot = slot
         self.unsaved = False
+
+    def observe_device(self, state: dict[str, Any]) -> None:
+        """What the device told us over MIDI (get_device_state): project pad, Play/Stop, its clock.
+
+        The internal sequencer's own Start and clock come back from the device too, so while it
+        plays, only the project is taken."""
+        project = state.get("project")
+        if project is not None and project + 1 != self.device_project:
+            self.device_project = project + 1
+            self.device_dirty = False
+        self.device_clock = state.get("bpm")
+        if self.source == "internal":
+            return
+        playing = state.get("playing")
+        if playing is not None:
+            self.running = bool(playing)
+            if playing:
+                self.source = "device"
+        if self.device_clock and not state.get("clock_from_here"):
+            self.bpm = self.device_clock
 
     def first_pattern(self) -> str | None:
         return self.song_order[0] if self.song_order else (self.patterns[0] if self.patterns else None)
@@ -182,11 +204,13 @@ class Ledger:
         if self.song_name is None and self.source == "none" and self.device_project is None:
             return "Es ist noch kein Song geladen und nichts spielt."
         parts: list[str] = []
-        if self.source == "device" and self.device_project is not None:
+        if self.source != "internal" and self.device_project is not None:
             if self.running:
                 parts.append(f"Das Gerät spielt Projekt {self.device_project}")
             else:
                 parts.append(f"Projekt {self.device_project} ist gewählt, gestoppt")
+            if self.bpm:
+                parts.append(f"{int(round(self.bpm))} BPM")
         else:
             running = bool(status["running"]) if status else self.running
             pattern = (status or {}).get("current_pattern")

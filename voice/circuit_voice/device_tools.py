@@ -40,6 +40,7 @@ def register_device_tools(bridge: Bridge) -> None:
         if ledger.running and ledger.source == "internal":
             await bridge.dispatch("stop_sequencer", {})
             note = "Ich habe den internen Sequenzer gestoppt. "
+        state = await bridge.sync_device()
         if ledger.source != "device" and ledger.song_json is not None:
             # Coming from the internal sequencer, "play it on the device" means the project this
             # song was saved to, not whatever happens to be loaded there.
@@ -60,12 +61,21 @@ def register_device_tools(bridge: Bridge) -> None:
             if wait > 0:
                 await asyncio.sleep(wait)
         payload: dict[str, Any] = {"action": action}
-        bpm = args.get("bpm") or ledger.device_bpm.get(ledger.device_project)
+        # A tempo the user asked for, else the device's own clock (it sends its project tempo even
+        # while stopped), else what we remember for the project; the server assumes 120 otherwise.
+        bpm = (
+            args.get("bpm")
+            or ledger.pending_bpm
+            or state.get("bpm")
+            or ledger.device_bpm.get(ledger.device_project)
+            or ledger.saved_bpm.get(ledger.device_project)
+        )
         if bpm:
             payload["bpm"] = float(bpm)
         result = await backend.call("transport", payload)
         if result.is_error:
             return f"Starten ging nicht: {result.text}"
+        ledger.pending_bpm = None
         match = _BPM_RE.search(result.text or "")
         if match:
             ledger.bpm = float(match.group(1))
@@ -74,6 +84,8 @@ def register_device_tools(bridge: Bridge) -> None:
         ledger.source, ledger.running = "device", True
         where = f"Projekt {ledger.device_project}" if ledger.device_project else "das Gerät"
         tempo = f", {int(ledger.bpm)} BPM" if ledger.bpm else ""
+        if "assumed 120" in (result.text or ""):
+            tempo = ", 120 BPM angenommen, das Gerät meldet kein Tempo"
         return f"{note}{where} läuft{tempo}."
 
     async def set_tempo(args: dict[str, Any]) -> str:
@@ -85,6 +97,7 @@ def register_device_tools(bridge: Bridge) -> None:
         if ledger.device_project is not None:
             ledger.device_bpm[ledger.device_project] = bpm
         if "not running" in (result.text or ""):
+            ledger.pending_bpm = bpm
             return f"Tempo auf {int(bpm)} vorgemerkt; es gilt, sobald das Gerät von hier gestartet wird."
         return f"Tempo ist jetzt {int(bpm)}."
 

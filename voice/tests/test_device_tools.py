@@ -59,21 +59,57 @@ async def test_confirmation_only_after_sound_changes(server):
         assert "gewählt" in out.response["result"]
 
 
-async def test_transport_reads_device_bpm_once_and_caches(server, monkeypatch):
-    reads = []
-
-    def fake_read(midi):
-        reads.append(1)
-        return 96.0
-
-    monkeypatch.setattr("circuit_mcp.server._device_bpm", fake_read)
+async def test_transport_start_follows_the_device_clock_every_time(server, monkeypatch):
+    """The device sends its project tempo as clock even while stopped (2026-09-21); the 14:48 session
+    started every project at slot 0's 125 BPM."""
+    srv = server[0]
+    monkeypatch.setattr("circuit_voice.device_tools.PROJECT_LOAD_S", 0.0)
     async with agent(server) as (bridge, ledger, midi):
         await bridge.dispatch("select_project", {"number": 5})
-        await bridge.dispatch("transport", {"action": "start"})
+        midi.state = {**midi.state, "bpm": 96.0}
+        out = await bridge.dispatch("transport", {"action": "start"})
+        assert "96 BPM" in out.response["result"] and srv._clock._bpm == 96.0
         await bridge.dispatch("transport", {"action": "stop"})
-        await bridge.dispatch("transport", {"action": "start"})
-        assert len(reads) == 1 and ledger.device_bpm[5] == 96.0
+        midi.state = {**midi.state, "bpm": 110.0}  # the user turned the tempo knob meanwhile
+        out = await bridge.dispatch("transport", {"action": "start"})
+        assert "110 BPM" in out.response["result"] and srv._clock._bpm == 110.0
         await bridge.dispatch("transport", {"action": "stop"})
+
+
+async def test_transport_start_without_a_tempo_says_that_120_is_assumed(server, monkeypatch):
+    monkeypatch.setattr("circuit_voice.device_tools.PROJECT_LOAD_S", 0.0)
+    async with agent(server) as (bridge, ledger, midi):
+        out = await bridge.dispatch("transport", {"action": "start"})
+        assert "120" in out.response["result"] and "angenommen" in out.response["result"]
+        await bridge.dispatch("transport", {"action": "stop"})
+
+
+async def test_tempo_said_while_stopped_is_used_by_the_next_start(server, monkeypatch):
+    """14:48 session: '120', Stopp, Start -> 125 again."""
+    srv = server[0]
+    monkeypatch.setattr("circuit_voice.device_tools.PROJECT_LOAD_S", 0.0)
+    async with agent(server) as (bridge, ledger, midi):
+        midi.state = {**midi.state, "bpm": 125.0}
+        out = await bridge.dispatch("set_tempo", {"bpm": 120})
+        assert "vorgemerkt" in out.response["result"]
+        out = await bridge.dispatch("transport", {"action": "start"})
+        assert "120 BPM" in out.response["result"] and srv._clock._bpm == 120.0
+        await bridge.dispatch("transport", {"action": "stop"})
+        out = await bridge.dispatch("transport", {"action": "start"})  # the wish was for one start
+        assert "125 BPM" in out.response["result"]
+        await bridge.dispatch("transport", {"action": "stop"})
+
+
+async def test_state_follows_the_project_pad_and_the_play_button(server):
+    async with agent(server) as (bridge, ledger, midi):
+        midi.state = {"project": 44, "playing": True, "bpm": 120.0, "last_seen_s": 0.0}
+        out = await bridge.dispatch("get_state", {})
+        text = out.response["result"]
+        assert "Projekt 45" in text and "spielt" in text and "120 BPM" in text
+        assert ledger.device_project == 45 and ledger.running and ledger.source == "device"
+        midi.state = {**midi.state, "playing": False}
+        out = await bridge.dispatch("get_state", {})
+        assert "gestoppt" in out.response["result"] and not ledger.running
 
 
 async def test_project_saved_from_here_starts_without_reading_the_device(server, monkeypatch):

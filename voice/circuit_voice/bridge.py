@@ -89,8 +89,16 @@ class Bridge:
         if "undo_last" in self.cards:
             self._virtual["undo_last"] = self._undo_last
 
+    async def sync_device(self) -> dict[str, Any]:
+        """Take over what the device reported since the last look (project pad, Play/Stop, tempo)."""
+        result = await self.backend.call("get_device_state", {})
+        state = result.data if not result.is_error and isinstance(result.data, dict) else {}
+        self.ledger.observe_device(state)
+        return state
+
     async def _get_state(self, args: dict[str, Any]) -> str:
         status = None
+        await self.sync_device()
         if self.ledger.source == "internal":
             result = await self.backend.call("get_sequencer_status", {})
             if not result.is_error and isinstance(result.data, dict):

@@ -84,3 +84,8 @@
 {"say": "King of Queens.", "tool": null, "state": "loaded"}
 {"say": "llave", "tool": null, "state": "loaded"}
 {"say": "comprehensive", "tool": null, "state": "loaded"}
+{"say": "Welches Projekt ist gerade auf dem Gerät?", "tool": "get_state", "state": "device"}
+{"say": "Start.", "tool": "transport", "args": {"action": "start"}, "state": "device"}
+{"say": "Spiel Projekt zwölf.", "tool": "select_project", "args": {"number": 12}, "state": "device"}
+{"say": "Tempo auf hundert.", "tool": "set_tempo", "args": {"bpm": 100}, "state": "device"}
+{"say": "Hol Projekt zwölf rein, ich will daran weiterarbeiten.", "tool": "import_project", "args": {"number": 12}, "state": "device"}
