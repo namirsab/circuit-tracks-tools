@@ -22,7 +22,7 @@ def register_compose_tools(bridge: Bridge, composer: Composer) -> None:
         was_running = ledger.running and ledger.source == "internal"
         if was_running:
             await bridge.dispatch("stop_sequencer", {})
-        text = await bridge.load_song_dict(song, label)  # type: ignore[attr-defined]
+        text = await bridge.load_song_dict(song, label)
         if not ledger.last_load_ok:
             return text  # load failed; the text says why
         if was_running:

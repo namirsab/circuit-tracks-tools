@@ -237,7 +237,7 @@ def register_edit_tools(bridge: Bridge) -> None:
         if ledger.running and ledger.source == "internal":
             await bridge.dispatch("stop_sequencer", {})
         data = empty_song(name, bpm)
-        text = await bridge.load_song_dict(copy.deepcopy(data), name)  # type: ignore[attr-defined]
+        text = await bridge.load_song_dict(copy.deepcopy(data), name)
         if not ledger.last_load_ok:
             return text
         ledger.song_json = data

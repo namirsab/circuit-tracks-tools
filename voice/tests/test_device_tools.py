@@ -190,6 +190,13 @@ async def test_import_project(server):
         assert out.blocking is False
         assert "Alt" in out.response["result"] and ledger.song_json["bpm"] == 111
         assert ledger.slot == 7 and ledger.unsaved is False
+        # 15:37 session: the import filled the ledger only; start_sequencer then ran over an empty
+        # engine and nothing sounded. The project must be loaded like a song file.
+        assert ledger.source == "internal" and ledger.patterns == ["p1"]
+        await bridge.dispatch("start_sequencer", {})
+        status = await real_call("get_sequencer_status", {})
+        assert status.data["running"] and status.data["patterns_defined"] == ["p1"]
+        await bridge.dispatch("stop_sequencer", {})
 
 
 async def test_device_mode_mute_uses_levels_and_restores(server, monkeypatch):

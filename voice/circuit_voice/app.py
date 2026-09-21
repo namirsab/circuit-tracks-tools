@@ -56,10 +56,10 @@ async def build_bridge(config: Config, backend: McpBackend, on_usage: Any = None
     await composer.prepare()
     register_compose_tools(bridge, composer)
     register_generate_tools(bridge, model)
-    await bridge.generate_prepare()  # type: ignore[attr-defined]
+    await bridge.generate_prepare()
     if config.song:
         data = SongLibrary.load(config.song)
-        text = await bridge.load_song_dict(data, config.song)  # type: ignore[attr-defined]
+        text = await bridge.load_song_dict(data, config.song)
         print(text, file=sys.stderr)
     return bridge
 

@@ -11,6 +11,7 @@ route to a virtual handler or the MCP tool, and wrap the outcome in the
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import time
@@ -95,6 +96,23 @@ class Bridge:
         state = result.data if not result.is_error and isinstance(result.data, dict) else {}
         self.ledger.observe_device(state)
         return state
+
+    async def load_song_dict(self, data: dict[str, Any], label: str) -> str:
+        """Make ``data`` the current song: engine patterns, patches sent, ledger updated."""
+        result = await self.backend.call("load_song", {"song": copy.deepcopy(data)})  # the server mutates its input
+        ledger = self.ledger
+        ledger.last_load_ok = not result.is_error
+        if result.is_error:
+            return f"Der Song {label} konnte nicht geladen werden: {result.text[:300]}"
+        info = result.data if isinstance(result.data, dict) else {}
+        name = info.get("name") or data.get("name") or label
+        ledger.song_loaded(
+            name, float(info.get("bpm") or data.get("bpm") or 120), info.get("patterns", []), info.get("song_order", [])
+        )
+        ledger.source = "internal"
+        ledger.song_json = data
+        patterns = ", ".join(ledger.patterns)
+        return f"Song {name} geladen, {int(ledger.bpm)} BPM, Patterns: {patterns}."
 
     async def _get_state(self, args: dict[str, Any]) -> str:
         status = None

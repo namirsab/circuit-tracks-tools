@@ -140,19 +140,17 @@ def register_device_tools(bridge: Bridge) -> None:
         if result.is_error or not isinstance(result.data, dict):
             return f"Projekt {number} konnte nicht gelesen werden: {result.text}"
         data = {k: v for k, v in result.data.items() if not k.startswith("_")}
-        patterns = list((data.get("patterns") or {}).keys())
-        ledger.song_loaded(
-            data.get("name") or f"Projekt {number}",
-            float(data.get("bpm") or 120),
-            patterns,
-            list(data.get("song") or []),
-        )
-        ledger.song_json = data
+        # Load it like a song file: the engine gets the patterns and the device the patches.
+        # (15:37 session: filling the ledger alone left the sequencer empty and silent.)
+        text = await bridge.load_song_dict(data, data.get("name") or f"Projekt {number}")
+        if not ledger.last_load_ok:
+            return f"Projekt {number} konnte nicht als Song geladen werden. {text}"
         ledger.unsaved = False
         ledger.slot = number
+        patterns = ", ".join(ledger.patterns)
         return (
-            f"Projekt {number} ist als Song {ledger.song_name} geladen: "
-            f"{len(patterns)} Patterns, {int(ledger.bpm)} BPM."
+            f"Projekt {number} ist als Song '{ledger.song_name}' im internen Sequenzer: "
+            f"Patterns {patterns}, {int(ledger.bpm)} BPM. Sag Start, oder ändere etwas."
         )
 
     async def mute_track(args: dict[str, Any]) -> str:

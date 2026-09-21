@@ -135,21 +135,6 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
             return "Es gibt keine gespeicherten Songs im Song-Ordner."
         return "Gespeicherte Songs: " + ", ".join(names) + "."
 
-    async def load_song_dict(data: dict[str, Any], label: str) -> str:
-        result = await backend.call("load_song", {"song": copy.deepcopy(data)})  # the server mutates its input
-        ledger.last_load_ok = not result.is_error
-        if result.is_error:
-            return f"Der Song {label} konnte nicht geladen werden: {result.text[:300]}"
-        info = result.data if isinstance(result.data, dict) else {}
-        name = info.get("name") or data.get("name") or label
-        ledger.song_loaded(
-            name, float(info.get("bpm") or data.get("bpm") or 120), info.get("patterns", []), info.get("song_order", [])
-        )
-        ledger.source = "internal"
-        ledger.song_json = data
-        patterns = ", ".join(ledger.patterns)
-        return f"Song {name} geladen, {int(ledger.bpm)} BPM, Patterns: {patterns}."
-
     async def load_saved_song(args: dict[str, Any]) -> str:
         spoken = str(args.get("name", "")).strip()
         path = library.find(spoken) if spoken else None
@@ -160,7 +145,7 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
             data = library.load(path)
         except Exception as e:  # noqa: BLE001 - a bad file must not kill the session
             return f"Die Datei {path.name} ist kein gültiger Song: {str(e)[:200]}"
-        return await load_song_dict(data, path.stem)
+        return await bridge.load_song_dict(data, path.stem)
 
     async def save_to_device(args: dict[str, Any]) -> Any:
         if ledger.song_name is None:
@@ -216,4 +201,3 @@ def register_song_tools(bridge: Bridge, library: SongLibrary) -> None:
     bridge.register_virtual("list_saved_songs", list_saved_songs)
     bridge.register_virtual("load_saved_song", load_saved_song)
     bridge.register_virtual("save_to_device", save_to_device)
-    bridge.load_song_dict = load_song_dict  # type: ignore[attr-defined]  # used by --song at startup
