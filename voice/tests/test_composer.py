@@ -102,3 +102,51 @@ def test_house_rules_reject_unknown_macro_targets_and_mod_names():
         }
     )
     assert not [p for p in check_house_rules(fine) if "macro" in p or "mod matrix" in p]
+
+
+def test_repair_drops_what_the_device_cannot_take_and_says_so():
+    """15:43 session: 'filter_drive' as macro target and '1/8 dotted' as delay preset cost three
+    attempts and four minutes; both are dropped now instead of rejected."""
+    from circuit_voice.composer import repair_song
+
+    song = broken(
+        sounds={
+            "synth1": {
+                "preset": "bass",
+                "macros": {
+                    "2": {
+                        "targets": [{"dest": "filter_drive", "depth": 40}, {"dest": "filter_frequency", "depth": 60}]
+                    },
+                    "3": {"targets": [{"dest": "nope"}]},
+                },
+                "mod_matrix": [{"source1": "lfo 1", "dest": "no such dest", "depth": 10}],
+            },
+            "synth2": {"preset": "lead"},
+        },
+        fx={"delay_preset": "1/8 dotted", "reverb_preset": "Hall", "delay_sends": {"synth1": 40}},
+    )
+    fixed, notes = repair_song(song)
+    s1 = fixed["sounds"]["synth1"]
+    assert s1["macros"]["2"]["targets"] == [{"dest": "filter_frequency", "depth": 60}]
+    assert "3" not in s1["macros"] and s1["mod_matrix"] == []
+    assert "delay_preset" not in fixed["fx"] and fixed["fx"]["reverb_preset"] == "Hall"
+    assert fixed["fx"]["delay_sends"] == {"synth1": 40}
+    assert any("filter_drive" in n for n in notes) and any("1/8 dotted" in n for n in notes)
+    assert check_house_rules(fixed) == []
+    assert repair_song(SONG) == (SONG, [])
+
+
+def test_house_rules_reject_unknown_preset_names():
+    assert any("delay preset" in p for p in check_house_rules(broken(fx={"delay_preset": "1/8 dotted"})))
+    assert any("reverb preset" in p for p in check_house_rules(broken(fx={"reverb_preset": "Cathedral"})))
+    assert check_house_rules(broken(fx={"delay_preset": "8th dotted Ping Pong", "reverb_preset": 3})) == []
+
+
+async def test_compose_repairs_before_it_retries():
+    synth1 = {**SONG["sounds"]["synth1"], "macros": {"2": {"targets": [{"dest": "filter_drive"}]}}}
+    bad = broken(sounds={**SONG["sounds"], "synth1": synth1})
+    fake = FakeComposer([bad])
+    composer = Composer(fake, max_retries=2)
+    song = await composer.compose("x")
+    assert len(fake.calls) == 1 and "2" not in song["sounds"]["synth1"].get("macros", {})
+    assert composer.last_repairs and "filter_drive" in composer.last_repairs[0]

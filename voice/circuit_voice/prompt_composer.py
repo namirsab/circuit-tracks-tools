@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from circuit_tracks.constants import DELAY_PRESET_NAMES, REVERB_PRESET_NAMES
+
 HOUSE_RULES = """\
 You compose songs for a Novation Circuit Tracks as JSON in the song format
 below. The brief comes from a German-speaking musician; answer with JSON only,
@@ -23,11 +25,17 @@ Hard rules (violations are rejected and sent back to you):
 7. When revising: return the complete song, change only what the instruction
    asks for, keep every other pattern, track and sound byte-identical, and add
    new layers as new patterns rather than rewriting existing ones.
+8. Macro targets are patch parameter names from the reference (for example
+   filter_frequency, filter_resonance, osc1_wave_interpolate, distortion_level);
+   there is no filter_drive. FX presets are named exactly: reverb one of
+   {REVERB_PRESETS}; delay one of {DELAY_PRESETS}. Unknown names are dropped.
 
 Musical guidance: match the requested tempo, key and mood; use all four drum
 tracks and both synths unless told otherwise; give the arrangement a shape
 (intro, main part, variation, outro) and keep each pattern loopable.
 """
+HOUSE_RULES = HOUSE_RULES.replace("{REVERB_PRESETS}", ", ".join(REVERB_PRESET_NAMES))
+HOUSE_RULES = HOUSE_RULES.replace("{DELAY_PRESETS}", ", ".join(DELAY_PRESET_NAMES))
 
 
 def system_prompt(reference_sections: dict[str, str]) -> str:

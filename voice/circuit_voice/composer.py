@@ -113,10 +113,90 @@ def _macro_targets_ok(sounds: dict[str, Any]) -> list[str]:
     return problems
 
 
+def _preset_names_ok(fx: dict[str, Any]) -> list[str]:
+    """load_song raises KeyError on a preset name it does not know (seen: '1/8 dotted')."""
+    from circuit_tracks.constants import (  # noqa: PLC0415
+        DELAY_PRESET_BY_NAME,
+        DELAY_PRESET_NAMES,
+        REVERB_PRESET_BY_NAME,
+        REVERB_PRESET_NAMES,
+    )
+
+    problems: list[str] = []
+    for key, table, names, what in (
+        ("delay_preset", DELAY_PRESET_BY_NAME, DELAY_PRESET_NAMES, "delay preset"),
+        ("reverb_preset", REVERB_PRESET_BY_NAME, REVERB_PRESET_NAMES, "reverb preset"),
+    ):
+        value = (fx or {}).get(key)
+        if isinstance(value, str) and value.lower() not in table:
+            problems.append(f"unknown {what} {value!r}; valid names are {', '.join(names)}")
+    return problems
+
+
+def repair_song(candidate: Any) -> tuple[Any, list[str]]:
+    """Drop what the device cannot take instead of rejecting the whole song.
+
+    The 15:43 session lost three builds and four minutes to a macro target
+    'filter_drive' and a delay preset '1/8 dotted'. Returns the repaired copy
+    and one note per thing dropped (German, for the reply)."""
+    if not isinstance(candidate, dict):
+        return candidate, []
+    from circuit_tracks.constants import DELAY_PRESET_BY_NAME, REVERB_PRESET_BY_NAME  # noqa: PLC0415
+    from circuit_tracks.patch_builder import MACRO_DEST_BY_NAME, _resolve_mod_dest, _resolve_mod_source  # noqa: PLC0415
+
+    notes: list[str] = []
+    song = copy.deepcopy(candidate)
+    for synth, cfg in (song.get("sounds") or {}).items():
+        if not isinstance(cfg, dict):
+            continue
+        for macro, mcfg in list((cfg.get("macros") or {}).items()):
+            targets = (mcfg or {}).get("targets") if isinstance(mcfg, dict) else None
+            if not isinstance(targets, list):
+                continue
+            kept = []
+            for target in targets:
+                param = target.get("dest", target.get("destination")) if isinstance(target, dict) else None
+                if isinstance(param, str) and param not in MACRO_DEST_BY_NAME:
+                    notes.append(f"Makro {macro} auf {synth}: Ziel '{param}' gibt es nicht")
+                    continue
+                kept.append(target)
+            if kept:
+                mcfg["targets"] = kept
+            else:
+                del cfg["macros"][macro]
+        entries = cfg.get("mod_matrix")
+        if isinstance(entries, list):
+            kept = []
+            for entry in entries:
+                try:
+                    if isinstance(entry, dict):
+                        for key in ("source", "source1", "source2"):
+                            if isinstance(entry.get(key), str):
+                                _resolve_mod_source(entry[key])
+                        dest = entry.get("dest", entry.get("destination"))
+                        if isinstance(dest, str):
+                            _resolve_mod_dest(dest)
+                except ValueError as e:
+                    notes.append(f"Mod-Matrix auf {synth}: {str(e)[:80]}")
+                    continue
+                kept.append(entry)
+            cfg["mod_matrix"] = kept
+    fx = song.get("fx")
+    if isinstance(fx, dict):
+        presets = (("delay_preset", DELAY_PRESET_BY_NAME, "Delay"), ("reverb_preset", REVERB_PRESET_BY_NAME, "Reverb"))
+        for key, table, what in presets:
+            value = fx.get(key)
+            if isinstance(value, str) and value.lower() not in table:
+                notes.append(f"{what}-Preset '{value}' gibt es nicht")
+                del fx[key]
+    return (song, notes) if notes else (candidate, [])
+
+
 def check_house_rules(song: dict[str, Any]) -> list[str]:
     """Rules SongSchema does not enforce; empty list means fine."""
     problems: list[str] = []
     problems.extend(_macro_targets_ok(song.get("sounds") or {}))
+    problems.extend(_preset_names_ok(song.get("fx") or {}))
     patterns = song.get("patterns") or {}
     if not patterns:
         problems.append("the song has no patterns")
@@ -151,6 +231,7 @@ class Composer:
         self.model = model
         self.backend = backend
         self.max_retries = max_retries
+        self.last_repairs: list[str] = []  # what repair_song dropped from the last accepted song
         self._system: str | None = None
         self._schema = get_song_json_schema()
 
@@ -181,10 +262,12 @@ class Composer:
             answer = await self.model.generate(self.system, messages, self._schema)
             if current_song is not None and isinstance(answer, dict):
                 answer = keep_untouched_sections(current_song, answer)
+            answer, repairs = repair_song(answer)
             song, error = validate_song(answer)
             if song is not None:
                 if current_song is not None and not song.get("name") and current_song.get("name"):
                     song["name"] = current_song["name"]
+                self.last_repairs = repairs
                 return song
             messages.append(("model", json.dumps(answer, ensure_ascii=False)[:20000]))
             messages.append(("user", retry_prompt(error or "invalid")))

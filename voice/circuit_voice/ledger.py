@@ -63,6 +63,7 @@ class Ledger:
     history: deque[Change] = field(default_factory=lambda: deque(maxlen=20))
     last_result: Any = None
     composer_job: str | None = None
+    compose_ok_until: float = 0.0  # monotonic; a confirmed build that failed leaves the yes standing this long
     last_load_ok: bool = True
 
     # --- events from the harness ---

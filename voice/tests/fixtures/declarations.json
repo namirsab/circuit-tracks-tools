@@ -854,7 +854,7 @@
     "behavior": "BLOCKING"
   },
   {
-    "description": "Build a new song from a German brief (style, tempo, key, mood, instruments). Runs in the background for about half a minute. Without confirmed it returns the question to ask first. Replaces the loaded song.",
+    "description": "Build a new song from a German brief (style, tempo, key, mood, instruments). Runs in the background for one to two minutes. Without confirmed it returns the question to ask first; after a failed build the same yes still counts, call it again directly. Replaces the loaded song.",
     "name": "compose",
     "parameters_json_schema": {
       "type": "object",

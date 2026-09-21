@@ -447,7 +447,8 @@ CARDS: list[ToolCard] = [
     ToolCard(
         "compose",
         "Build a new song from a German brief (style, tempo, key, mood, instruments). Runs in the background for "
-        "about half a minute. Without confirmed it returns the question to ask first. Replaces the loaded song.",
+        "one to two minutes. Without confirmed it returns the question to ask first; after a failed build the "
+        "same yes still counts, call it again directly. Replaces the loaded song.",
         schema=_obj({"brief": {"type": "string"}, "confirmed": {"type": "boolean", "default": False}}, ["brief"]),
         blocking=False,
         profiles=("creative",),

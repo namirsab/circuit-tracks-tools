@@ -132,7 +132,7 @@ async def test_compose_loads_and_restarts_and_revise_edits_in_place(server):
         await bridge.dispatch("start_sequencer", {})
         calls.clear()
         out = await bridge.dispatch("compose", {"brief": "Ruhiger Ambient in Moll"})
-        assert "halbe Minute" in out.response["result"]["needs_confirmation"]
+        assert "Minute" in out.response["result"]["needs_confirmation"]
         out = await bridge.dispatch("compose", {"brief": "Ruhiger Ambient in Moll", "confirmed": True})
         assert out.blocking is False
         assert "Fertig gebaut" in out.response["result"] and "emergence" in out.response["result"]
@@ -150,6 +150,10 @@ async def test_compose_loads_and_restarts_and_revise_edits_in_place(server):
         out = await bridge.dispatch("compose", {"brief": "Unmöglich", "confirmed": True})
         assert "nicht geklappt" in out.response["result"]
         assert ledger.composer_job is None
+        # 15:43 session: after a failed build the model re-called compose with a reworded brief and the
+        # user had to say yes a third time. One yes covers a retry while nothing has been replaced.
+        out = await bridge.dispatch("compose", {"brief": "Unmöglich, anders gesagt"})
+        assert "needs_confirmation" not in str(out.response["result"]) and "nicht geklappt" in out.response["result"]
 
 
 async def test_tempo_change_is_saved_and_play_from_device_selects_the_saved_project(server, monkeypatch):
