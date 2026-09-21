@@ -161,20 +161,25 @@ class ClockGenerator:
             self._bpm = bpm
 
     def _run(self) -> None:
+        # Ticks are scheduled at absolute times. Waiting "interval minus send time" from a
+        # fresh timestamp let the 1-3 ms overshoot of every wait add up: 120 BPM arrived
+        # at the device as about 100.
+        next_tick = time.perf_counter()
         while not self._stop_event.is_set():
             with self._lock:
                 bpm = self._bpm
             # 24 pulses per quarter note
             interval = 60.0 / bpm / 24.0
-            start = time.perf_counter()
             try:
                 self._midi.send_clock()
             except Exception:
                 pass
-            elapsed = time.perf_counter() - start
-            wait = interval - elapsed
+            next_tick += interval
+            wait = next_tick - time.perf_counter()
             if wait > 0:
                 self._stop_event.wait(wait)
+            elif wait < -interval:
+                next_tick = time.perf_counter()  # fell far behind (sleep, stall): don't burst
         with self._lock:
             self._running = False
 

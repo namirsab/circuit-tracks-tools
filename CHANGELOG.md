@@ -109,6 +109,11 @@ and round-trips of all tested factory/user projects are now byte-exact.
 
 ### Fixed
 
+- **MIDI clock ran slow** — `ClockGenerator` waited "interval minus send time"
+  from a fresh timestamp on every tick, so the scheduling overshoot of each wait
+  accumulated: a clock started at 120 BPM arrived at the device at roughly
+  100 BPM (174 → 147). Ticks are now scheduled at absolute times; the measured
+  rate is within 1-2 % of the requested tempo.
 - **Mod matrix sources in song exports** — `sounds.*.mod_matrix` entries store
   the primary source as `source1`, but the NCS export read a `source` key, so
   every exported slot silently used source "direct". The export now honours
